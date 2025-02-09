@@ -1,0 +1,9 @@
+{
+    "cmake.generator": "Ninja",
+    "glsllint.glslangValidatorArgs": [
+        "-V"
+    ],
+    "cmake.debugConfig": {
+        "externalConsole": false
+    }
+}
