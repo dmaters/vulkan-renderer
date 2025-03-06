@@ -7,9 +7,6 @@
 [submodule "thirdparty/stb"]
 	path = thirdparty/stb
 	url = https://github.com/nothings/stb.git
-[submodule "thirdparty/vk-bootstrap"]
-	path = thirdparty/vk-bootstrap
-	url = https://github.com/charles-lunarg/vk-bootstrap.git
 [submodule "thirdparty/vma"]
 	path = thirdparty/vma
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

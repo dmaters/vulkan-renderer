@@ -85,26 +85,45 @@ struct PipelineStateCreateInfo {
 	inline vk::PipelineRasterizationStateCreateInfo rasterization() {
 		vk::PipelineRasterizationStateCreateInfo info {
 			.polygonMode = vk::PolygonMode::eFill,
-			.cullMode = vk::CullModeFlagBits::eNone,
+			.cullMode = vk::CullModeFlagBits::eBack,
 			.lineWidth = 1,
 		};
 
 		return info;
 	};
 
+	std::array<vk::PipelineColorBlendAttachmentState, 1> colorblendStates;
 	inline vk::PipelineColorBlendStateCreateInfo colorBlend() {
-		vk::PipelineColorBlendStateCreateInfo info {
+		colorblendStates = {
+			vk::PipelineColorBlendAttachmentState {
 
+												   .blendEnable = false,
+												   .colorWriteMask = vk::ColorComponentFlagBits(0xf),
+												   },
 		};
+		return {
 
-		return info;
+			.attachmentCount = (uint32_t)colorblendStates.size(),
+			.pAttachments = colorblendStates.data(),
+		};
 	};
 
 	inline vk::PipelineMultisampleStateCreateInfo multiSample() {
-		vk::PipelineMultisampleStateCreateInfo info;
-		info.sampleShadingEnable = false;
-		info.rasterizationSamples = vk::SampleCountFlagBits::e1;
-		return info;
+		return {
+			.rasterizationSamples = vk::SampleCountFlagBits::e1,
+			.sampleShadingEnable = false,
+		};
+	}
+
+	inline vk::PipelineDepthStencilStateCreateInfo depthStencil() {
+		return vk::PipelineDepthStencilStateCreateInfo {
+			.depthTestEnable = true,
+			.depthWriteEnable = true,
+			.depthCompareOp = vk::CompareOp::eLess,
+			.depthBoundsTestEnable = false,
+			.stencilTestEnable = false,
+
+		};
 	}
 };
 
@@ -146,9 +165,10 @@ Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
 
 	auto multisampling = helper.multiSample();
 	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = {};
-
-	pipelineInfo.pColorBlendState = {};
+	auto depthStencilState = helper.depthStencil();
+	pipelineInfo.pDepthStencilState = &depthStencilState;
+	auto colorBlendState = helper.colorBlend();
+	pipelineInfo.pColorBlendState = &colorBlendState;
 
 	auto dynamicState = helper.dynamicState();
 	pipelineInfo.pDynamicState = &dynamicState;
@@ -156,7 +176,13 @@ Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
 	pipelineInfo.layout = getLayout(info.device, info.layouts);
 
 	pipelineInfo.renderPass = nullptr;
-	vk::PipelineRenderingCreateInfoKHR renderingInfo;
+	vk::PipelineRenderingCreateInfoKHR renderingInfo {
+		.colorAttachmentCount = 1,
+		.pColorAttachmentFormats =
+			std::array<vk::Format, 1> { vk::Format::eR8G8B8A8Unorm }.data(),
+		.depthAttachmentFormat = vk::Format::eD16Unorm,
+
+	};
 	pipelineInfo.pNext = &renderingInfo;
 
 	pipelineInfo.subpass = 0;

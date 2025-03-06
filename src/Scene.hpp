@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "Camera.hpp"
-#include "Drawable.hpp"
+#include "Primitive.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/MemoryAllocator.hpp"
 
@@ -15,7 +15,7 @@ private:
 		glm::vec2 texcoord;
 	};
 
-	std::vector<Drawable> m_drawables;
+	std::vector<Primitive> m_primitives;
 	Camera camera;
 
 public:
@@ -25,7 +25,7 @@ public:
 		MaterialManager& materialManager
 	);
 
-	const std::vector<Drawable>& getDrawables() const { return m_drawables; }
+	const std::vector<Primitive>& getPrimitives() const { return m_primitives; }
 
 	inline Camera& getCamera() { return camera; }
 };

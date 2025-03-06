@@ -4,14 +4,20 @@
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "Image.hpp"
-#include "VkBootstrap.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
 MemoryAllocator::MemoryAllocator(Instance& instance) : m_instance(instance) {
+	const auto& d = VULKAN_HPP_DEFAULT_DISPATCHER;
+	VmaVulkanFunctions functions {
+		.vkGetInstanceProcAddr = d.vkGetInstanceProcAddr,
+		.vkGetDeviceProcAddr = d.vkGetDeviceProcAddr,
+	};
+
 	VmaAllocatorCreateInfo allocatorInfo {
 		.flags = {},
 		.physicalDevice = instance.physicalDevice,
@@ -20,7 +26,7 @@ MemoryAllocator::MemoryAllocator(Instance& instance) : m_instance(instance) {
 		.pAllocationCallbacks = {},
 		.pDeviceMemoryCallbacks = {},
 		.pHeapSizeLimit = {},
-		.pVulkanFunctions = {},
+		.pVulkanFunctions = &functions,
 		.instance = instance.instance,
 		.vulkanApiVersion = vk::ApiVersion13,
 		.pTypeExternalMemoryHandleTypes = {},
@@ -64,8 +70,10 @@ MemoryAllocator::BufferAllocation MemoryAllocator::allocateBuffer(
 	);
 
 	return BufferAllocation {
-		.base { .allocation = allocation, .allocator = *this },
+		.allocation = allocation,
 		.buffer = buffer,
+		.mappedData = location == Location::HostMapped ? info.pMappedData
+		                                               : nullptr,
 	};
 }
 MemoryAllocator::BufferAllocation MemoryAllocator::allocateStagingBuffer(
@@ -103,7 +111,7 @@ MemoryAllocator::ImageAllocation MemoryAllocator::allocateImage(
 	);
 
 	return ImageAllocation {
-		.base = { .allocation = allocation, .allocator = *this },
+		.allocation = allocation,
 		.image = image,
 	};
 }
@@ -155,27 +163,55 @@ void MemoryAllocator::copyToImage(
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
 	};
 	commandBuffer.begin(beginInfo);
-	Image::LayoutTransition(
-		commandBuffer,
-		destination.image,
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::eTransferDstOptimal
-	);
+
+	vk::ImageMemoryBarrier2 barrier {
+		.dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+		.dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+		.oldLayout = vk::ImageLayout::eUndefined,
+		.newLayout = vk::ImageLayout::eTransferDstOptimal,
+		.image = destination.image,
+		.subresourceRange = {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		}
+	};
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
+	});
 	commandBuffer.copyBufferToImage(
 		origin.buffer,
 		destination.image,
 		vk::ImageLayout::eTransferDstOptimal,
 		{ offset }
 	);
-	Image::LayoutTransition(
-		commandBuffer,
-		destination.image,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal
-	);
+	barrier = {
+		.srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+		.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+		.oldLayout = vk::ImageLayout::eTransferDstOptimal,
+		.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+		.image = destination.image,	
+		.subresourceRange = {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		}
+	};
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
+
+	});
 	commandBuffer.end();
-	vk::SubmitInfo submitInfo { .commandBufferCount = 1,
-		                        .pCommandBuffers = &commandBuffer };
+	vk::SubmitInfo submitInfo {
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+	};
 
 	m_queue.submit({ submitInfo }, m_uploadFinishedFence);
 	m_instance.device.waitForFences({ m_uploadFinishedFence }, true, 5e6);
@@ -217,29 +253,26 @@ constexpr VmaAllocationCreateInfo AllocationInfo(
 	}
 }
 
-void MemoryAllocator::BufferAllocation::updateData(
-	const std::vector<unsigned char>& data, unsigned int offset
+void MemoryAllocator::copyToBuffer(
+	const std::vector<std::byte>& data, BufferAllocation& buffer
 ) {
 	VmaAllocationInfo info;
-	vmaGetAllocationInfo(base.allocator.m_allocator, base.allocation, &info);
+	vmaGetAllocationInfo(m_allocator, buffer.allocation, &info);
 
 	if (info.pMappedData == nullptr) {
 		MemoryAllocator::BufferAllocation staging =
-			base.allocator.allocateStagingBuffer(data.size());
+			allocateStagingBuffer(data.size());
 		VmaAllocationInfo stagingInfo;
-		vmaGetAllocationInfo(
-			base.allocator.m_allocator, staging.base.allocation, &stagingInfo
-		);
-		std::memcpy(
-			(char*)stagingInfo.pMappedData + offset, data.data(), data.size()
-		);
+		vmaGetAllocationInfo(m_allocator, staging.allocation, &stagingInfo);
+		std::memcpy((char*)stagingInfo.pMappedData, data.data(), data.size());
 
-		base.allocator.copyBuffer(staging, *this, { .size = data.size() });
+		copyBuffer(staging, buffer, { .size = data.size() });
+		freeAllocation(staging.allocation);
 	} else {
-		memcpy((char*)info.pMappedData + offset, data.data(), data.size());
+		memcpy((char*)info.pMappedData, data.data(), data.size());
 	}
 }
 
-void MemoryAllocator::freeAllocation(MemoryAllocator::Allocation& allocation) {
-	vmaFreeMemory(m_allocator, allocation.allocation);
+void MemoryAllocator::freeAllocation(VmaAllocation& allocation) {
+	vmaFreeMemory(m_allocator, allocation);
 }

@@ -20,31 +20,24 @@
 ResourceManager::ResourceManager(Instance &instance) :
 	m_device(instance.device), m_memoryAllocator(instance) {}
 
-ResourceManager::BufferHandle ResourceManager::createBuffer(size_t size) {
+Buffer ResourceManager::createBuffer(const BufferDescription &description) {
 	vk::BufferCreateInfo createInfo {
-		.size = size,
-		.usage = vk::BufferUsageFlagBits::eUniformBuffer,
+		.size = description.size,
+		.usage = description.usage,
 	};
 
-	BufferHandle handle(*this);
 	MemoryAllocator::BufferAllocation allocation =
-		m_memoryAllocator.allocateBuffer(
-			createInfo, MemoryAllocator::Location::HostMapped
-		);
-	Buffer buffer {
+		m_memoryAllocator.allocateBuffer(createInfo, description.location);
+	return {
 		.buffer = allocation.buffer,
 		.allocation = allocation,
-		.size = size,
+		.size = description.size,
 	};
-	m_buffers.insert({ handle, buffer });
-	return handle;
 }
-
-ResourceManager::ImageHandle ResourceManager::createImage(
-	const ImageDescription &description
-) {
+Image ResourceManager::createImage(const ImageDescription &description) {
 	const vk::ImageCreateInfo imageInfo {
 		.flags = {},
+
 		.imageType = vk::ImageType::e2D,
 		.format = description.format,
 		.extent = vk::Extent3D(description.width, description.height, 1),
@@ -61,34 +54,33 @@ ResourceManager::ImageHandle ResourceManager::createImage(
 		.image = allocation.image,
 		.viewType = vk::ImageViewType::e2D,
 		.format = description.format,
-		.subresourceRange = vk::ImageSubresourceRange(
-			vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
-		),
+		.subresourceRange = { .aspectMask =
+		                          description.format == vk::Format::eD16Unorm
+		                              ? vk::ImageAspectFlagBits::eDepth
+		                              : vk::ImageAspectFlagBits::eColor,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1,},
 	};
 
-	ImageHandle handle = ImageHandle(*this);
-
-	m_images.insert({
-		handle,
-		Image {
-			   .image = allocation.image,
-			   .view = m_device.createImageView(viewInfo),
-			   .allocation = allocation,
-			   .format = description.format,
-			   .layout = vk::ImageLayout::eUndefined,
-			   }
-    });
-
-	return handle;
-
-	// GESTITA LA CREAZIONE DELLIMMAGINE, GESTISCI IL CARICAMENTO DA LOCALE
+	return Image {
+		.image = allocation.image,
+		.view = m_device.createImageView(viewInfo),
+		.format = description.format,
+		.layout = vk::ImageLayout::eUndefined,
+		.size = { .width = description.width,
+                 .height = description.height,
+                 .depth = 1, },
+		            .allocation = allocation,
+	};
 }
 
 struct ImageData {
 	uint32_t x;
 	uint32_t y;
 	uint8_t channels;
-	std::vector<unsigned char> data;
+	std::vector<std::byte> data;
 };
 
 ImageData load(const std::filesystem::path &image) {
@@ -102,8 +94,8 @@ ImageData load(const std::filesystem::path &image) {
 				  << "Failed for error " << stbi_failure_reason() << std::endl;
 		throw "Error loading image";
 	}
-	size_t size = x * y * channels * sizeof(uint8_t);
-	std::vector<unsigned char> vectorData(size);
+	size_t size = x * y * channels * sizeof(std::byte);
+	std::vector<std::byte> vectorData(size);
 	memcpy(vectorData.data(), rawData, size);
 	stbi_image_free(rawData);
 
@@ -112,12 +104,7 @@ ImageData load(const std::filesystem::path &image) {
 		     .channels = (uint8_t)channels,
 		     .data = vectorData };
 }
-ResourceManager::ImageHandle ResourceManager::loadImage(
-	const std::filesystem::path &path
-) {
-	if (m_imageCache.find(path) != m_imageCache.end())
-		return m_imageCache.at(path);
-
+Image ResourceManager::loadImage(const std::filesystem::path &path) {
 	ImageData data = load(path);
 	ImageDescription description {
 		.width = data.x,
@@ -128,13 +115,13 @@ ResourceManager::ImageHandle ResourceManager::loadImage(
 
 	};
 
-	ImageHandle image = createImage(description);
+	Image image = createImage(description);
 	MemoryAllocator::BufferAllocation staging =
 		m_memoryAllocator.allocateStagingBuffer(data.data.size());
 
-	staging.updateData(data.data);
+	m_memoryAllocator.copyToBuffer(data.data, staging);
 
-	m_memoryAllocator.copyToImage(staging, m_images.at(image).allocation.value(), {
+	m_memoryAllocator.copyToImage(staging, image.allocation.value(), {
 		.bufferOffset = 0,
 		.bufferRowLength = data.x,
 		.bufferImageHeight = data.y,
@@ -154,9 +141,8 @@ ResourceManager::ImageHandle ResourceManager::loadImage(
 		
 	});
 
-	m_images[image].layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	image.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-	m_memoryAllocator.freeAllocation(staging.base);
-	m_imageCache.insert({ path, image });
+	m_memoryAllocator.freeAllocation(staging.allocation);
 	return image;
 }

@@ -18,7 +18,6 @@ add_executable(${PROJECT_NAME} ${LOCAL_SOURCES})
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
-target_link_libraries(${PROJECT_NAME} PRIVATE vk-bootstrap)
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${PROJECT_NAME} PRIVATE GPUOpen::VulkanMemoryAllocator)
 target_link_libraries(${PROJECT_NAME} PRIVATE assimp)
@@ -26,6 +25,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE stb)
 
 target_include_directories(${PROJECT_NAME} PRIVATE src/)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_CONSTRUCTORS)
+target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /DEBUG:FULL)

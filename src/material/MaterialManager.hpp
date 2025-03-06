@@ -16,7 +16,14 @@
 #include "Pipeline.hpp"
 #include "resources/ResourceManager.hpp"
 
-struct MaterialHandle : Handle<MaterialHandle> {};
+struct GlobalResources {
+	struct Camera {
+		glm::mat4 view;
+		glm::mat4 projection;
+	};
+
+	Camera camera;
+};
 
 class MaterialManager {
 public:
@@ -24,40 +31,30 @@ public:
 		vk::DescriptorSet set;
 		vk::DescriptorSetLayout layout;
 	};
-	struct MaterialDescription;
-	struct GlobalResources;
-
-private:
-	struct MaterialInstance {
+	struct Material {
 		Pipeline pipeline;
-		DescriptorSet instanceSet;
-		std::vector<ResourceManager::ImageHandle> textures;
+		DescriptorSet& globalSet;
 	};
 
+	struct MaterialInstance {
+		Material& baseMaterial;
+		DescriptorSet instanceSet;
+	};
+	struct MaterialDescription;
+
+private:
 	vk::Device& m_device;
 	vk::DescriptorPool m_pool;
-	DescriptorSet m_globalDescriptor;
-	std::unique_ptr<GlobalResources> m_globalResources;
-	std::vector<ResourceManager::BufferHandle> m_globalResourceBuffers;
-	std::map<MaterialHandle, MaterialInstance> m_materials;
-	ResourceManager m_resourceManager;
-	bool m_dirtyGlobalDescriptors;
+	std::vector<Material> m_materials;
+	std::array<DescriptorSet, 3> m_globalDescriptorSets;
 
-	void setupGlobalResources();
+	ResourceManager m_resourceManager;
 
 public:
 	MaterialManager(Instance& instance);
-	MaterialHandle instantiateMaterial(MaterialDescription& description);
-	const DescriptorSet& getGlobalDescriptorSet();
+	Buffer getGlobalBuffer(std::array<Buffer, 3>& deviceLocalBuffer);
 
-	GlobalResources& getGlobalResources() {
-		m_dirtyGlobalDescriptors = true;
-		return *m_globalResources;
-	}
-
-	inline const MaterialInstance& getMaterial(MaterialHandle handle) {
-		return m_materials.at(handle);
-	}
+	MaterialInstance instantiateMaterial(MaterialDescription& description);
 };
 
 struct MaterialManager::MaterialDescription {
@@ -80,22 +77,13 @@ struct MaterialManager::MaterialDescription {
 		return { .vertex = "resources/shaders/main.vert.spv",
 			     .fragment = "resources/shaders/main.frag.spv",
 			     .resources = {
-					 Resource { .binding = 0,
+					{ .binding = 0,
 			                    .count = 1,
 			                    .type = vk::DescriptorType::eSampledImage,
 			                    .stage = vk::ShaderStageFlagBits::eFragment,
-			                    .path = definition.albedo } } };
+							.path = definition.albedo, 
+						}, 
+					}, 
+				};
 	}
 };
-
-struct MaterialManager::GlobalResources {
-	struct CameraBuffer {
-		glm::mat4 transformation;
-		glm::mat4 projection;
-	};
-	CameraBuffer camera;
-};
-
-/// STAVO IMPLEMENTANDO LE IMAMAGINI, PENSA SOLO A QUELLO
-// DI DEFAULT IMAGEVIEW SERVER PER TUTTO; CREA DEEFAULT POI PENSA NEGLI ALTRI
-// CASI

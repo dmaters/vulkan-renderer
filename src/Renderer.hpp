@@ -1,18 +1,14 @@
 #pragma once
-#include <vulkan/vulkan_hpp_macros.hpp>
-
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#endif
 
 #include <SDL3/SDL_video.h>
-#include <VkBootstrap.h>
 
 #include <filesystem>
+#include <memory>
 #include <vulkan/vulkan.hpp>
 
 #include "Camera.hpp"
 #include "Instance.hpp"
+#include "Rendergraph/RenderGraph.hpp"
 #include "Scene.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
@@ -22,7 +18,6 @@ class Renderer {
 public:
 private:
 	Instance m_instance;
-	vk::SurfaceKHR m_surface;
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
 	vk::CommandPool m_commandPool;
@@ -33,10 +28,14 @@ private:
 	std::unique_ptr<MaterialManager> m_materialManager;
 	std::unique_ptr<Scene> m_currentScene;
 
+	std::unique_ptr<RenderGraph> m_renderGraph;
+
 	Camera m_camera;
 
-	void createDevice(vkb::Instance& instance);
+	GlobalResources* m_globalData;
+
 	void createSwapchain();
+	void createRenderGraph();
 
 public:
 	Renderer(SDL_Window* window);

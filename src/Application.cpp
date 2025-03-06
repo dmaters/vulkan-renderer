@@ -10,11 +10,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 
 #include "Renderer.hpp"
 
-Application::Application(const std::filesystem::path& path) :
-	m_renderer(nullptr) {
+Application::Application(const std::filesystem::path& path) {
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		std::cerr << "Failed to initialize SDL: " << SDL_GetError()
 				  << std::endl;
@@ -29,8 +29,8 @@ Application::Application(const std::filesystem::path& path) :
 		SDL_Quit();
 		throw;
 	}
-	m_renderer = Renderer(m_window);
-	m_renderer.load(path);
+	m_renderer = std::make_unique<Renderer>(m_window);
+	m_renderer->load(path);
 }
 
 int Application::run() {
@@ -77,7 +77,7 @@ int Application::run() {
 			if (cameraLocked) {
 				glm::vec2 coordinates;
 				SDL_GetMouseState(&coordinates.x, &coordinates.y);
-				m_renderer.getCamera().rotate(
+				m_renderer->getCamera().rotate(
 					(glm::vec2(400., 300.) - coordinates) * deltaTime
 
 				);
@@ -85,7 +85,7 @@ int Application::run() {
 			}
 		}
 
-		m_renderer.render();
+		m_renderer->render();
 	};
 
 	return 0;

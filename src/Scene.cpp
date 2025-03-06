@@ -58,12 +58,11 @@ Scene Scene::loadMesh(
 		vertexInfo, MemoryAllocator::Location::DeviceLocal
 	);
 
-	auto vertexData = reinterpret_cast<const unsigned char*>(vertices.data());
-	std::vector<unsigned char> rawVertices(
+	auto vertexData = reinterpret_cast<const std::byte*>(vertices.data());
+	std::vector<std::byte> rawVertices(
 		vertexData, vertexData + vertexBufferSize
 	);
-	vertexBuffer.updateData(rawVertices);
-
+	allocator.copyToBuffer(rawVertices, vertexBuffer);
 	size_t indexBufferSize = sizeof(unsigned int) * indices.size();
 
 	vk::BufferCreateInfo indexInfo {
@@ -76,11 +75,9 @@ Scene Scene::loadMesh(
 		indexInfo, MemoryAllocator::Location::DeviceLocal
 	);
 
-	auto indexData = reinterpret_cast<const unsigned char*>(indices.data());
-	std::vector<unsigned char> rawIndices(
-		indexData, indexData + indexBufferSize
-	);
-	indexBuffer.updateData(rawIndices);
+	auto indexData = reinterpret_cast<const std::byte*>(indices.data());
+	std::vector<std::byte> rawIndices(indexData, indexData + indexBufferSize);
+	allocator.copyToBuffer(rawIndices, indexBuffer);
 
 	Scene scene;
 
@@ -88,12 +85,14 @@ Scene Scene::loadMesh(
 		{ .albedo = "resources/textures/image.png" }
 	);
 
-	scene.m_drawables.push_back(Drawable {
-		.m_vertexBuffer = vertexBuffer,
-		.m_indexBuffer = indexBuffer,
-		.m_materialInstance = materialManager.instantiateMaterial(materialDesc),
-		.m_modelMatrix = glm::mat4x4(1),
-		.m_indexCount = indices.size() });
+	scene.m_primitives.push_back(Primitive {
+		.vertexBuffer = vertexBuffer,
+		.indexBuffer = indexBuffer,
+		.material = materialManager.instantiateMaterial(materialDesc),
+		.indexCount = indices.size(),
+		.modelMatrix = glm::mat4x4(1),
+
+	});
 
 	return scene;
 };

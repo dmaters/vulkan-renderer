@@ -6,7 +6,7 @@
 class Application {
 private:
 	SDL_Window* m_window;
-	Renderer m_renderer;
+	std::unique_ptr<Renderer> m_renderer;
 
 public:
 	Application(const std::filesystem::path& path);

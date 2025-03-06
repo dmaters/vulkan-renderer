@@ -4,23 +4,26 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "MemoryAllocator.hpp"
 
 struct Image {
 	vk::Image image = nullptr;
 	vk::ImageView view = nullptr;
-	std::optional<MemoryAllocator::ImageAllocation> allocation;
 	vk::Format format;
 	vk::ImageLayout layout = vk::ImageLayout::eUndefined;
-	void layoutTransition(
-		vk::CommandBuffer& commandBuffer, vk::ImageLayout newLayout
-	);
+	vk::Extent3D size;
 
-	static void LayoutTransition(
-		vk::CommandBuffer& commandBuffer,
-		vk::Image& image,
-		vk::ImageLayout oldLayout,
-		vk::ImageLayout newLayout
-	);
+	std::optional<MemoryAllocator::ImageAllocation> allocation;
+
+	vk::ImageAspectFlags getAspectFlags() {
+		vk::ImageAspectFlags flags;
+		if (format == vk::Format::eD16Unorm)
+			flags = vk::ImageAspectFlagBits::eDepth;
+		else
+			flags = vk::ImageAspectFlagBits::eColor;
+
+		return flags;
+	}
 };

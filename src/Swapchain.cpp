@@ -16,7 +16,8 @@ Swapchain::Swapchain(vk::Device& device, SwapchainCreateInfo& userInfo) {
 	info.imageFormat = userInfo.format.format;
 	info.imageExtent = vk::Extent2D(userInfo.width, userInfo.height);
 	info.imageArrayLayers = 1;
-	info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst |
+	                  vk::ImageUsageFlagBits::eColorAttachment;
 	info.imageColorSpace = userInfo.format.colorSpace;
 	info.imageSharingMode = vk::SharingMode::eExclusive;
 
@@ -45,13 +46,13 @@ void Swapchain::createFrames(
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
 	poolInfo.queueFamilyIndex = familyIndex;
 	for (int i = 0; i < BUFFERING_COUNT; i++) {
-		m_frames.push_back(std::move(Frame {
+		m_frames.push_back(Frame {
 
 			.commandPool = device.createCommandPool(poolInfo),
 			.fence = device.createFence(fenceInfo),
 			.imageAvailable = device.createSemaphore({}),
 			.renderFinished = device.createSemaphore({}),
-		}));
+		});
 		vk::ImageViewCreateInfo viewInfo {
 			.image = images[i],
 			.viewType = vk::ImageViewType::e2D,
@@ -63,14 +64,19 @@ void Swapchain::createFrames(
 
 		m_images.push_back(
 
-			std::move(Image {
+			Image {
 				.image = images[i],
 				.view = device.createImageView(viewInfo),
-				.allocation = std::nullopt,
 				.format = format,
 				.layout = vk::ImageLayout::eUndefined,
+				.size = {
+					.width = 800,
+					.height = 600,
+					.depth = 1,
+				},
+				.allocation = std::nullopt,
 
-			})
+			}
 		);
 	}
 }

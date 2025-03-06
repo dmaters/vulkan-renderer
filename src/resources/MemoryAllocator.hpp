@@ -39,9 +39,12 @@ public:
 
 	ImageAllocation allocateImage(const vk::ImageCreateInfo& image);
 
-	void freeAllocation(Allocation& allocation);
+	void freeAllocation(VmaAllocation& allocation);
 
-	// Buffer getIndexBuffer();
+	void copyToBuffer(
+		const std::vector<std::byte>& bytes, BufferAllocation& buffer
+	);
+
 	void copyBuffer(
 		BufferAllocation& origin,
 		BufferAllocation& destination,
@@ -54,20 +57,13 @@ public:
 	);
 };
 
-struct MemoryAllocator::Allocation {
-	VmaAllocation allocation;
-	MemoryAllocator& allocator;
-};
-
 struct MemoryAllocator::BufferAllocation {
-	Allocation base;
+	VmaAllocation allocation;
 	vk::Buffer buffer;
-	void updateData(
-		const std::vector<unsigned char>& data, unsigned int offset = 0
-	);
+	void* mappedData = nullptr;
 };
 
 struct MemoryAllocator::ImageAllocation {
-	Allocation base;
+	VmaAllocation allocation;
 	vk::Image image;
 };

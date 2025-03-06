@@ -37,6 +37,8 @@ public:
 	};
 	inline int getCurrentFrameIndex() { return m_currentFrame; }
 	inline Image& getImage(uint32_t index) { return m_images.at(index); }
+	inline const std::vector<Image>& getImages() const { return m_images; }
+
 	inline const vk::SwapchainKHR& getSwapchain() const { return m_swapchain; };
 };
 
