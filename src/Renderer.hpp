@@ -12,7 +12,7 @@
 #include "Scene.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
-#include "resources/MemoryAllocator.hpp"
+#include "resources/ResourceManager.hpp"
 
 class Renderer {
 public:
@@ -23,7 +23,7 @@ private:
 	vk::CommandPool m_commandPool;
 	vk::DescriptorPool m_descriptorPool;
 
-	std::unique_ptr<MemoryAllocator> m_allocator;
+	std::unique_ptr<ResourceManager> m_resourceManager;
 	std::unique_ptr<Swapchain> m_swapchain;
 	std::unique_ptr<MaterialManager> m_materialManager;
 	std::unique_ptr<Scene> m_currentScene;

@@ -6,7 +6,7 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-#include "MemoryAllocator.hpp"
+#include "memory/MemoryAllocator.hpp"
 
 struct Image {
 	vk::Image image = nullptr;
@@ -15,7 +15,7 @@ struct Image {
 	vk::ImageLayout layout = vk::ImageLayout::eUndefined;
 	vk::Extent3D size;
 
-	std::optional<MemoryAllocator::ImageAllocation> allocation;
+	std::optional<MemoryAllocator::SubAllocation> allocation;
 
 	vk::ImageAspectFlags getAspectFlags() {
 		vk::ImageAspectFlags flags;

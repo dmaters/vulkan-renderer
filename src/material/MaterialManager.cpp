@@ -13,7 +13,6 @@
 #include "material/MaterialManager.hpp"
 #include "material/Pipeline.hpp"
 #include "resources/Buffer.hpp"
-#include "resources/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 MaterialManager::MaterialManager(Instance& instance) :

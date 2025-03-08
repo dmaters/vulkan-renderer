@@ -25,8 +25,6 @@
 #include "rendergraph/tasks/BufferCopy.hpp"
 #include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
-#include "resources/Image.hpp"
-#include "resources/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 Renderer::Renderer(SDL_Window* window) {
@@ -43,7 +41,7 @@ Renderer::Renderer(SDL_Window* window) {
 	);
 	createSwapchain();
 
-	m_allocator = std::make_unique<MemoryAllocator>(m_instance);
+	m_resourceManager = std::make_unique<ResourceManager>(m_instance);
 	m_materialManager = std::make_unique<MaterialManager>(m_instance);
 
 	createRenderGraph();
@@ -85,7 +83,7 @@ void Renderer::createRenderGraph() {
 		m_renderGraph->getBuffers("gset_buffer");
 	Buffer localBuffer = m_materialManager->getGlobalBuffer(resourceBuffer);
 
-	m_globalData = (GlobalResources*)localBuffer.allocation.mappedData;
+	m_globalData = (GlobalResources*)localBuffer.allocation.address;
 
 	auto copyDescriptorBufferPass = std::make_unique<BufferCopy>(BufferCopy::BufferCopyInfo{
 		.origin = {
@@ -143,6 +141,6 @@ void Renderer::render() {
 
 void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene = std::make_unique<Scene>(
-		Scene::loadMesh(path, *m_allocator, *m_materialManager)
+		Scene::loadMesh(path, *m_resourceManager, *m_materialManager)
 	);
 }

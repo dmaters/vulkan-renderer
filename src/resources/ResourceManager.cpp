@@ -7,10 +7,13 @@
 #include <iostream>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Buffer.hpp"
-#include "MemoryAllocator.hpp"
+#include "Image.hpp"
+#include "memory/MemoryAllocator.hpp"
+#include "resources/Buffer.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -18,18 +21,31 @@
 #include <filesystem>
 
 ResourceManager::ResourceManager(Instance &instance) :
-	m_device(instance.device), m_memoryAllocator(instance) {}
+	m_device(instance.device), m_memoryAllocator(instance) {
+	m_queue = instance.device.getQueue(
+		instance.queueFamiliesIndices.transferIndex, 0
+	);
+
+	m_commandPool = m_device.createCommandPool(vk::CommandPoolCreateInfo {
+		.flags = vk::CommandPoolCreateFlagBits::eTransient,
+		.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
+	});
+}
 
 Buffer ResourceManager::createBuffer(const BufferDescription &description) {
 	vk::BufferCreateInfo createInfo {
 		.size = description.size,
 		.usage = description.usage,
+
 	};
 
-	MemoryAllocator::BufferAllocation allocation =
-		m_memoryAllocator.allocateBuffer(createInfo, description.location);
+	vk::Buffer buffer = m_device.createBuffer(createInfo);
+
+	MemoryAllocator::SubAllocation allocation =
+		m_memoryAllocator.allocate(buffer, description.location);
+
 	return {
-		.buffer = allocation.buffer,
+		.buffer = buffer,
 		.allocation = allocation,
 		.size = description.size,
 	};
@@ -47,11 +63,14 @@ Image ResourceManager::createImage(const ImageDescription &description) {
 		.usage = description.usage,
 		.initialLayout = vk::ImageLayout::eUndefined,
 	};
-	MemoryAllocator::ImageAllocation allocation =
-		m_memoryAllocator.allocateImage(imageInfo);
+
+	vk::Image image = m_device.createImage(imageInfo);
+
+	MemoryAllocator::SubAllocation allocation =
+		m_memoryAllocator.allocate(image);
 
 	vk::ImageViewCreateInfo viewInfo {
-		.image = allocation.image,
+		.image = image,
 		.viewType = vk::ImageViewType::e2D,
 		.format = description.format,
 		.subresourceRange = { .aspectMask =
@@ -65,7 +84,7 @@ Image ResourceManager::createImage(const ImageDescription &description) {
 	};
 
 	return Image {
-		.image = allocation.image,
+		.image = image,
 		.view = m_device.createImageView(viewInfo),
 		.format = description.format,
 		.layout = vk::ImageLayout::eUndefined,
@@ -116,12 +135,12 @@ Image ResourceManager::loadImage(const std::filesystem::path &path) {
 	};
 
 	Image image = createImage(description);
-	MemoryAllocator::BufferAllocation staging =
-		m_memoryAllocator.allocateStagingBuffer(data.data.size());
 
-	m_memoryAllocator.copyToBuffer(data.data, staging);
+	Buffer staging = createStagingBuffer(data.data.size());
 
-	m_memoryAllocator.copyToImage(staging, image.allocation.value(), {
+	copyToBuffer(data.data, staging);
+
+	copyToImage(staging, image, {
 		.bufferOffset = 0,
 		.bufferRowLength = data.x,
 		.bufferImageHeight = data.y,
@@ -143,6 +162,132 @@ Image ResourceManager::loadImage(const std::filesystem::path &path) {
 
 	image.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-	m_memoryAllocator.freeAllocation(staging.allocation);
+	free(staging);
 	return image;
+}
+
+Buffer ResourceManager::createStagingBuffer(size_t size) {
+	vk::BufferCreateInfo info {
+		.size = size,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc,
+	};
+	vk::Buffer buffer = m_device.createBuffer(info);
+	MemoryAllocator::SubAllocation allocation = m_memoryAllocator.allocate(
+		buffer, MemoryAllocator::Location::HostMapped
+	);
+
+	return {
+		.buffer = buffer,
+		.allocation = allocation,
+		.size = size,
+	};
+}
+
+void ResourceManager::copyBuffer(
+	Buffer &origin, Buffer &destination, vk::BufferCopy offset
+) {
+	vk::CommandBufferAllocateInfo commandBufferInfo {
+		.commandPool = m_commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+
+	};
+	vk::CommandBuffer commandBuffer =
+		m_device.allocateCommandBuffers(commandBufferInfo)[0];
+
+	vk::CommandBufferBeginInfo beginInfo {
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	};
+	commandBuffer.begin(beginInfo);
+
+	commandBuffer.copyBuffer(origin.buffer, destination.buffer, offset);
+	commandBuffer.end();
+	vk::SubmitInfo submitInfo { .commandBufferCount = 1,
+		                        .pCommandBuffers = &commandBuffer };
+
+	m_queue.submit({ submitInfo });
+};
+void ResourceManager::copyToImage(
+	Buffer &origin, Image &destination, vk::BufferImageCopy offset
+) {
+	vk::CommandBufferAllocateInfo commandBufferInfo {
+		.commandPool = m_commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+
+	};
+
+	vk::CommandBuffer commandBuffer =
+		m_device.allocateCommandBuffers(commandBufferInfo)[0];
+
+	vk::CommandBufferBeginInfo beginInfo {
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	};
+	commandBuffer.begin(beginInfo);
+
+	vk::ImageMemoryBarrier2 barrier {
+        .dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eTransferDstOptimal,
+        .image = destination.image,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }
+    };
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
+	});
+	commandBuffer.copyBufferToImage(
+		origin.buffer,
+		destination.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		{ offset }
+	);
+	barrier = {
+        .srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+        .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        .image = destination.image,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }
+    };
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
+
+	});
+	commandBuffer.end();
+	vk::SubmitInfo submitInfo {
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+	};
+
+	m_queue.submit({ submitInfo });
+}
+
+void ResourceManager::copyToBuffer(
+	const std::vector<std::byte> &data, Buffer &buffer
+) {
+	if (buffer.allocation.address != nullptr) {
+		memcpy((char *)buffer.allocation.address, data.data(), data.size());
+		return;
+	}
+
+	Buffer staging = createStagingBuffer(data.size());
+	std::memcpy((char *)staging.allocation.address, data.data(), data.size());
+
+	copyBuffer(staging, buffer, { .size = data.size() });
+	free(staging);
 }

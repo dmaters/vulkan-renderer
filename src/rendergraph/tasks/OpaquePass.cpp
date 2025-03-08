@@ -9,7 +9,6 @@
 #include "material/Pipeline.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphResourceSolver.hpp"
-#include "resources/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {

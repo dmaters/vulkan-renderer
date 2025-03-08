@@ -5,7 +5,7 @@
 #include "Camera.hpp"
 #include "Primitive.hpp"
 #include "material/MaterialManager.hpp"
-#include "resources/MemoryAllocator.hpp"
+#include "resources/ResourceManager.hpp"
 
 class Scene {
 private:
@@ -21,7 +21,7 @@ private:
 public:
 	static Scene loadMesh(
 		const std::filesystem::path& file,
-		MemoryAllocator& allocator,
+		ResourceManager& resourceManager,
 		MaterialManager& materialManager
 	);
 

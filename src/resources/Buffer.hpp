@@ -1,16 +1,15 @@
 #pragma once
 
-#include <vk_mem_alloc.h>
-
 #include <cstddef>
+#include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_handles.hpp>
 
-#include "MemoryAllocator.hpp"
+#include "memory/MemoryAllocator.hpp"
 
 struct Buffer {
 	vk::Buffer buffer;
-	MemoryAllocator::BufferAllocation allocation;
+	MemoryAllocator::SubAllocation allocation;
 	size_t size;
 };

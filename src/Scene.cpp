@@ -10,11 +10,12 @@
 #include <vulkan/vulkan_enums.hpp>
 
 #include "material/MaterialManager.hpp"
-#include "resources/MemoryAllocator.hpp"
+#include "memory/MemoryAllocator.hpp"
+#include "resources/ResourceManager.hpp"
 
 Scene Scene::loadMesh(
 	const std::filesystem::path& path,
-	MemoryAllocator& allocator,
+	ResourceManager& resourceManager,
 	MaterialManager& materialManager
 ) {
 	Assimp::Importer importer;
@@ -48,36 +49,33 @@ Scene Scene::loadMesh(
 
 	size_t vertexBufferSize = sizeof(Vertex) * vertices.size();
 
-	vk::BufferCreateInfo vertexInfo {
+	ResourceManager::BufferDescription vertexInfo {
 		.size = vertexBufferSize,
 		.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-		         vk::BufferUsageFlagBits::eTransferDst
+		         vk::BufferUsageFlagBits::eTransferDst,
+		.location = MemoryAllocator::Location::DeviceLocal
+
 	};
 
-	auto vertexBuffer = allocator.allocateBuffer(
-		vertexInfo, MemoryAllocator::Location::DeviceLocal
-	);
+	auto vertexBuffer = resourceManager.createBuffer(vertexInfo);
 
 	auto vertexData = reinterpret_cast<const std::byte*>(vertices.data());
 	std::vector<std::byte> rawVertices(
 		vertexData, vertexData + vertexBufferSize
 	);
-	allocator.copyToBuffer(rawVertices, vertexBuffer);
+	resourceManager.copyToBuffer(rawVertices, vertexBuffer);
 	size_t indexBufferSize = sizeof(unsigned int) * indices.size();
 
-	vk::BufferCreateInfo indexInfo {
+	auto indexBuffer = resourceManager.createBuffer({
 		.size = indexBufferSize,
 		.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-		         vk::BufferUsageFlagBits::eTransferDst
-	};
-
-	auto indexBuffer = allocator.allocateBuffer(
-		indexInfo, MemoryAllocator::Location::DeviceLocal
-	);
+	             vk::BufferUsageFlagBits::eTransferDst,
+		.location = MemoryAllocator::Location::DeviceLocal,
+	});
 
 	auto indexData = reinterpret_cast<const std::byte*>(indices.data());
 	std::vector<std::byte> rawIndices(indexData, indexData + indexBufferSize);
-	allocator.copyToBuffer(rawIndices, indexBuffer);
+	resourceManager.copyToBuffer(rawIndices, indexBuffer);
 
 	Scene scene;
 
