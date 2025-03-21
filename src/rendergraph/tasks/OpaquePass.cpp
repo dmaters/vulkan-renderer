@@ -3,13 +3,13 @@
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
+#include "Primitive.hpp"
 #include "RenderPass.hpp"
-#include "material/MaterialManager.hpp"
-#include "material/Pipeline.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphResourceSolver.hpp"
-#include "resources/ResourceManager.hpp"
+
 
 void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {
 	renderGraph.registerDependency({
@@ -33,19 +33,19 @@ void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {
 		.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 						});
 
-	renderGraph
-		.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
-			.name = "gset_buffer",
-			.usage = {
-					  .type = ResourceUsage::Type::READ,
-					  .access = vk::AccessFlagBits2::eShaderRead,
-					  .stage = vk::PipelineStageFlagBits2::eVertexShader,
-					  }
-    });
 	RenderPass::setAttachments({
 		.color = "main_color",
 		.depth = "main_depth",
 	});
+
+	renderGraph.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
+		.name = "gset_buffer",
+		.usage =  {
+						   .type = ResourceUsage::Type::READ,
+						   .access = vk::AccessFlagBits2::eShaderRead,
+						   .stage = vk::PipelineStageFlagBits2::eVertexShader,
+						   },
+						});
 }
 
 void OpaquePass::execute(
@@ -53,21 +53,10 @@ void OpaquePass::execute(
 ) {
 	RenderPass::execute(commandBuffer, resources);
 
-	MaterialManager::Material& baseMaterial =
-		resources.primitives[0].material.baseMaterial;
-	Pipeline pipeline = baseMaterial.pipeline;
+	MaterialManager::MaterialInstance materialInstance =
+		resources.primitives[0].material;
+	Pipeline pipeline = materialInstance.baseMaterial.pipeline;
 
-	commandBuffer.bindPipeline(
-		vk::PipelineBindPoint::eGraphics, baseMaterial.pipeline.m_pipeline
-	);
-
-	commandBuffer.bindDescriptorSets(
-		vk::PipelineBindPoint::eGraphics,
-		pipeline.m_pipelineLayout,
-		0,
-		baseMaterial.globalSet.set,
-		nullptr
-	);
 	for (auto primitive : resources.primitives) {
 		commandBuffer.pushConstants(
 			pipeline.m_pipelineLayout,
@@ -85,15 +74,13 @@ void OpaquePass::execute(
 			nullptr
 		);
 
-		commandBuffer.bindVertexBuffers(
-			0, { primitive.vertexBuffer.buffer }, { 0 }
+		commandBuffer.drawIndexed(
+			primitive.indexCount,
+			1,
+			primitive.baseIndex,
+			primitive.baseVertex,
+			0
 		);
-		commandBuffer.bindIndexBuffer(
-			primitive.indexBuffer.buffer, 0, vk::IndexType::eUint32
-		);
-
-		commandBuffer.drawIndexed(primitive.indexCount, 1, 0, 0, 0);
 	}
-
 	commandBuffer.endRendering();
 }

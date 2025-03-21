@@ -9,6 +9,7 @@
 class OpaquePass : public RenderPass {
 private:
 public:
+	OpaquePass(MaterialManager::Material material) : RenderPass(material) {}
 	void setup(RenderGraphResourceSolver& graph) override;
 	void execute(vk::CommandBuffer& buffer, const Resources& resources)
 		override;

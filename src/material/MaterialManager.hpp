@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <glm/ext/matrix_float4x4.hpp>
@@ -14,6 +15,7 @@
 
 #include "Instance.hpp"
 #include "Pipeline.hpp"
+#include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
 struct GlobalResources {
@@ -33,7 +35,7 @@ public:
 	};
 	struct Material {
 		Pipeline pipeline;
-		DescriptorSet& globalSet;
+		std::array<DescriptorSet, 3> globalSets;
 	};
 
 	struct MaterialInstance {
@@ -47,12 +49,11 @@ private:
 	vk::DescriptorPool m_pool;
 	std::vector<Material> m_materials;
 	std::array<DescriptorSet, 3> m_globalDescriptorSets;
-
-	ResourceManager m_resourceManager;
+	ResourceManager& m_resourceManager;
 
 public:
-	MaterialManager(Instance& instance);
-	Buffer getGlobalBuffer(std::array<Buffer, 3>& deviceLocalBuffer);
+	MaterialManager(Instance& instance, ResourceManager& resourceManager);
+	std::array<Buffer, 3> setupMainDescriptorSet();
 
 	MaterialInstance instantiateMaterial(MaterialDescription& description);
 };

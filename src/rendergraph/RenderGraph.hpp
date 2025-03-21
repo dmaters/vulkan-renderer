@@ -76,6 +76,7 @@ public:
 	);
 
 	void registerBuffer(std::string_view name, Buffer buffer);
+	void registerBuffer(std::string_view name, std::array<Buffer, 3> buffer);
 	void registerBuffer(
 		std::string_view name,
 		const ResourceManager::BufferDescription& description

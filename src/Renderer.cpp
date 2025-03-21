@@ -4,11 +4,9 @@
 #include <mfidl.h>
 #include <vulkan/vulkan_core.h>
 
-#include <cstdint>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
-#include <iostream>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -42,9 +40,12 @@ Renderer::Renderer(SDL_Window* window) {
 	createSwapchain();
 
 	m_resourceManager = std::make_unique<ResourceManager>(m_instance);
-	m_materialManager = std::make_unique<MaterialManager>(m_instance);
-
-	createRenderGraph();
+	m_materialManager =
+		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
+	m_renderGraph = std::make_unique<RenderGraph>(m_instance, *m_swapchain);
+	m_renderGraph->registerBuffer(
+		"gset_buffer", m_materialManager->setupMainDescriptorSet()
+	);
 }
 
 void Renderer::createSwapchain() {
@@ -67,22 +68,11 @@ void Renderer::createSwapchain() {
 }
 
 void Renderer::createRenderGraph() {
-	m_renderGraph = std::make_unique<RenderGraph>(m_instance, *m_swapchain);
-
-	m_renderGraph->registerBuffer(
-		"gset_buffer",
-		ResourceManager::BufferDescription {
-			.size = sizeof(GlobalResources::Camera),
-			.usage = vk::BufferUsageFlagBits::eUniformBuffer |
-
-	                 vk::BufferUsageFlagBits::eTransferDst,
-			.location = MemoryAllocator::Location::DeviceLocal,
-		}
-	);
-	std::array<Buffer, 3>& resourceBuffer =
-		m_renderGraph->getBuffers("gset_buffer");
-	Buffer localBuffer = m_materialManager->getGlobalBuffer(resourceBuffer);
-
+	Buffer localBuffer = m_resourceManager->createBuffer({
+		.size = sizeof(GlobalResources),
+		.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		.location = MemoryAllocator::Location::HostMapped,
+	});
 	m_globalData = (GlobalResources*)localBuffer.allocation.address;
 
 	auto copyDescriptorBufferPass = std::make_unique<BufferCopy>(BufferCopy::BufferCopyInfo{
@@ -122,7 +112,18 @@ void Renderer::createRenderGraph() {
 	                 vk::ImageUsageFlagBits::eTransferDst,
 		}
 	);
-	auto opaquePass = std::make_unique<OpaquePass>();
+
+	m_renderGraph->registerBuffer(
+		"index_buffer", m_currentScene->getIndexBuffer()
+	);
+	m_renderGraph->registerBuffer(
+		"vertex_buffer", m_currentScene->getVertexBuffer()
+	);
+
+	auto opaquePass = std::make_unique<OpaquePass>(
+		m_currentScene->getPrimitives()[0].material.baseMaterial
+	);
+
 	m_renderGraph->addTask("main_pass", std::move(opaquePass));
 
 	auto imageCopyTask = std::make_unique<ImageCopy>("main_color", "result");
@@ -143,4 +144,6 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene = std::make_unique<Scene>(
 		Scene::loadMesh(path, *m_resourceManager, *m_materialManager)
 	);
+
+	createRenderGraph();
 }

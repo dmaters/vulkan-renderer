@@ -1,6 +1,7 @@
 #include "RenderGraph.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <memory>
 #include <queue>
@@ -18,6 +19,7 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphResourceSolver.hpp"
 #include "rendergraph/tasks/ImageCopy.hpp"
+#include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
 RenderGraph::RenderGraph(Instance& instance, Swapchain& swapchain) :
@@ -341,6 +343,11 @@ void RenderGraph::registerImage(
 }
 void RenderGraph::registerBuffer(std::string_view name, Buffer buffer) {
 	m_buffers[name] = buffer;
+}
+void RenderGraph::registerBuffer(
+	std::string_view name, std::array<Buffer, 3> buffers
+) {
+	m_transientBuffers[name] = buffers;
 }
 void RenderGraph::registerBuffer(
 	std::string_view name, const ResourceManager::BufferDescription& description

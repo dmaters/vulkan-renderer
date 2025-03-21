@@ -12,15 +12,14 @@
 #include "Pipeline.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/Pipeline.hpp"
+#include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
-MaterialManager::MaterialManager(Instance& instance) :
-	m_device(instance.device),
-
-	m_resourceManager(instance)
-
-{
+MaterialManager::MaterialManager(
+	Instance& instance, ResourceManager& resourceManager
+) :
+	m_device(instance.device), m_resourceManager(resourceManager) {
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eUniformBuffer,
@@ -43,7 +42,20 @@ MaterialManager::MaterialManager(Instance& instance) :
 	m_pool = m_device.createDescriptorPool(info);
 }
 
-Buffer MaterialManager::getGlobalBuffer(std::array<Buffer, 3>& globalBuffers) {
+std::array<Buffer, 3> MaterialManager::setupMainDescriptorSet() {
+	ResourceManager::BufferDescription uboDesc {
+		.size = sizeof(GlobalResources::Camera),
+		.usage = vk::BufferUsageFlagBits::eUniformBuffer |
+		         vk::BufferUsageFlagBits::eTransferDst,
+		.location = MemoryAllocator::Location::DeviceLocal,
+	};
+
+	std::array<Buffer, 3> ubos {
+		m_resourceManager.createBuffer(uboDesc),
+		m_resourceManager.createBuffer(uboDesc),
+		m_resourceManager.createBuffer(uboDesc),
+	};
+
 	std::array<vk::DescriptorSetLayoutBinding, 1> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
@@ -70,19 +82,13 @@ Buffer MaterialManager::getGlobalBuffer(std::array<Buffer, 3>& globalBuffers) {
 
 	auto sets = m_device.allocateDescriptorSets(allocateInfo);
 
-	Buffer buffer = m_resourceManager.createBuffer({
-		.size = sizeof(GlobalResources),
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		.location = MemoryAllocator::Location::HostMapped,
-	});
-
 	for (int i = 0; i < 3; i++) {
 		vk::DescriptorSet set = sets[i];
 
 		m_globalDescriptorSets[i] = { .set = set, .layout = layout };
 
 		vk::DescriptorBufferInfo bufferInfo {
-			.buffer = globalBuffers[i].buffer,
+			.buffer = ubos[i].buffer,
 			.offset = 0,
 			.range = sizeof(GlobalResources::Camera)
 		};
@@ -99,7 +105,8 @@ Buffer MaterialManager::getGlobalBuffer(std::array<Buffer, 3>& globalBuffers) {
 		};
 		m_device.updateDescriptorSets(writeInfo, {});
 	}
-	return buffer;
+
+	return ubos;
 }
 
 MaterialManager::MaterialInstance MaterialManager::instantiateMaterial(
@@ -163,7 +170,7 @@ MaterialManager::MaterialInstance MaterialManager::instantiateMaterial(
 	if (m_materials.size() == 0) {
 		m_materials.push_back({
 			.pipeline = pipeline,
-			.globalSet = m_globalDescriptorSets[0],
+			.globalSets = m_globalDescriptorSets,
 		});
 	}
 

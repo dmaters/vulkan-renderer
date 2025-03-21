@@ -5,12 +5,13 @@
 #include <assimp/scene.h>
 
 #include <assimp/Importer.hpp>
+#include <cstdint>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
+#include "PrimitiveManager.hpp"
 #include "material/MaterialManager.hpp"
-#include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 Scene Scene::loadMesh(
@@ -26,7 +27,7 @@ Scene Scene::loadMesh(
 	auto mesh = importedScene->mMeshes[0];
 
 	std::vector<Vertex> vertices;
-	std::vector<unsigned int> indices;
+	std::vector<uint16_t> indices;
 
 	for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
 		auto face = mesh->mFaces[i];
@@ -49,33 +50,14 @@ Scene Scene::loadMesh(
 
 	size_t vertexBufferSize = sizeof(Vertex) * vertices.size();
 
-	ResourceManager::BufferDescription vertexInfo {
-		.size = vertexBufferSize,
-		.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-		         vk::BufferUsageFlagBits::eTransferDst,
-		.location = MemoryAllocator::Location::DeviceLocal
-
-	};
-
-	auto vertexBuffer = resourceManager.createBuffer(vertexInfo);
-
 	auto vertexData = reinterpret_cast<const std::byte*>(vertices.data());
 	std::vector<std::byte> rawVertices(
 		vertexData, vertexData + vertexBufferSize
 	);
-	resourceManager.copyToBuffer(rawVertices, vertexBuffer);
-	size_t indexBufferSize = sizeof(unsigned int) * indices.size();
-
-	auto indexBuffer = resourceManager.createBuffer({
-		.size = indexBufferSize,
-		.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-	             vk::BufferUsageFlagBits::eTransferDst,
-		.location = MemoryAllocator::Location::DeviceLocal,
-	});
+	size_t indexBufferSize = sizeof(uint16_t) * indices.size();
 
 	auto indexData = reinterpret_cast<const std::byte*>(indices.data());
 	std::vector<std::byte> rawIndices(indexData, indexData + indexBufferSize);
-	resourceManager.copyToBuffer(rawIndices, indexBuffer);
 
 	Scene scene;
 
@@ -83,14 +65,24 @@ Scene Scene::loadMesh(
 		{ .albedo = "resources/textures/image.png" }
 	);
 
-	scene.m_primitives.push_back(Primitive {
-		.vertexBuffer = vertexBuffer,
-		.indexBuffer = indexBuffer,
-		.material = materialManager.instantiateMaterial(materialDesc),
-		.indexCount = indices.size(),
-		.modelMatrix = glm::mat4x4(1),
+	PrimitiveManager primitiveManager;
 
+	uint32_t indexOffset, vertexOffset;
+	primitiveManager.addPrimitive(
+		rawVertices, rawIndices, indexOffset, vertexOffset
+	);
+
+	scene.m_primitives.push_back(Primitive {
+		.baseVertex = vertexOffset,
+		.baseIndex = indexOffset,
+		.indexCount = (uint32_t)indices.size(),
+		.material = materialManager.instantiateMaterial(materialDesc),
+		.modelMatrix = glm::mat4x4(1),
 	});
+
+	primitiveManager.buildBuffers(
+		resourceManager, scene.m_vertexBuffer, scene.m_indexBuffer
+	);
 
 	return scene;
 };
