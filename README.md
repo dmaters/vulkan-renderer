@@ -1,8 +1,8 @@
 # Vulkan Renderer
 
-A Vulkan-based renderer designed for experimenting with and testing various graphics techniques. The project aims to provide a modular and extensible framework for rapid prototyping and development of rendering techniques.
+A Vulkan-based renderer designed for experimenting and testing various graphics techniques. The project aims to provide a modular and extensible framework for rapid prototyping and development of rendering techniques.
 
-Check #1 for implementation progress.
+Check the related [issue](https://github.com/dmaters/vulkan-renderer/issues/1) for implementation progress.
 
 
 ## Build Instructions
