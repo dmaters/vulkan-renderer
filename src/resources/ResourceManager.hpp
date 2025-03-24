@@ -20,10 +20,10 @@ private:
 
 	vk::CommandPool m_commandPool;
 	vk::Queue m_queue;
-	MemoryAllocator m_memoryAllocator;
+	MemoryAllocator& m_memoryAllocator;
 
 public:
-	ResourceManager(Instance& instance);
+	ResourceManager(Instance& instance, MemoryAllocator& memoryAllocator);
 
 	Buffer createStagingBuffer(size_t size);
 	Buffer createBuffer(const BufferDescription& description);

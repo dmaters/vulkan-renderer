@@ -22,8 +22,12 @@
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
-RenderGraph::RenderGraph(Instance& instance, Swapchain& swapchain) :
-	m_instance(instance), m_swapchain(swapchain), m_resourceManager(instance) {
+RenderGraph::RenderGraph(
+	Instance& instance, Swapchain& swapchain, ResourceManager& resourceManager
+) :
+	m_instance(instance),
+	m_swapchain(swapchain),
+	m_resourceManager(resourceManager) {
 	m_mainQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.graphicsIndex, 0
 	);

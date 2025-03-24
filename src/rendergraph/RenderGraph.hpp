@@ -48,7 +48,7 @@ private:
 
 	Instance& m_instance;
 	Swapchain& m_swapchain;
-	ResourceManager m_resourceManager;
+	ResourceManager& m_resourceManager;
 	vk::Queue m_mainQueue;
 
 	void clearImage(vk::CommandBuffer& buffer, std::string_view image);
@@ -65,7 +65,11 @@ private:
 	uint8_t m_currentFrame = 0;
 
 public:
-	RenderGraph(Instance& instance, Swapchain& swapchain);
+	RenderGraph(
+		Instance& instance,
+		Swapchain& swapchain,
+		ResourceManager& resourceManager
+	);
 
 	void addTask(std::string_view name, std::unique_ptr<Task> task);
 

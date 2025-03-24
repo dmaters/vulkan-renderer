@@ -20,8 +20,10 @@
 
 #include <filesystem>
 
-ResourceManager::ResourceManager(Instance &instance) :
-	m_device(instance.device), m_memoryAllocator(instance) {
+ResourceManager::ResourceManager(
+	Instance &instance, MemoryAllocator &memoryAllocator
+) :
+	m_device(instance.device), m_memoryAllocator(memoryAllocator) {
 	m_queue = instance.device.getQueue(
 		instance.queueFamiliesIndices.transferIndex, 0
 	);

@@ -20,6 +20,7 @@
 #include "Scene.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
+#include "memory/MemoryAllocator.hpp"
 #include "rendergraph/tasks/BufferCopy.hpp"
 #include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
@@ -38,11 +39,14 @@ Renderer::Renderer(SDL_Window* window) {
 		m_instance.queueFamiliesIndices.presentIndex, 0
 	);
 	createSwapchain();
-
-	m_resourceManager = std::make_unique<ResourceManager>(m_instance);
+	m_memoryAllocator = std::make_unique<MemoryAllocator>(m_instance);
+	m_resourceManager =
+		std::make_unique<ResourceManager>(m_instance, *m_memoryAllocator);
 	m_materialManager =
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
-	m_renderGraph = std::make_unique<RenderGraph>(m_instance, *m_swapchain);
+	m_renderGraph = std::make_unique<RenderGraph>(
+		m_instance, *m_swapchain, *m_resourceManager
+	);
 	m_renderGraph->registerBuffer(
 		"gset_buffer", m_materialManager->setupMainDescriptorSet()
 	);
