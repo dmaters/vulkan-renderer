@@ -52,5 +52,5 @@ struct ResourceManager::ImageDescription {
 struct ResourceManager::BufferDescription {
 	size_t size;
 	vk::BufferUsageFlags usage;
-	MemoryAllocator::Location location;
+	AllocationLocation location;
 };

@@ -15,7 +15,7 @@ struct Image {
 	vk::ImageLayout layout = vk::ImageLayout::eUndefined;
 	vk::Extent3D size;
 
-	std::optional<MemoryAllocator::SubAllocation> allocation;
+	std::optional<SubAllocation> allocation;
 
 	vk::ImageAspectFlags getAspectFlags() {
 		vk::ImageAspectFlags flags;

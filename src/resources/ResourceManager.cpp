@@ -41,8 +41,9 @@ Buffer ResourceManager::createBuffer(const BufferDescription &description) {
 
 	vk::Buffer buffer = m_device.createBuffer(createInfo);
 
-	MemoryAllocator::SubAllocation allocation =
-		m_memoryAllocator.allocate(buffer, description.location);
+	SubAllocation allocation = m_memoryAllocator.allocate(
+		buffer, AllocationType::Persistent, description.location
+	);
 
 	return {
 		.buffer = buffer,
@@ -66,8 +67,9 @@ Image ResourceManager::createImage(const ImageDescription &description) {
 
 	vk::Image image = m_device.createImage(imageInfo);
 
-	MemoryAllocator::SubAllocation allocation =
-		m_memoryAllocator.allocate(image);
+	SubAllocation allocation = m_memoryAllocator.allocate(
+		image, AllocationType::Persistent, AllocationLocation::Device
+	);
 
 	vk::ImageViewCreateInfo viewInfo {
 		.image = image,
@@ -172,8 +174,8 @@ Buffer ResourceManager::createStagingBuffer(size_t size) {
 		.usage = vk::BufferUsageFlagBits::eTransferSrc,
 	};
 	vk::Buffer buffer = m_device.createBuffer(info);
-	MemoryAllocator::SubAllocation allocation = m_memoryAllocator.allocate(
-		buffer, MemoryAllocator::Location::HostMapped
+	SubAllocation allocation = m_memoryAllocator.allocate(
+		buffer, AllocationType::Staging, AllocationLocation::Host
 	);
 
 	return {

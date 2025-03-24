@@ -25,7 +25,7 @@ bool PrimitiveManager::buildBuffers(
 		.size = m_vertexbuffer.size(),
 		.usage = vk::BufferUsageFlagBits::eVertexBuffer |
 	             vk::BufferUsageFlagBits::eTransferDst,
-		.location = MemoryAllocator::Location::DeviceLocal,
+		.location = AllocationLocation::Device,
 	});
 
 	resourceManager.copyToBuffer(m_vertexbuffer, vertexBuffer);
@@ -34,7 +34,7 @@ bool PrimitiveManager::buildBuffers(
 		.size = m_indexBuffer.size(),
 		.usage = vk::BufferUsageFlagBits::eIndexBuffer |
 	             vk::BufferUsageFlagBits::eTransferDst,
-		.location = MemoryAllocator::Location::DeviceLocal,
+		.location = AllocationLocation::Device,
 	});
 	resourceManager.copyToBuffer(m_indexBuffer, indexBuffer);
 	return true;

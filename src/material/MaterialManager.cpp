@@ -47,7 +47,7 @@ std::array<Buffer, 3> MaterialManager::setupMainDescriptorSet() {
 		.size = sizeof(GlobalResources::Camera),
 		.usage = vk::BufferUsageFlagBits::eUniformBuffer |
 		         vk::BufferUsageFlagBits::eTransferDst,
-		.location = MemoryAllocator::Location::DeviceLocal,
+		.location = AllocationLocation::Device,
 	};
 
 	std::array<Buffer, 3> ubos {

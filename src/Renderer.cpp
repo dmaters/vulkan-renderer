@@ -71,7 +71,7 @@ void Renderer::createRenderGraph() {
 	Buffer localBuffer = m_resourceManager->createBuffer({
 		.size = sizeof(GlobalResources),
 		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		.location = MemoryAllocator::Location::HostMapped,
+		.location = AllocationLocation::Host,
 	});
 	m_globalData = (GlobalResources*)localBuffer.allocation.address;
 
