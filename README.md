@@ -20,6 +20,6 @@ cmake --build .
 ```
 
 ## Contributing
-The project is in early development, and contributions are welcome! If you have ideas or suggestions, feel free to open an issue or submit a pull request.
+The project is in a very early stage. If you encounter any errors, compatibility issues, or have suggestions, please feel free to open an issue or submit a pull request.
 
 
