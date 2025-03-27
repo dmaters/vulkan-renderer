@@ -20,9 +20,5 @@ public:
 		uint32_t& vertexOffset,
 		uint32_t& indexOffset
 	);
-	bool buildBuffers(
-		ResourceManager& resourceManager,
-		Buffer& vertexBuffer,
-		Buffer& indexBuffer
-	);
+	bool buildBuffers(ResourceManager& resourceManager);
 };

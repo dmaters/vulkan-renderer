@@ -29,6 +29,7 @@ public:
 	struct ImageDependencyInfo {
 		std::string_view name;
 		ResourceUsage usage;
+		std::optional<vk::ClearColorValue> clearValue;
 		std::optional<vk::ImageLayout> requiredLayout;
 	};
 

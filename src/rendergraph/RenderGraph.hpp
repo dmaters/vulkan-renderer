@@ -13,16 +13,12 @@
 
 #include "RenderGraphResourceSolver.hpp"
 #include "Swapchain.hpp"
-#include "resources/Buffer.hpp"
-#include "resources/Image.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
+
 struct Primitive;
 struct Resources {
-	std::map<std::string_view, Image>& images;
-	std::map<std::string_view, Buffer>& buffers;
-	std::map<std::string_view, std::array<Image, 3>>& transientImages;
-	std::map<std::string_view, std::array<Buffer, 3>>& transientBuffers;
+	ResourceManager& resourceManager;
 	const std::vector<Primitive>& primitives;
 	uint8_t currentFrame;
 };
@@ -31,18 +27,14 @@ public:
 private:
 	struct Node;
 	struct RegisteredTask;
-	std::map<std::string_view, ResourceUsage> m_resourceStatus;
-	std::map<std::string_view, Image> m_images;
-	std::map<std::string_view, Buffer> m_buffers;
-	std::map<std::string_view, std::array<Image, 3>> m_transientImages;
-	std::map<std::string_view, std::array<Buffer, 3>> m_transientBuffers;
-	std::set<std::string_view> m_clearedImages;
 
 	std::map<std::string_view, std::vector<std::string_view>> m_imageReferences;
 	std::map<std::string_view, std::vector<std::string_view>>
 		m_bufferReferences;
 
 	std::map<std::string_view, RegisteredTask> m_registeredTask;
+
+	std::array<ImageHandle, 3> m_swapchainImages;
 
 	std::vector<std::string_view> m_nodes;
 
@@ -62,6 +54,7 @@ private:
 	);
 
 	void buildGraph();
+
 	uint8_t m_currentFrame = 0;
 
 public:
@@ -73,21 +66,6 @@ public:
 
 	void addTask(std::string_view name, std::unique_ptr<Task> task);
 
-	void registerImage(std::string_view name, Image image);
-	void registerImage(
-		std::string_view name,
-		const ResourceManager::ImageDescription& description
-	);
-
-	void registerBuffer(std::string_view name, Buffer buffer);
-	void registerBuffer(std::string_view name, std::array<Buffer, 3> buffer);
-	void registerBuffer(
-		std::string_view name,
-		const ResourceManager::BufferDescription& description
-	);
-	std::array<Buffer, 3>& getBuffers(std::string_view name) {
-		return m_transientBuffers[name];
-	}
 	void submit(const std::vector<Primitive>& primitives);
 };
 struct ImageDependency {

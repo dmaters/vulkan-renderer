@@ -30,33 +30,26 @@ void BufferCopy::setup(RenderGraphResourceSolver& graph) {
 void BufferCopy::execute(
 	vk::CommandBuffer& buffer, const Resources& resources
 ) {
-	std::string_view originName = m_info.origin.name;
-	vk::Buffer origin;
+	Buffer& origin =
+		resources.resourceManager.getNamedBuffer(m_info.origin.name);
 
-	if (resources.buffers.contains(originName))
-		origin = resources.buffers[originName].buffer;
-	else
-		origin = resources.transientBuffers[originName][resources.currentFrame]
-		             .buffer;
+	Buffer& destination =
+		resources.resourceManager.getNamedBuffer(m_info.destination.name);
 
-	std::string_view destinationName = m_info.destination.name;
-	vk::Buffer destination;
-
-	if (resources.buffers.contains(destinationName))
-		destination = resources.buffers[destinationName].buffer;
-	else
-		destination =
-			resources.transientBuffers[destinationName][resources.currentFrame]
-				.buffer;
-
+	uint32_t originBaseOffset =
+		origin.transient ? origin.bufferAccess[resources.currentFrame].offset
+						 : 0;
+	uint32_t destinationBaseOffset =
+		destination.transient
+			? destination.bufferAccess[resources.currentFrame].offset
+			: 0;
 	buffer.copyBuffer(
-
-		origin,
-		destination,
+		origin.buffer,
+		destination.buffer,
 		{
 			{
-             .srcOffset = m_info.origin.offset,
-             .dstOffset = m_info.destination.offset,
+             .srcOffset = originBaseOffset + m_info.origin.offset,
+             .dstOffset = destinationBaseOffset + m_info.destination.offset,
              .size = m_info.origin.length,
 			 },
     }

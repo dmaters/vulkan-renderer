@@ -34,11 +34,11 @@ ResourceManager::ResourceManager(
 	});
 }
 
-Buffer ResourceManager::createBuffer(const BufferDescription &description) {
+BufferHandle ResourceManager::createBuffer(const BufferDescription &description
+) {
 	vk::BufferCreateInfo createInfo {
-		.size = description.size,
+		.size = description.transient ? description.size * 3 : description.size,
 		.usage = description.usage,
-
 	};
 
 	vk::Buffer buffer = m_device.createBuffer(createInfo);
@@ -47,21 +47,44 @@ Buffer ResourceManager::createBuffer(const BufferDescription &description) {
 		buffer, AllocationType::Persistent, description.location
 	);
 
-	return {
+	BufferHandle handle { m_resourceCounter };
+	m_resourceCounter++;
+
+	m_buffers[handle.value] = {
 		.buffer = buffer,
 		.allocation = allocation,
 		.size = description.size,
+		.bufferAccess = std::vector<BufferAccess> { BufferAccess {
+			.length = description.size,
+			.offset = 0,
+		} },
+		.transient = description.transient,
 	};
-}
-Image ResourceManager::createImage(const ImageDescription &description) {
-	const vk::ImageCreateInfo imageInfo {
-		.flags = {},
 
-		.imageType = vk::ImageType::e2D,
+	if (description.transient) {
+		m_buffers[handle.value].bufferAccess.push_back({
+			.length = description.size,
+			.offset = description.size,
+		});
+		m_buffers[handle.value].bufferAccess.push_back({
+			.length = description.size,
+			.offset = description.size * 2,
+		});
+	}
+
+	return handle;
+}
+ImageHandle ResourceManager::createImage(const ImageDescription &description) {
+	vk::ImageCreateInfo imageInfo {
+		.flags = {},
+		.imageType = description.depth > 1 ? vk::ImageType::e3D
+		                                   : vk::ImageType::e2D,
 		.format = description.format,
-		.extent = vk::Extent3D(description.width, description.height, 1),
+		.extent = vk::Extent3D(
+			description.width, description.height, description.depth
+		),
 		.mipLevels = 1,
-		.arrayLayers = 1,
+		.arrayLayers = description.transient ? 3u : 1u,
 		.samples = vk::SampleCountFlagBits::e1,
 		.usage = description.usage,
 		.initialLayout = vk::ImageLayout::eUndefined,
@@ -73,9 +96,11 @@ Image ResourceManager::createImage(const ImageDescription &description) {
 		image, AllocationType::Persistent, AllocationLocation::Device
 	);
 
+	std::vector<vk::ImageView> views;
+
 	vk::ImageViewCreateInfo viewInfo {
 		.image = image,
-		.viewType = vk::ImageViewType::e2D,
+		.viewType = description.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
 		.format = description.format,
 		.subresourceRange = { .aspectMask =
 		                          description.format == vk::Format::eD16Unorm
@@ -84,19 +109,46 @@ Image ResourceManager::createImage(const ImageDescription &description) {
                              .baseMipLevel = 0,
                              .levelCount = 1,
                              .baseArrayLayer = 0,
-                             .layerCount = 1,},
+                             .layerCount = 1,
+							},
 	};
 
-	return Image {
+	views.push_back(m_device.createImageView(viewInfo));
+
+	if (description.transient) {
+		viewInfo.subresourceRange.baseArrayLayer = 1;
+		views.push_back(m_device.createImageView(viewInfo));
+		viewInfo.subresourceRange.baseArrayLayer = 2;
+		views.push_back(m_device.createImageView(viewInfo));
+	}
+
+	ImageHandle handle { m_resourceCounter };
+	m_resourceCounter++;
+
+	Image finalImage {
 		.image = image,
-		.view = m_device.createImageView(viewInfo),
+		.view = views[0],
 		.format = description.format,
-		.layout = vk::ImageLayout::eUndefined,
 		.size = { .width = description.width,
                  .height = description.height,
-                 .depth = 1, },
-		            .allocation = allocation,
+                 .depth = description.depth,
+				},
+		.allocation = allocation,
+		.accesses = std::vector<ImageAccess>(!description.transient ?1 : 3, ImageAccess{
+			.view = views[0],
+			.layout = vk::ImageLayout::eUndefined,
+			.accessType = vk::AccessFlagBits2::eNone,
+			.accessStage = vk::PipelineStageFlagBits2::eNone,
+		}),
+		.transient = description.transient
 	};
+
+	if (description.transient) {
+		finalImage.accesses[1] = { .view = views[1] };
+		finalImage.accesses[2] = { .view = views[2] };
+	}
+	m_images[handle.value] = finalImage;
+	return handle;
 }
 
 struct ImageData {
@@ -122,12 +174,14 @@ ImageData load(const std::filesystem::path &image) {
 	memcpy(vectorData.data(), rawData, size);
 	stbi_image_free(rawData);
 
-	return { .x = (uint32_t)x,
-		     .y = (uint32_t)y,
-		     .channels = (uint8_t)channels,
-		     .data = vectorData };
+	return {
+		.x = (uint32_t)x,
+		.y = (uint32_t)y,
+		.channels = (uint8_t)channels,
+		.data = vectorData,
+	};
 }
-Image ResourceManager::loadImage(const std::filesystem::path &path) {
+ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
 	ImageData data = load(path);
 	ImageDescription description {
 		.width = data.x,
@@ -138,9 +192,9 @@ Image ResourceManager::loadImage(const std::filesystem::path &path) {
 
 	};
 
-	Image image = createImage(description);
+	ImageHandle image = createImage(description);
 
-	Buffer staging = createStagingBuffer(data.data.size());
+	BufferHandle staging = createStagingBuffer(data.data.size());
 
 	copyToBuffer(data.data, staging);
 
@@ -164,13 +218,11 @@ Image ResourceManager::loadImage(const std::filesystem::path &path) {
 		
 	});
 
-	image.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
 	free(staging);
 	return image;
 }
 
-Buffer ResourceManager::createStagingBuffer(size_t size) {
+BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
 	vk::BufferCreateInfo info {
 		.size = size,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc,
@@ -179,16 +231,28 @@ Buffer ResourceManager::createStagingBuffer(size_t size) {
 	SubAllocation allocation = m_memoryAllocator.allocate(
 		buffer, AllocationType::Staging, AllocationLocation::Host
 	);
+	BufferHandle handle { m_resourceCounter };
+	m_resourceCounter++;
 
-	return {
-		.buffer = buffer,
-		.allocation = allocation,
-		.size = size,
-	};
+	m_buffers[handle.value] = Buffer { .buffer = buffer,
+		                               .allocation = allocation,
+		                               .size = size,
+		                               .bufferAccess = { BufferAccess {
+										   .length = size,
+										   .offset = 0,
+									   }, }, };
+
+	return handle;
 }
+ImageHandle ResourceManager::registerImage(Image image) {
+	ImageHandle handle { m_resourceCounter };
+	m_resourceCounter++;
 
+	m_images[handle.value] = image;
+	return handle;
+}
 void ResourceManager::copyBuffer(
-	Buffer &origin, Buffer &destination, vk::BufferCopy offset
+	BufferHandle origin, BufferHandle destination, vk::BufferCopy offset
 ) {
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
@@ -204,7 +268,11 @@ void ResourceManager::copyBuffer(
 	};
 	commandBuffer.begin(beginInfo);
 
-	commandBuffer.copyBuffer(origin.buffer, destination.buffer, offset);
+	commandBuffer.copyBuffer(
+		m_buffers[origin.value].buffer,
+		m_buffers[destination.value].buffer,
+		offset
+	);
 	commandBuffer.end();
 	vk::SubmitInfo submitInfo { .commandBufferCount = 1,
 		                        .pCommandBuffers = &commandBuffer };
@@ -212,7 +280,7 @@ void ResourceManager::copyBuffer(
 	m_queue.submit({ submitInfo });
 };
 void ResourceManager::copyToImage(
-	Buffer &origin, Image &destination, vk::BufferImageCopy offset
+	BufferHandle origin, ImageHandle destination, vk::BufferImageCopy offset
 ) {
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
@@ -234,7 +302,7 @@ void ResourceManager::copyToImage(
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eUndefined,
         .newLayout = vk::ImageLayout::eTransferDstOptimal,
-        .image = destination.image,
+        .image = m_images[destination.value].image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
@@ -248,8 +316,8 @@ void ResourceManager::copyToImage(
 		.pImageMemoryBarriers = &barrier,
 	});
 	commandBuffer.copyBufferToImage(
-		origin.buffer,
-		destination.image,
+		m_buffers[origin.value].buffer,
+		m_images[destination.value].image,
 		vk::ImageLayout::eTransferDstOptimal,
 		{ offset }
 	);
@@ -258,7 +326,7 @@ void ResourceManager::copyToImage(
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eTransferDstOptimal,
         .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-        .image = destination.image,
+        .image = m_images[destination.value].image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
@@ -282,16 +350,21 @@ void ResourceManager::copyToImage(
 }
 
 void ResourceManager::copyToBuffer(
-	const std::vector<std::byte> &data, Buffer &buffer
+	const std::vector<std::byte> &data, BufferHandle handle
 ) {
+	Buffer &buffer = m_buffers[handle.value];
 	if (buffer.allocation.address != nullptr) {
 		memcpy((char *)buffer.allocation.address, data.data(), data.size());
 		return;
 	}
 
-	Buffer staging = createStagingBuffer(data.size());
-	std::memcpy((char *)staging.allocation.address, data.data(), data.size());
+	BufferHandle staging = createStagingBuffer(data.size());
+	std::memcpy(
+		(char *)m_buffers[staging.value].allocation.address,
+		data.data(),
+		data.size()
+	);
 
-	copyBuffer(staging, buffer, { .size = data.size() });
+	copyBuffer(staging, handle, { .size = data.size() });
 	free(staging);
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <memory>
 #include <optional>
 #include <vulkan/vulkan.hpp>
 
@@ -9,19 +11,23 @@
 
 class RenderPass : public Task {
 public:
+	struct Attachment {
+		std::string_view name;
+		bool clear;
+	};
 	struct Attachments {
-		std::optional<std::string_view> color;
-		std::optional<std::string_view> depth;
+		std::optional<Attachment> color;
+		std::optional<Attachment> depth;
 	};
 
 private:
 	Attachments m_attachments;
 
 protected:
-	MaterialManager::Material m_material;
+	std::shared_ptr<Material> m_material;
 
 public:
-	RenderPass(MaterialManager::Material material) : m_material(material) {}
+	RenderPass(std::shared_ptr<Material> material) : m_material(material) {}
 	inline void setAttachments(Attachments attachments) {
 		m_attachments = attachments;
 	}

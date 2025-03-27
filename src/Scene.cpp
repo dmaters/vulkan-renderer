@@ -80,9 +80,7 @@ Scene Scene::loadMesh(
 		.modelMatrix = glm::mat4x4(1),
 	});
 
-	primitiveManager.buildBuffers(
-		resourceManager, scene.m_vertexBuffer, scene.m_indexBuffer
-	);
+	primitiveManager.buildBuffers(resourceManager);
 
 	return scene;
 };

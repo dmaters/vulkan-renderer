@@ -26,34 +26,38 @@ struct GlobalResources {
 
 	Camera camera;
 };
+struct DescriptorSet {
+	vk::DescriptorSet set = nullptr;
+	vk::DescriptorSetLayout layout = nullptr;
+};
+struct Material {
+	Pipeline pipeline;
+	DescriptorSet globalSet;
+	DescriptorSet materialSet;
+};
+
+struct MaterialInstance {
+	std::shared_ptr<Material> baseMaterial;
+	DescriptorSet instanceSet;
+};
 
 class MaterialManager {
 public:
-	struct DescriptorSet {
-		vk::DescriptorSet set;
-		vk::DescriptorSetLayout layout;
-	};
-	struct Material {
-		Pipeline pipeline;
-		std::array<DescriptorSet, 3> globalSets;
-	};
-
-	struct MaterialInstance {
-		Material& baseMaterial;
-		DescriptorSet instanceSet;
-	};
 	struct MaterialDescription;
 
 private:
 	vk::Device& m_device;
 	vk::DescriptorPool m_pool;
-	std::vector<Material> m_materials;
-	std::array<DescriptorSet, 3> m_globalDescriptorSets;
+	std::vector<std::shared_ptr<Material>> m_materials;
+
 	ResourceManager& m_resourceManager;
+
+	std::array<DescriptorSet, 3> m_globalSets;
+	BufferHandle m_cameraUBO;
 
 public:
 	MaterialManager(Instance& instance, ResourceManager& resourceManager);
-	std::array<Buffer, 3> setupMainDescriptorSet();
+	void updateDescriptorSets(uint8_t currentFrame);
 
 	MaterialInstance instantiateMaterial(MaterialDescription& description);
 };
@@ -68,7 +72,8 @@ struct MaterialManager::MaterialDescription {
 	};
 	std::filesystem::path vertex;
 	std::filesystem::path fragment;
-	std::vector<Resource> resources;
+	std::vector<Resource> materialResources;
+	std::vector<Resource> instanceResources;
 
 	struct DefaultMaterialTextures {
 		std::filesystem::path albedo;
@@ -77,7 +82,7 @@ struct MaterialManager::MaterialDescription {
 	static MaterialDescription Default(DefaultMaterialTextures definition) {
 		return { .vertex = "resources/shaders/main.vert.spv",
 			     .fragment = "resources/shaders/main.frag.spv",
-			     .resources = {
+			     .instanceResources = {
 					{ .binding = 0,
 			                    .count = 1,
 			                    .type = vk::DescriptorType::eSampledImage,

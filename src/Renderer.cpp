@@ -42,13 +42,33 @@ Renderer::Renderer(SDL_Window* window) {
 	m_memoryAllocator = std::make_unique<MemoryAllocator>(m_instance);
 	m_resourceManager =
 		std::make_unique<ResourceManager>(m_instance, *m_memoryAllocator);
+
+	m_resourceManager->createBuffer(
+		"gset_buffer_local",
+		{
+			.size = sizeof(GlobalResources),
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+			.location = AllocationLocation::Host,
+		}
+	);
+	m_resourceManager->createBuffer(
+		"gset_buffer",
+		{
+			.size = sizeof(GlobalResources),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+			.location = AllocationLocation::Device,
+			.transient = true,
+		}
+	);
+	Buffer& globalBuffer =
+		m_resourceManager->getNamedBuffer("gset_buffer_local");
+	m_globalData = (GlobalResources*)globalBuffer.allocation.address;
+
 	m_materialManager =
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 	m_renderGraph = std::make_unique<RenderGraph>(
 		m_instance, *m_swapchain, *m_resourceManager
-	);
-	m_renderGraph->registerBuffer(
-		"gset_buffer", m_materialManager->setupMainDescriptorSet()
 	);
 }
 
@@ -72,29 +92,24 @@ void Renderer::createSwapchain() {
 }
 
 void Renderer::createRenderGraph() {
-	Buffer localBuffer = m_resourceManager->createBuffer({
-		.size = sizeof(GlobalResources),
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		.location = AllocationLocation::Host,
-	});
-	m_globalData = (GlobalResources*)localBuffer.allocation.address;
+	Buffer& globalBuffer =
+		m_resourceManager->getNamedBuffer("gset_buffer_local");
 
 	auto copyDescriptorBufferPass = std::make_unique<BufferCopy>(BufferCopy::BufferCopyInfo{
 		.origin = {
 			.name = "gset_buffer_local",
-			.length = localBuffer.size,
+			.length = globalBuffer.size,
 		},
 		.destination = {
 			.name = "gset_buffer",
-			.length = localBuffer.size,
+			.length = globalBuffer.size,
 			
 		}
 	});
 
-	m_renderGraph->registerBuffer("gset_buffer_local", localBuffer);
 	m_renderGraph->addTask("data_update", std::move(copyDescriptorBufferPass));
 
-	m_renderGraph->registerImage(
+	m_resourceManager->createImage(
 		"main_color",
 		ResourceManager::ImageDescription {
 			.width = 800,
@@ -104,9 +119,11 @@ void Renderer::createRenderGraph() {
 	                 vk::ImageUsageFlagBits::eTransferSrc |
 	                 vk::ImageUsageFlagBits::eTransferDst,
 
+			.transient = true,
+
 		}
 	);
-	m_renderGraph->registerImage(
+	m_resourceManager->createImage(
 		"main_depth",
 		ResourceManager::ImageDescription {
 			.width = 800,
@@ -114,18 +131,12 @@ void Renderer::createRenderGraph() {
 			.format = vk::Format::eD16Unorm,
 			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
 	                 vk::ImageUsageFlagBits::eTransferDst,
+			.transient = true,
 		}
 	);
 
-	m_renderGraph->registerBuffer(
-		"index_buffer", m_currentScene->getIndexBuffer()
-	);
-	m_renderGraph->registerBuffer(
-		"vertex_buffer", m_currentScene->getVertexBuffer()
-	);
-
 	auto opaquePass = std::make_unique<OpaquePass>(
-		m_currentScene->getPrimitives()[0].material.baseMaterial
+		m_currentScene->getPrimitives()[0].material.baseMaterial, true
 	);
 
 	m_renderGraph->addTask("main_pass", std::move(opaquePass));

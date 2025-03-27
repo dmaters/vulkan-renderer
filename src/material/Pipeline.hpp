@@ -9,8 +9,8 @@
 #include <vulkan/vulkan_structs.hpp>
 
 struct Pipeline {
-	vk::Pipeline m_pipeline;
-	vk::PipelineLayout m_pipelineLayout;
+	vk::Pipeline pipeline;
+	vk::PipelineLayout pipelineLayout;
 };
 
 class PipelineBuilder {

@@ -10,7 +10,6 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphResourceSolver.hpp"
 
-
 void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {
 	renderGraph.registerDependency({
 		.name = "main_color",
@@ -34,8 +33,8 @@ void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {
 						});
 
 	RenderPass::setAttachments({
-		.color = "main_color",
-		.depth = "main_depth",
+		.color = Attachment { "main_color", m_clear },
+		.depth = Attachment { "main_depth", m_clear },
 	});
 
 	renderGraph.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
@@ -53,13 +52,9 @@ void OpaquePass::execute(
 ) {
 	RenderPass::execute(commandBuffer, resources);
 
-	MaterialManager::MaterialInstance materialInstance =
-		resources.primitives[0].material;
-	Pipeline pipeline = materialInstance.baseMaterial.pipeline;
-
 	for (auto primitive : resources.primitives) {
 		commandBuffer.pushConstants(
-			pipeline.m_pipelineLayout,
+			m_material->pipeline.pipelineLayout,
 			vk::ShaderStageFlagBits::eVertex,
 			0,
 			64,
@@ -68,7 +63,7 @@ void OpaquePass::execute(
 
 		commandBuffer.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
-			pipeline.m_pipelineLayout,
+			m_material->pipeline.pipelineLayout,
 			1,
 			{ primitive.material.instanceSet.set },
 			nullptr

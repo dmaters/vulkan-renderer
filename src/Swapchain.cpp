@@ -61,21 +61,25 @@ void Swapchain::createFrames(
 				vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
 			),
 		};
-
+		vk::ImageView view = device.createImageView(viewInfo);
 		m_images.push_back(
-
 			Image {
 				.image = images[i],
-				.view = device.createImageView(viewInfo),
+				.view = view,
 				.format = format,
-				.layout = vk::ImageLayout::eUndefined,
 				.size = {
 					.width = 800,
 					.height = 600,
 					.depth = 1,
 				},
 				.allocation = std::nullopt,
-
+				.accesses = {
+					{
+						.view = view,
+						.layout = vk::ImageLayout::eUndefined,
+					}
+				},
+				.transient= false,
 			}
 		);
 	}

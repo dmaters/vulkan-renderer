@@ -13,7 +13,7 @@ public:
 	struct SwapchainCreateInfo;
 
 private:
-	static const short BUFFERING_COUNT = 2;
+	static const short BUFFERING_COUNT = 3;
 	std::vector<Frame> m_frames;
 	std::vector<Image> m_images;
 

@@ -1,5 +1,6 @@
 #include "ImageCopy.hpp"
 
+#include <cstdint>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
@@ -31,37 +32,37 @@ void ImageCopy::setup(RenderGraphResourceSolver& solver) {
 void ImageCopy::execute(
 	vk::CommandBuffer& commandBuffer, const Resources& resources
 ) {
-	bool isOriginTransient = resources.transientImages.contains(m_origin);
-	Image& origin =
-		isOriginTransient
-			? resources.transientImages[m_origin][resources.currentFrame]
-			: resources.images[m_origin];
+	Image& origin = resources.resourceManager.getNamedImage(m_origin);
 
-	bool isDestinationTransient =
-		resources.transientImages.contains(m_destination);
-	Image& destination =
-		isDestinationTransient
-			? resources.transientImages[m_destination][resources.currentFrame]
-			: resources.images[m_destination];
+	uint8_t originAccessIndex = origin.transient ? resources.currentFrame : 0;
+	Image& destination = resources.resourceManager.getNamedImage(m_destination);
 
-	vk::ImageSubresourceLayers layer = {
+	uint8_t destinationAccessIndex =
+		destination.transient ? resources.currentFrame : 0;
+
+	vk::ImageSubresourceLayers originLayer = {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.mipLevel = 0,
-		.baseArrayLayer = 0,
+		.baseArrayLayer = originAccessIndex,
+		.layerCount = 1,
+	};
+	vk::ImageSubresourceLayers destinationLayer = {
+		.aspectMask = vk::ImageAspectFlagBits::eColor,
+		.mipLevel = 0,
+		.baseArrayLayer = destinationAccessIndex,
 		.layerCount = 1,
 	};
 	commandBuffer.copyImage(
 		origin.image,
-		origin.layout,
+		origin.accesses[originAccessIndex].layout,
 		destination.image,
-		destination.layout,
+		destination.accesses[destinationAccessIndex].layout,
 		{
 			{
-             .srcSubresource = layer,
-             .dstSubresource = layer,
+             .srcSubresource = originLayer,
+             .dstSubresource = destinationLayer,
              .extent = origin.size,
 			 },
     }
-
 	);
 }

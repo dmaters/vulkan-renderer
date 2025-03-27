@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <vector>
 
 #include "Primitive.hpp"
@@ -8,8 +9,11 @@
 
 class OpaquePass : public RenderPass {
 private:
+	bool m_clear;
+
 public:
-	OpaquePass(MaterialManager::Material material) : RenderPass(material) {}
+	OpaquePass(std::shared_ptr<Material> material, bool clear) :
+		RenderPass(material), m_clear(clear) {}
 	void setup(RenderGraphResourceSolver& graph) override;
 	void execute(vk::CommandBuffer& buffer, const Resources& resources)
 		override;
