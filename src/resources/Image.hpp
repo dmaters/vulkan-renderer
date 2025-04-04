@@ -22,6 +22,8 @@ struct Image {
 	vk::Format format;
 	vk::Extent3D size;
 	std::optional<SubAllocation> allocation;
+	std::vector<ImageAccess> accesses;
+	bool transient = false;
 
 	vk::ImageAspectFlags getAspectFlags() {
 		vk::ImageAspectFlags flags;
@@ -31,6 +33,4 @@ struct Image {
 			flags = vk::ImageAspectFlagBits::eColor;
 		return flags;
 	}
-	std::vector<ImageAccess> accesses;
-	bool transient = false;
 };

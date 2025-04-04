@@ -9,11 +9,12 @@
 #include "Camera.hpp"
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
-#include "Scene.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Scene.hpp"
+
 
 class Renderer {
 public:

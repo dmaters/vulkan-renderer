@@ -114,7 +114,7 @@ void RenderPass::execute(
 
 	commandBuffer.bindVertexBuffers(0, { vertexBuffer.buffer }, { 0 });
 	commandBuffer.bindIndexBuffer(
-		indexBuffer.buffer, 0, vk::IndexType::eUint16
+		indexBuffer.buffer, 0, vk::IndexType::eUint32
 	);
 
 	commandBuffer.bindDescriptorSets(

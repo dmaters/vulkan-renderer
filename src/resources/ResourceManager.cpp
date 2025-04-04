@@ -147,6 +147,7 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 		finalImage.accesses[1] = { .view = views[1] };
 		finalImage.accesses[2] = { .view = views[2] };
 	}
+
 	m_images[handle.value] = finalImage;
 	return handle;
 }
@@ -161,15 +162,15 @@ struct ImageData {
 ImageData load(const std::filesystem::path &image) {
 	assert(!image.empty());
 
-	int x, y, channels;
-	unsigned char *rawData =
-		stbi_load(image.string().c_str(), &x, &y, &channels, 4);
+	int x, y, _;
+	stbi_set_flip_vertically_on_load(1);
+	unsigned char *rawData = stbi_load(image.string().c_str(), &x, &y, &_, 4);
 	if (rawData == nullptr && stbi_failure_reason()) {
 		std::cout << "Error loading " + image.string() + "|"
 				  << "Failed for error " << stbi_failure_reason() << std::endl;
 		throw "Error loading image";
 	}
-	size_t size = x * y * channels * sizeof(std::byte);
+	size_t size = x * y * 4 * sizeof(std::byte);
 	std::vector<std::byte> vectorData(size);
 	memcpy(vectorData.data(), rawData, size);
 	stbi_image_free(rawData);
@@ -177,7 +178,7 @@ ImageData load(const std::filesystem::path &image) {
 	return {
 		.x = (uint32_t)x,
 		.y = (uint32_t)y,
-		.channels = (uint8_t)channels,
+		.channels = 4,
 		.data = vectorData,
 	};
 }

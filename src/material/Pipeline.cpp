@@ -16,7 +16,8 @@
 struct PipelineStateCreateInfo {
 	inline vk::PipelineInputAssemblyStateCreateInfo inputAssembly() {
 		vk::PipelineInputAssemblyStateCreateInfo info {
-			.topology = vk::PrimitiveTopology::eTriangleStrip
+			.topology = vk::PrimitiveTopology::eTriangleList,
+
 		};
 
 		return info;
@@ -86,6 +87,7 @@ struct PipelineStateCreateInfo {
 		vk::PipelineRasterizationStateCreateInfo info {
 			.polygonMode = vk::PolygonMode::eFill,
 			.cullMode = vk::CullModeFlagBits::eBack,
+			.frontFace = vk::FrontFace::eCounterClockwise,
 			.lineWidth = 1,
 		};
 
@@ -179,7 +181,7 @@ Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
 		.colorAttachmentCount = 1,
 		.pColorAttachmentFormats =
-			std::array<vk::Format, 1> { vk::Format::eR8G8B8A8Unorm }.data(),
+			std::array<vk::Format, 1> { vk::Format::eB8G8R8A8Unorm }.data(),
 		.depthAttachmentFormat = vk::Format::eD16Unorm,
 
 	};

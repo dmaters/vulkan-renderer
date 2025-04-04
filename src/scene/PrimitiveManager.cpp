@@ -10,14 +10,14 @@
 void PrimitiveManager::addPrimitive(
 	std::vector<std::byte> vertices,
 	std::vector<std::byte> indices,
-	uint32_t& vertexOffset,
-	uint32_t& indexOffset
+	uint32_t& vertexByteOffset,
+	uint32_t& indexByteOffset
 ) {
-	vertexOffset = m_vertexbuffer.size();
+	vertexByteOffset = m_vertexbuffer.size();
 	m_vertexbuffer.insert(
 		m_vertexbuffer.end(), vertices.begin(), vertices.end()
 	);
-	indexOffset = m_indexBuffer.size() / sizeof(uint16_t);
+	indexByteOffset = m_indexBuffer.size();
 	m_indexBuffer.insert(m_indexBuffer.end(), indices.begin(), indices.end());
 }
 bool PrimitiveManager::buildBuffers(ResourceManager& resourceManager) {

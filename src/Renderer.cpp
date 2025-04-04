@@ -17,7 +17,6 @@
 
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
-#include "Scene.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "memory/MemoryAllocator.hpp"
@@ -25,6 +24,8 @@
 #include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Scene.hpp"
+#include "scene/SceneLoader.hpp"
 
 Renderer::Renderer(SDL_Window* window) {
 	if (window == nullptr) return;
@@ -114,7 +115,7 @@ void Renderer::createRenderGraph() {
 		ResourceManager::ImageDescription {
 			.width = 800,
 			.height = 600,
-			.format = vk::Format::eR8G8B8A8Unorm,
+			.format = vk::Format::eB8G8R8A8Unorm,
 			.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                 vk::ImageUsageFlagBits::eTransferSrc |
 	                 vk::ImageUsageFlagBits::eTransferDst,
@@ -136,7 +137,7 @@ void Renderer::createRenderGraph() {
 	);
 
 	auto opaquePass = std::make_unique<OpaquePass>(
-		m_currentScene->getPrimitives()[0].material.baseMaterial, true
+		m_materialManager->getBaseMaterial(), true
 	);
 
 	m_renderGraph->addTask("main_pass", std::move(opaquePass));
@@ -146,19 +147,21 @@ void Renderer::createRenderGraph() {
 }
 
 void Renderer::render() {
+	glm::mat4 proj =
+		glm::perspectiveRH_ZO(glm::radians(60.f), 800.f / 600.f, 0.1f, 1000.0f);
+
+	proj[1][1] *= -1;
 	m_globalData->camera = {
 		.view = m_camera.getViewVector(),
-		.projection =
-			glm::perspective(glm::radians(60.f), 800.f / 600.f, 0.1f, 1000.0f),
+		.projection = proj,
 	};
 
 	m_renderGraph->submit(m_currentScene->getPrimitives());
 };
 
 void Renderer::load(const std::filesystem::path& path) {
-	m_currentScene = std::make_unique<Scene>(
-		Scene::loadMesh(path, *m_resourceManager, *m_materialManager)
-	);
+	SceneLoader loader(*m_resourceManager, *m_materialManager);
+	m_currentScene = std::make_unique<Scene>(loader.load(path));
 
 	createRenderGraph();
 }

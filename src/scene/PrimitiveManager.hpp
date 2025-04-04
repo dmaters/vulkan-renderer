@@ -17,8 +17,8 @@ public:
 	void addPrimitive(
 		std::vector<std::byte> vertices,
 		std::vector<std::byte> indices,
-		uint32_t& vertexOffset,
-		uint32_t& indexOffset
+		uint32_t& vertexByteOffset,
+		uint32_t& indexByteOffset
 	);
 	bool buildBuffers(ResourceManager& resourceManager);
 };

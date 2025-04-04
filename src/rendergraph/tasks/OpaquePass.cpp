@@ -65,7 +65,7 @@ void OpaquePass::execute(
 			vk::PipelineBindPoint::eGraphics,
 			m_material->pipeline.pipelineLayout,
 			1,
-			{ primitive.material.instanceSet.set },
+			{ m_material->instanceSets[primitive.material.instanceIndex] },
 			nullptr
 		);
 

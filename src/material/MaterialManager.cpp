@@ -27,7 +27,7 @@ MaterialManager::MaterialManager(
 								.descriptorCount = 1,
 								},
 		vk::DescriptorPoolSize {
-								.type = vk::DescriptorType::eSampledImage,
+								.type = vk::DescriptorType::eCombinedImageSampler,
 								.descriptorCount = 20,
 								}
 	};
@@ -91,6 +91,17 @@ MaterialManager::MaterialManager(
 		m_device.updateDescriptorSets(writeInfo, {});
 		m_globalSets[i] = { .set = sets[i], .layout = layout };
 	}
+
+	vk::SamplerCreateInfo samplerInfo {
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.mipmapMode = vk::SamplerMipmapMode::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eRepeat,
+		.addressModeV = vk::SamplerAddressMode::eRepeat,
+		.addressModeW = vk::SamplerAddressMode::eRepeat,
+	};
+
+	m_linearSampler = m_device.createSampler(samplerInfo);
 }
 void MaterialManager::updateDescriptorSets(uint8_t currentFrame) {
 	for (auto& material : m_materials) {
@@ -98,9 +109,13 @@ void MaterialManager::updateDescriptorSets(uint8_t currentFrame) {
 	}
 }
 
-MaterialInstance MaterialManager::instantiateMaterial(
-	MaterialDescription& description
-) {
+uint32_t MaterialManager::createMaterial(MaterialDescription& description) {
+	auto key = std::pair(description.vertex, description.fragment);
+
+	// if (m_materialCache.contains(key)) return m_materialCache[key];
+
+	if (m_materials.size() > 0) return 0;
+
 	std::vector<vk::DescriptorSetLayoutBinding> resourcesLayouts;
 	std::vector<ImageHandle> textures;
 	for (const auto& resource : description.instanceResources) {
@@ -108,7 +123,7 @@ MaterialInstance MaterialManager::instantiateMaterial(
 		                             .descriptorType = resource.type,
 		                             .descriptorCount = resource.count,
 		                             .stageFlags = resource.stage });
-		if (resource.type == vk::DescriptorType::eSampledImage) {
+		if (resource.type == vk::DescriptorType::eCombinedImageSampler) {
 			textures.push_back(m_resourceManager.loadImage(resource.path));
 		}
 	}
@@ -126,19 +141,45 @@ MaterialInstance MaterialManager::instantiateMaterial(
 		.fragment = description.fragment,
 		.layouts = { m_globalSets[0].layout, localLayout }
 	};
-	vk::DescriptorSetAllocateInfo descriptorInfo { .descriptorPool = m_pool,
-		                                           .descriptorSetCount = 1,
-		                                           .pSetLayouts =
-		                                               &localLayout };
+	Pipeline pipeline = PipelineBuilder::DefaultPipeline(pipelineInfo);
+	m_materials.push_back(std::make_shared<Material>(Material {
+		.pipeline = pipeline,
+		.globalSet = m_globalSets[0],
+		.materialSet = {},
+		.instanceLayout = localLayout,
+	}));
+
+	uint32_t materialIndex = m_materials.size() - 1;
+
+	// m_materialCache[key] = materialIndex;
+
+	return materialIndex;
+}
+MaterialInstance MaterialManager::instantiateMaterial(
+	MaterialDescription& description
+) {
+	Material& material = *m_materials[createMaterial(description)];
+	vk::DescriptorSetAllocateInfo descriptorInfo {
+		.descriptorPool = m_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &material.instanceLayout
+	};
 
 	vk::DescriptorSet set = m_device.allocateDescriptorSets(descriptorInfo)[0];
 
 	std::vector<vk::WriteDescriptorSet> writeInfos;
 
 	int binding = 0;
+	std::vector<ImageHandle> textures;
+	for (const auto& resource : description.instanceResources) {
+		if (resource.type == vk::DescriptorType::eCombinedImageSampler) {
+			textures.push_back(m_resourceManager.loadImage(resource.path));
+		}
+	}
 	for (const auto& texture : textures) {
 		Image& image = m_resourceManager.getImage(texture);
 		vk::DescriptorImageInfo imageInfo {
+			.sampler = m_linearSampler,
 			.imageView = image.view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 		};
@@ -147,7 +188,7 @@ MaterialInstance MaterialManager::instantiateMaterial(
 			.dstSet = set,
 			.dstBinding = (uint32_t)(binding),
 			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eSampledImage,
+			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 			.pImageInfo = &imageInfo,
 		});
 
@@ -158,20 +199,6 @@ MaterialInstance MaterialManager::instantiateMaterial(
 		writeInfos.size(), writeInfos.data(), 0, nullptr
 	);
 
-	Pipeline pipeline = PipelineBuilder::DefaultPipeline(pipelineInfo);
-	if (m_materials.size() == 0) {
-		m_materials.push_back(std::make_shared<Material>(Material {
-			.pipeline = pipeline,
-			.globalSet = m_globalSets[0],
-			.materialSet = {},
-
-		}));
-	}
-
-	MaterialInstance instance {
-		.baseMaterial = m_materials[0],
-		.instanceSet = { .set = set, .layout = localLayout },
-	};
-
-	return instance;
+	material.instanceSets.push_back(set);
+	return { (uint32_t)material.instanceSets.size() - 1 };
 }
