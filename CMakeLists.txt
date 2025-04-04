@@ -60,6 +60,3 @@ add_custom_target(resources ALL)
 add_custom_command(TARGET resources PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/resources/ $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources)
-add_custom_command(TARGET resources PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/sample_meshes/ $<TARGET_FILE_DIR:${PROJECT_NAME}>/sample_meshes)

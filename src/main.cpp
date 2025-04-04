@@ -3,8 +3,9 @@
 
 #include "Application.hpp"
 
-int main(int argv, char **args) {
-	Application app("sample_meshes/cube.obj");
+int main(int argc, char *argv[]) {
+	assert(argc == 2);
+	Application app((std::filesystem::path(std::string(argv[1]))));
 	app.run();
 
 	return 0;
