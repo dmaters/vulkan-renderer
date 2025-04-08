@@ -7,7 +7,6 @@
 
 #include "Task.hpp"
 #include "material/MaterialManager.hpp"
-#include "rendergraph/RenderGraphResourceSolver.hpp"
 
 class RenderPass : public Task {
 public:
@@ -31,7 +30,10 @@ public:
 	inline void setAttachments(Attachments attachments) {
 		m_attachments = attachments;
 	}
-	void setup(RenderGraphResourceSolver& solver) override;
+	void setup(
+		std::vector<ImageDependencyInfo>& requiredImages,
+		std::vector<BufferDependencyInfo>& requiredBuffers
+	) override;
 	void execute(vk::CommandBuffer& commandBuffer, const Resources& resources)
 		override;
 };

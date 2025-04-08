@@ -25,7 +25,7 @@ struct Image {
 	std::vector<ImageAccess> accesses;
 	bool transient = false;
 
-	vk::ImageAspectFlags getAspectFlags() {
+	vk::ImageAspectFlags getAspectFlags() const {
 		vk::ImageAspectFlags flags;
 		if (format == vk::Format::eD16Unorm)
 			flags = vk::ImageAspectFlagBits::eDepth;

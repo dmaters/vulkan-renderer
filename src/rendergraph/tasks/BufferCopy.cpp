@@ -3,10 +3,12 @@
 #include <vulkan/vulkan_enums.hpp>
 
 #include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/RenderGraphResourceSolver.hpp"
 
-void BufferCopy::setup(RenderGraphResourceSolver& graph) {
-	graph.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
+void BufferCopy::setup(
+	std::vector<ImageDependencyInfo>& requiredImages,
+	std::vector<BufferDependencyInfo>& requiredBuffers
+) {
+	requiredBuffers.push_back({
 		.name = m_info.origin.name,
 		.usage = {
 				  .type = ResourceUsage::Type::READ,
@@ -17,7 +19,7 @@ void BufferCopy::setup(RenderGraphResourceSolver& graph) {
 				
     });
 
-	graph.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
+	requiredBuffers.push_back({
 		.name = m_info.destination.name,
 		.usage = {
 				  .type = ResourceUsage::Type::WRITE,

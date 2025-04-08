@@ -5,46 +5,50 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "../RenderGraph.hpp"
 #include "Primitive.hpp"
 #include "RenderPass.hpp"
-#include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/RenderGraphResourceSolver.hpp"
 
-void OpaquePass::setup(RenderGraphResourceSolver& renderGraph) {
-	renderGraph.registerDependency({
+void OpaquePass::setup(
+	std::vector<ImageDependencyInfo>& requiredImages,
+	std::vector<BufferDependencyInfo>& requiredBuffers
+) {
+	requiredImages.push_back({
 		.name = "main_color",
 		.usage =
-			 {
-						   .type = ResourceUsage::Type::WRITE,
-						   .access = vk::AccessFlagBits2::eColorAttachmentWrite,
-						   .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-						   },
+		{
+			.type = ResourceUsage::Type::WRITE,
+			.access = vk::AccessFlagBits2::eColorAttachmentWrite,
+			.stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		},
 		.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
 		
 	});
-	renderGraph.registerDependency({
+	requiredImages.push_back({
 		.name = "main_depth",
-		.usage =  {
-						   .type = ResourceUsage::Type::WRITE,
-						   .access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-						   .stage = vk::PipelineStageFlagBits2::eLateFragmentTests,
-						   },
+		.usage =
+		{
+			.type = ResourceUsage::Type::WRITE,
+			.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+			.stage = vk::PipelineStageFlagBits2::eLateFragmentTests,
+		},
 		.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-						});
+	});
 
 	RenderPass::setAttachments({
 		.color = Attachment { "main_color", m_clear },
 		.depth = Attachment { "main_depth", m_clear },
 	});
 
-	renderGraph.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
+	requiredBuffers.push_back({
 		.name = "gset_buffer",
-		.usage =  {
-						   .type = ResourceUsage::Type::READ,
-						   .access = vk::AccessFlagBits2::eShaderRead,
-						   .stage = vk::PipelineStageFlagBits2::eVertexShader,
-						   },
-						});
+		.usage =  
+		{
+			.type = ResourceUsage::Type::READ,
+			.access = vk::AccessFlagBits2::eShaderRead,
+			.stage = vk::PipelineStageFlagBits2::eVertexShader,
+		},
+	});
 }
 
 void OpaquePass::execute(

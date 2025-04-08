@@ -4,11 +4,13 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-#include "../RenderGraphResourceSolver.hpp"
 #include "rendergraph/RenderGraph.hpp"
 
-void ImageCopy::setup(RenderGraphResourceSolver& solver) {
-	solver.registerDependency(RenderGraphResourceSolver::ImageDependencyInfo {
+void ImageCopy::setup(
+	std::vector<ImageDependencyInfo>& requiredImages,
+	std::vector<BufferDependencyInfo>& requiredBuffers
+) {
+	requiredImages.push_back( {
 		.name = m_origin,
 		.usage =  {
 				  .type = ResourceUsage::Type::READ,
@@ -18,7 +20,7 @@ void ImageCopy::setup(RenderGraphResourceSolver& solver) {
 		.requiredLayout = vk::ImageLayout::eTransferSrcOptimal
 	});
 
-	solver.registerDependency(RenderGraphResourceSolver::ImageDependencyInfo {
+	requiredImages.push_back({
 		.name = m_destination,
 		.usage = {
 				  .type = ResourceUsage::Type::WRITE,

@@ -10,27 +10,27 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/RenderGraphResourceSolver.hpp"
 
-void RenderPass::setup(RenderGraphResourceSolver& renderGraph) {
-	renderGraph
-		.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
-			.name = "vertex_buffer",
-			.usage = {
-					  .type = ResourceUsage::Type::READ,
-					  .access = vk::AccessFlagBits2::eVertexAttributeRead,
-					  .stage = vk::PipelineStageFlagBits2::eVertexAttributeInput,
-					  }
+void RenderPass::setup(
+	std::vector<ImageDependencyInfo>& requiredImages,
+	std::vector<BufferDependencyInfo>& requiredBuffers
+) {
+	requiredImages.push_back({
+		.name = "vertex_buffer",
+		.usage = {
+				  .type = ResourceUsage::Type::READ,
+				  .access = vk::AccessFlagBits2::eVertexAttributeRead,
+				  .stage = vk::PipelineStageFlagBits2::eVertexAttributeInput,
+				  }
     });
 
-	renderGraph
-		.registerDependency(RenderGraphResourceSolver::BufferDependencyInfo {
-			.name = "index_buffer",
-			.usage = {
-					  .type = ResourceUsage::Type::READ,
-					  .access = vk::AccessFlagBits2::eIndexRead,
-					  .stage = vk::PipelineStageFlagBits2::eIndexInput,
-					  }
+	requiredBuffers.push_back({
+		.name = "index_buffer",
+		.usage = {
+				  .type = ResourceUsage::Type::READ,
+				  .access = vk::AccessFlagBits2::eIndexRead,
+				  .stage = vk::PipelineStageFlagBits2::eIndexInput,
+				  }
     });
 }
 

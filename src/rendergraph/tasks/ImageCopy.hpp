@@ -3,7 +3,7 @@
 #include <string_view>
 
 #include "../RenderGraph.hpp"
-#include "../RenderGraphResourceSolver.hpp"
+#include "../RenderGraphBuilder.hpp"
 #include "Task.hpp"
 
 class ImageCopy : public Task {
@@ -13,7 +13,10 @@ private:
 	std::string_view m_destination;
 
 public:
-	void setup(RenderGraphResourceSolver& graph) override;
+	void setup(
+		std::vector<ImageDependencyInfo>& requiredImages,
+		std::vector<BufferDependencyInfo>& requiredBuffers
+	) override;
 	void execute(vk::CommandBuffer& commandBuffer, const Resources& resources)
 		override;
 

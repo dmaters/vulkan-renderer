@@ -52,7 +52,15 @@ Renderer::Renderer(SDL_Window* window) {
 			.location = AllocationLocation::Host,
 		}
 	);
-	m_resourceManager->createBuffer(
+
+	Buffer& globalBuffer =
+		m_resourceManager->getNamedBuffer("gset_buffer_local");
+	m_globalData = (GlobalResources*)globalBuffer.allocation.address;
+
+	m_renderGraph = std::make_unique<RenderGraph>(
+		m_instance, *m_swapchain, *m_resourceManager
+	);
+	m_renderGraph->addBuffer(
 		"gset_buffer",
 		{
 			.size = sizeof(GlobalResources),
@@ -62,15 +70,9 @@ Renderer::Renderer(SDL_Window* window) {
 			.transient = true,
 		}
 	);
-	Buffer& globalBuffer =
-		m_resourceManager->getNamedBuffer("gset_buffer_local");
-	m_globalData = (GlobalResources*)globalBuffer.allocation.address;
 
 	m_materialManager =
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
-	m_renderGraph = std::make_unique<RenderGraph>(
-		m_instance, *m_swapchain, *m_resourceManager
-	);
 }
 
 void Renderer::createSwapchain() {
@@ -110,7 +112,7 @@ void Renderer::createRenderGraph() {
 
 	m_renderGraph->addTask("data_update", std::move(copyDescriptorBufferPass));
 
-	m_resourceManager->createImage(
+	m_renderGraph->addImage(
 		"main_color",
 		ResourceManager::ImageDescription {
 			.width = 800,
@@ -124,7 +126,7 @@ void Renderer::createRenderGraph() {
 
 		}
 	);
-	m_resourceManager->createImage(
+	m_renderGraph->addImage(
 		"main_depth",
 		ResourceManager::ImageDescription {
 			.width = 800,
@@ -144,6 +146,8 @@ void Renderer::createRenderGraph() {
 
 	auto imageCopyTask = std::make_unique<ImageCopy>("main_color", "result");
 	m_renderGraph->addTask("result_copy", std::move(imageCopyTask));
+
+	m_renderGraph->build();
 }
 
 void Renderer::render() {
