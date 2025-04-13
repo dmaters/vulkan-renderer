@@ -16,6 +16,7 @@
 #include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Light.hpp"
 
 MaterialManager::MaterialManager(
 	Instance& instance, ResourceManager& resourceManager
@@ -42,18 +43,24 @@ MaterialManager::MaterialManager(
 
 	m_pool = m_device.createDescriptorPool(info);
 
-	std::array<vk::DescriptorSetLayoutBinding, 1> bindings {
+	std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
 										.descriptorCount = 1,
 										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
 										.pImmutableSamplers = {} },
+		vk::DescriptorSetLayoutBinding {
+										.binding = 1,
+										.descriptorType = vk::DescriptorType::eUniformBuffer,
+										.descriptorCount = 1,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.pImmutableSamplers = {} }
 	};
 
 	vk::DescriptorSetLayoutCreateInfo layoutInfo {
 		.flags = {},
-		.bindingCount = 1,
+		.bindingCount = bindings.size(),
 		.pBindings = bindings.data(),
 	};
 
@@ -71,24 +78,44 @@ MaterialManager::MaterialManager(
 	auto sets = m_device.allocateDescriptorSets(allocateInfo);
 
 	for (int i = 0; i < 3; i++) {
-		Buffer& buffer = m_resourceManager.getNamedBuffer("gset_buffer");
-		vk::DescriptorBufferInfo bufferInfo {
-			.buffer = buffer.buffer,
-			.offset = buffer.bufferAccess[i].offset,
+		Buffer& dynamicDataBuffer =
+			m_resourceManager.getNamedBuffer("gset_buffer");
+		Buffer& lightBuffer = m_resourceManager.getNamedBuffer("light_buffer");
+
+		vk::DescriptorBufferInfo dynamicDescriptorInfo {
+			.buffer = dynamicDataBuffer.buffer,
+			.offset = dynamicDataBuffer.bufferAccess[i].offset,
 			.range = sizeof(GlobalResources::Camera)
 		};
 
-		vk::WriteDescriptorSet writeInfo {
+		vk::DescriptorBufferInfo lightDescriptorInfo {
+			.buffer = lightBuffer.buffer,
+			.offset = lightBuffer.bufferAccess[0].offset,
+			.range = sizeof(Light::uLightData)
+		};
+
+		vk::WriteDescriptorSet gBufferInfo {
 			.dstSet = sets[i],
 			.dstBinding = 0,
 			.descriptorCount = 1,
 			.descriptorType = vk::DescriptorType::eUniformBuffer,
 			.pImageInfo = {},
-			.pBufferInfo = &bufferInfo,
+			.pBufferInfo = &dynamicDescriptorInfo,
 			.pTexelBufferView = {},
 
 		};
-		m_device.updateDescriptorSets(writeInfo, {});
+
+		vk::WriteDescriptorSet lightBufferInfo {
+			.dstSet = sets[i],
+			.dstBinding = 1,
+			.descriptorCount = 1,
+			.descriptorType = vk::DescriptorType::eUniformBuffer,
+			.pImageInfo = {},
+			.pBufferInfo = &lightDescriptorInfo,
+			.pTexelBufferView = {},
+
+		};
+		m_device.updateDescriptorSets({ gBufferInfo, lightBufferInfo }, {});
 		m_globalSets[i] = { .set = sets[i], .layout = layout };
 	}
 

@@ -49,6 +49,15 @@ void OpaquePass::setup(
 			.stage = vk::PipelineStageFlagBits2::eVertexShader,
 		},
 	});
+	requiredBuffers.push_back({
+		.name = "light_buffer",
+		.usage =  
+		{
+			.type = ResourceUsage::Type::READ,
+			.access = vk::AccessFlagBits2::eShaderRead,
+			.stage = vk::PipelineStageFlagBits2::eFragmentShader,
+		},
+	});
 }
 
 void OpaquePass::execute(

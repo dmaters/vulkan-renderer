@@ -10,7 +10,7 @@ public:
 	};
 
 private:
-	glm::vec3 m_position = glm::vec3(0, 0, -15);
+	glm::vec3 m_position = glm::vec3(0, 0, -150);
 	float m_pitch = 0;
 	float m_yaw = 0;
 

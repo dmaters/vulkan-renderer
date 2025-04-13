@@ -45,7 +45,7 @@ public:
 
 	BufferHandle createStagingBuffer(uint32_t size);
 	BufferHandle createBuffer(const BufferDescription& description);
-	inline BufferHandle createBuffer(
+	BufferHandle createBuffer(
 		std::string_view name, const BufferDescription& description
 	) {
 		BufferHandle handle = createBuffer(description);
@@ -54,7 +54,7 @@ public:
 	}
 
 	ImageHandle createImage(const ImageDescription& description);
-	inline ImageHandle createImage(
+	ImageHandle createImage(
 		std::string_view name, const ImageDescription& description
 	) {
 		ImageHandle handle = createImage(description);
@@ -64,25 +64,25 @@ public:
 
 	ImageHandle loadImage(const std::filesystem::path& path);
 
-	inline Image& getNamedImage(std::string_view name) {
+	Image& getNamedImage(std::string_view name) {
 		assert(m_imageNames.contains(name));
 		return m_images[m_imageNames[name]];
 	}
-	inline Buffer& getNamedBuffer(std::string_view name) {
+	Buffer& getNamedBuffer(std::string_view name) {
 		assert(m_bufferNames.contains(name));
 		return m_buffers[m_bufferNames[name]];
 	}
-	inline Image& getImage(ImageHandle handle) {
-		return m_images[handle.value];
+	BufferHandle getNamedBufferHandle(std::string_view handle) {
+		return BufferHandle { m_bufferNames[handle] };
 	}
-	inline Buffer& getBuffer(BufferHandle handle) {
-		return m_buffers[handle.value];
-	}
+	Image& getImage(ImageHandle handle) { return m_images[handle.value]; }
 
-	inline void setName(std::string_view name, ImageHandle handle) {
+	Buffer& getBuffer(BufferHandle handle) { return m_buffers[handle.value]; }
+
+	void setName(std::string_view name, ImageHandle handle) {
 		m_imageNames[name] = handle.value;
 	}
-	inline void setName(std::string_view name, BufferHandle handle) {
+	void setName(std::string_view name, BufferHandle handle) {
 		m_bufferNames[name] = handle.value;
 	}
 

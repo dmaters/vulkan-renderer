@@ -6,7 +6,6 @@
 #include <memory>
 #include <vulkan/vulkan.hpp>
 
-#include "Camera.hpp"
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
 #include "Swapchain.hpp"
@@ -14,7 +13,6 @@
 #include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
-
 
 class Renderer {
 public:
@@ -33,8 +31,6 @@ private:
 	std::unique_ptr<Swapchain> m_swapchain;
 	std::unique_ptr<Scene> m_currentScene;
 
-	Camera m_camera;
-
 	GlobalResources* m_globalData;
 
 	void createSwapchain();
@@ -45,5 +41,5 @@ public:
 	void load(const std::filesystem::path& path);
 	void render();
 
-	inline Camera& getCamera() { return m_camera; }
+	Scene& getScene() { return *m_currentScene; }
 };

@@ -1,19 +1,13 @@
 #include "Renderer.hpp"
 
 #include <SDL3/SDL_vulkan.h>
-#include <mfidl.h>
 #include <vulkan/vulkan_core.h>
 
+#include <cstddef>
 #include <glm/ext/matrix_clip_space.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/trigonometric.hpp>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_hpp_macros.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
@@ -24,6 +18,7 @@
 #include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Light.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
 
@@ -70,7 +65,16 @@ Renderer::Renderer(SDL_Window* window) {
 			.transient = true,
 		}
 	);
-
+	m_resourceManager->createBuffer(
+		"light_buffer",
+		{
+			.size = (uint32_t)sizeof(Light::uLightData),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+			.location = AllocationLocation::Device,
+			.transient = false,
+		}
+	);
 	m_materialManager =
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 }
@@ -156,7 +160,7 @@ void Renderer::render() {
 
 	proj[1][1] *= -1;
 	m_globalData->camera = {
-		.view = m_camera.getViewVector(),
+		.view = m_currentScene->getCamera().getViewVector(),
 		.projection = proj,
 	};
 
@@ -166,6 +170,30 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(*m_resourceManager, *m_materialManager);
 	m_currentScene = std::make_unique<Scene>(loader.load(path));
+	glm::mat3 orientation = glm::mat3(1);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, -1, 0);
+
+	m_currentScene->addLight({
+		.position = glm::vec3(0, 150, 0),
+		.orientation = orientation,
+		.intensity = 0.2,
+	});
+
+	auto& lights = m_currentScene->getLights();
+
+	Light::uLightData lightData = { .count = (uint32_t)lights.size() };
+	for (int i = 0; i < lights.size(); i++) {
+		const Light& light = lights[i];
+		lightData.lights[i] = light.getShaderObject();
+	}
+	BufferHandle handle =
+		m_resourceManager->getNamedBufferHandle("light_buffer");
+
+	std::byte* raw = (std::byte*)&lightData;
+	std::vector<std::byte> lightDataRaw(raw, raw + sizeof(Light::uLightData));
+
+	m_resourceManager->copyToBuffer(lightDataRaw, handle);
 
 	createRenderGraph();
 }

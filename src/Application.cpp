@@ -77,7 +77,7 @@ int Application::run() {
 			if (cameraLocked) {
 				glm::vec2 coordinates;
 				SDL_GetMouseState(&coordinates.x, &coordinates.y);
-				m_renderer->getCamera().rotate(
+				m_renderer->getScene().getCamera().rotate(
 					(glm::vec2(400., 300.) - coordinates) * deltaTime
 
 				);
