@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
@@ -15,7 +16,6 @@
 #include "material/MaterialManager.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "rendergraph/tasks/BufferCopy.hpp"
-#include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"
@@ -34,7 +34,8 @@ Renderer::Renderer(SDL_Window* window) {
 	m_presentQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.presentIndex, 0
 	);
-	createSwapchain();
+	m_swapchain = std::make_unique<Swapchain>(m_instance);
+
 	m_memoryAllocator = std::make_unique<MemoryAllocator>(m_instance);
 	m_resourceManager =
 		std::make_unique<ResourceManager>(m_instance, *m_memoryAllocator);
@@ -79,25 +80,6 @@ Renderer::Renderer(SDL_Window* window) {
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 }
 
-void Renderer::createSwapchain() {
-	vk::CommandPoolCreateInfo info;
-	info.queueFamilyIndex = m_instance.queueFamiliesIndices.graphicsIndex;
-
-	auto formats =
-		m_instance.physicalDevice.getSurfaceFormatsKHR(m_instance.surface);
-
-	Swapchain::SwapchainCreateInfo swapchainInfo {
-		.width = 800,
-		.height = 600,
-		.graphicsFamilyIndex = m_instance.queueFamiliesIndices.graphicsIndex,
-		.surface = m_instance.surface,
-		.format = { .format = formats[0].format,
-                   .colorSpace = formats[0].colorSpace },
-	};
-
-	m_swapchain = std::make_unique<Swapchain>(m_instance.device, swapchainInfo);
-}
-
 void Renderer::createRenderGraph() {
 	Buffer& globalBuffer =
 		m_resourceManager->getNamedBuffer("gset_buffer_local");
@@ -116,11 +98,13 @@ void Renderer::createRenderGraph() {
 
 	m_renderGraph->addTask("data_update", std::move(copyDescriptorBufferPass));
 
+	vk::Extent2D resolution = m_swapchain->getResolution();
+
 	m_renderGraph->addImage(
 		"main_color",
 		ResourceManager::ImageDescription {
-			.width = 800,
-			.height = 600,
+			.width = resolution.width,
+			.height = resolution.height,
 			.format = vk::Format::eB8G8R8A8Unorm,
 			.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                 vk::ImageUsageFlagBits::eTransferSrc |
@@ -128,18 +112,20 @@ void Renderer::createRenderGraph() {
 
 			.transient = true,
 
-		}
+		},
+		true
 	);
 	m_renderGraph->addImage(
 		"main_depth",
 		ResourceManager::ImageDescription {
-			.width = 800,
-			.height = 600,
+			.width = resolution.width,
+			.height = resolution.height,
 			.format = vk::Format::eD16Unorm,
 			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
 	                 vk::ImageUsageFlagBits::eTransferDst,
 			.transient = true,
-		}
+		},
+		true
 	);
 
 	auto opaquePass = std::make_unique<OpaquePass>(
@@ -148,15 +134,17 @@ void Renderer::createRenderGraph() {
 
 	m_renderGraph->addTask("main_pass", std::move(opaquePass));
 
-	auto imageCopyTask = std::make_unique<ImageCopy>("main_color", "result");
-	m_renderGraph->addTask("result_copy", std::move(imageCopyTask));
-
 	m_renderGraph->build();
 }
 
 void Renderer::render() {
-	glm::mat4 proj =
-		glm::perspectiveRH_ZO(glm::radians(60.f), 800.f / 600.f, 0.1f, 1000.0f);
+	vk::Extent2D resolution = m_swapchain->getResolution();
+	glm::mat4 proj = glm::perspectiveRH_ZO(
+		glm::radians(60.f),
+		(float)resolution.width / resolution.height,
+		0.1f,
+		1000.0f
+	);
 
 	proj[1][1] *= -1;
 	m_globalData->camera = {

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <queue>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
@@ -9,43 +12,32 @@
 #include "resources/Image.hpp"
 
 class Swapchain {
-public:
-	struct SwapchainCreateInfo;
-
 private:
-	static const short BUFFERING_COUNT = 3;
+	vk::Device& m_device;
+	vk::PhysicalDevice& m_physicalDevice;
+	vk::SurfaceKHR& m_surface;
+	vk::SurfaceFormatKHR m_surfaceFormat;
+	uint32_t m_graphicsIndex;
+
+	vk::SwapchainKHR m_swapchain = nullptr;
+	std::optional<vk::SwapchainKHR> m_oldSwapchain;
+
+	vk::Extent2D m_resolution;
+
 	std::vector<Frame> m_frames;
 	std::vector<Image> m_images;
 
-	int m_currentFrame = 0;
-	vk::SwapchainKHR m_swapchain;
-
-	void createFrames(
-		vk::Device& device, vk::Format format, uint32_t familyIndex
-	);
+	void createFrames();
+	void createImages();
+	void createSwapchain();
 
 public:
-	Swapchain(vk::Device& device, SwapchainCreateInfo& info);
+	Swapchain(Instance& instance);
 
-	inline const Frame& getNextFrame() {
-		m_currentFrame = (m_currentFrame + 1) % BUFFERING_COUNT;
-		return m_frames[m_currentFrame];
-	}
-	inline const Frame& getPreviousFrame() {
-		int frame = (m_currentFrame - 1 + BUFFERING_COUNT) % BUFFERING_COUNT;
-		return m_frames[frame];
-	};
-	inline int getCurrentFrameIndex() { return m_currentFrame; }
-	inline Image& getImage(uint32_t index) { return m_images.at(index); }
-	inline const std::vector<Image>& getImages() const { return m_images; }
-
-	inline const vk::SwapchainKHR& getSwapchain() const { return m_swapchain; };
-};
-
-struct Swapchain::SwapchainCreateInfo {
-	int width;
-	int height;
-	uint32_t graphicsFamilyIndex;
-	vk::SurfaceKHR& surface;
-	vk::SurfaceFormatKHR format;
+	const Frame& getFrame(uint8_t index) { return m_frames[index]; }
+	Image& getImage(uint8_t index) { return m_images.at(index); }
+	const vk::SwapchainKHR& getSwapchain() const { return m_swapchain; };
+	vk::Extent2D getResolution() { return m_resolution; }
+	void rebuild();
+	void flush();
 };

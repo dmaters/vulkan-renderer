@@ -7,6 +7,7 @@
 #include <set>
 #include <string_view>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_handles.hpp>
 
 #include "Buffer.hpp"
 #include "Image.hpp"
@@ -68,12 +69,15 @@ public:
 		assert(m_imageNames.contains(name));
 		return m_images[m_imageNames[name]];
 	}
+	ImageHandle getNamedImageHandle(std::string_view name) {
+		return ImageHandle { m_imageNames[name] };
+	}
 	Buffer& getNamedBuffer(std::string_view name) {
 		assert(m_bufferNames.contains(name));
 		return m_buffers[m_bufferNames[name]];
 	}
-	BufferHandle getNamedBufferHandle(std::string_view handle) {
-		return BufferHandle { m_bufferNames[handle] };
+	BufferHandle getNamedBufferHandle(std::string_view name) {
+		return BufferHandle { m_bufferNames[name] };
 	}
 	Image& getImage(ImageHandle handle) { return m_images[handle.value]; }
 
@@ -97,8 +101,14 @@ public:
 		BufferHandle origin, ImageHandle destination, vk::BufferImageCopy offset
 	);
 
-	void free(BufferHandle buffer) {}
-	void free(ImageHandle buffer) {}
+	void free(BufferHandle buffer) {
+		m_memoryAllocator.free(m_buffers[buffer.value].allocation);
+		m_buffers.erase(buffer.value);
+	}
+	void free(ImageHandle image) {
+		m_memoryAllocator.free(m_images[image.value].allocation.value());
+		m_images.erase(image.value);
+	}
 };
 
 struct ResourceManager::ImageDescription {

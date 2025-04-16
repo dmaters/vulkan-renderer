@@ -31,13 +31,13 @@ MemoryAllocator::MemoryAllocator(Instance& instance) : m_instance(instance) {
 	assert(m_memoryType.size() == 2);
 	Allocation allocation;
 	allocate(allocation, AllocationType::Persistent, AllocationLocation::Host);
-	m_localPersistent = std::make_unique<RingAllocation>(allocation);
+	m_localPersistent = std::make_unique<BuddyAllocator>(allocation);
 	allocate(allocation, AllocationType::Staging, AllocationLocation::Host);
 	m_stagingAllocation = std::make_unique<RingAllocation>(allocation);
 	allocate(
 		allocation, AllocationType::Persistent, AllocationLocation::Device
 	);
-	m_devicePersistent = std::make_unique<RingAllocation>(allocation);
+	m_devicePersistent = std::make_unique<BuddyAllocator>(allocation);
 }
 bool MemoryAllocator::getSubAllocation(
 	SubAllocation& subAllocation,
@@ -49,17 +49,23 @@ bool MemoryAllocator::getSubAllocation(
 	if (type == AllocationType::Persistent &&
 	    location == AllocationLocation::Device) {
 		memory = m_devicePersistent->getMemory();
-		return m_devicePersistent->subAllocate(subAllocation, requirements);
+		bool res = m_devicePersistent->subAllocate(subAllocation, requirements);
+		subAllocation.allocationIndex = 2;
+		return res;
 	}
 
 	if (type == AllocationType::Persistent &&
 	    location == AllocationLocation::Host) {
 		memory = m_localPersistent->getMemory();
-		return m_localPersistent->subAllocate(subAllocation, requirements);
+		bool res = m_localPersistent->subAllocate(subAllocation, requirements);
+		subAllocation.allocationIndex = 1;
+		return res;
 	}
 
 	memory = m_stagingAllocation->getMemory();
-	return m_stagingAllocation->subAllocate(subAllocation, requirements);
+	bool res = m_stagingAllocation->subAllocate(subAllocation, requirements);
+	subAllocation.allocationIndex = 0;
+	return res;
 }
 SubAllocation MemoryAllocator::allocate(
 	vk::Buffer buffer, AllocationType type, AllocationLocation location
@@ -105,4 +111,18 @@ bool MemoryAllocator::allocate(
 			m_instance.device.mapMemory(allocation.memory, 0, 256ull << 20);
 	}
 	return true;
+}
+
+void MemoryAllocator::free(SubAllocation subAllocation) {
+	switch (subAllocation.allocationIndex) {
+		case 0:
+			m_stagingAllocation->free(subAllocation);
+			break;
+		case 1:
+			m_localPersistent->free(subAllocation);
+			break;
+		case 2:
+			m_devicePersistent->free(subAllocation);
+			break;
+	}
 }

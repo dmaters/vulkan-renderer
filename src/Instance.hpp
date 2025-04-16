@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 struct SDL_Window;
 struct Instance {
@@ -13,6 +14,8 @@ struct Instance {
 	};
 	vk::Device device;
 	vk::SurfaceKHR surface;
+	vk::SurfaceFormatKHR surfaceFormat;
+
 	vk::PhysicalDevice physicalDevice;
 	vk::Instance instance;
 

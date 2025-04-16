@@ -31,10 +31,12 @@ Instance Instance::Create(SDL_Window* window) {
 	vk::Device device = createDevice(physicalDevice);
 
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
+	auto formats = physicalDevice.getSurfaceFormatsKHR(surface);
 
 	return {
 		.device = device,
 		.surface = surface,
+		.surfaceFormat = formats[0],
 		.physicalDevice = physicalDevice,
 		.instance = instance,
 		.queueFamiliesIndices = getQueueFamilies(physicalDevice),

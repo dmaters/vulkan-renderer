@@ -33,12 +33,18 @@ private:
 	std::unordered_map<std::string_view, RegisteredTask> m_registeredTask;
 	std::vector<std::string_view> m_nodes;
 	std::set<std::string_view> m_internalResources;
+	std::unordered_map<std::string_view, ResourceManager::ImageDescription>
+		m_swapchainDependentImages;
+
 	std::set<std::string_view> m_uninitializedResources;
 
-	std::vector<vk::ImageMemoryBarrier2> m_initializationBarriers;
-	bool m_initialized = false;
+	std::map<std::string_view, ImageDependencyInfo> m_uninitializedImages;
 
-	std::array<ImageHandle, 3> m_swapchainImages;
+	std::array<std::vector<ImageHandle>, 3> m_unusedImages;
+	std::array<std::vector<BufferHandle>, 3> m_unusedBuffers;
+	uint8_t m_swapchainFlushCounter = 0;
+
+	bool m_initialized = false;
 
 	Instance& m_instance;
 	Swapchain& m_swapchain;
@@ -46,6 +52,8 @@ private:
 	vk::Queue m_mainQueue;
 
 	RenderGraphBuilder m_builder;
+
+	uint8_t m_currentFrame = 0;
 
 	bool addImageBarrier(
 		ImageDependencyInfo& image, vk::ImageMemoryBarrier2& buffer
@@ -55,8 +63,12 @@ private:
 	);
 
 	void buildGraph();
+	void initializeExternalImages(vk::CommandBuffer& commandBuffer);
 
-	uint8_t m_currentFrame = 0;
+	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);
+	void clearUnusedResources();
+
+	void rebuildSwapchain();
 
 public:
 	RenderGraph(
@@ -67,7 +79,8 @@ public:
 
 	void addImage(
 		std::string_view name,
-		const ResourceManager::ImageDescription& description
+		const ResourceManager::ImageDescription& description,
+		bool swapchainDependent = false
 	);
 
 	void addBuffer(

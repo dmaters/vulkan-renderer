@@ -167,7 +167,7 @@ GraphData RenderGraphBuilder::build(
 	std::set<std::string_view> visitedTasks;
 	std::queue<std::string_view> tasksToVisit;
 
-	for (auto reference : m_imageReferences["result"])
+	for (auto reference : m_imageReferences["main_color"])
 		tasksToVisit.push(reference.task);
 
 	while (!tasksToVisit.empty()) {

@@ -40,7 +40,7 @@ void RenderPass::execute(
 	assert(m_attachments.color.has_value() || m_attachments.depth.has_value());
 
 	vk::RenderingInfoKHR renderingInfo {
-		.renderArea = vk::Rect2D({ 0, 0 }, { 800, 600 }),
+
 		.layerCount = 1,
 		.viewMask = 0,
 		.pDepthAttachment = nullptr,
@@ -88,7 +88,7 @@ void RenderPass::execute(
 		width = depth.size.width;
 		height = depth.size.height;
 	}
-
+	renderingInfo.renderArea = vk::Rect2D({ 0, 0 }, { width, height }),
 	commandBuffer.beginRendering(renderingInfo);
 	commandBuffer.setScissor(
 		0,

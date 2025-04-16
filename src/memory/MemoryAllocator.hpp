@@ -31,8 +31,8 @@ private:
 	vk::CommandPool m_commandPool;
 
 	std::unique_ptr<RingAllocation> m_stagingAllocation;
-	std::unique_ptr<RingAllocation> m_localPersistent;
-	std::unique_ptr<RingAllocation> m_devicePersistent;
+	std::unique_ptr<BuddyAllocator> m_localPersistent;
+	std::unique_ptr<BuddyAllocator> m_devicePersistent;
 
 	bool allocate(
 		Allocation& allocation, AllocationType type, AllocationLocation location
@@ -55,6 +55,7 @@ public:
 		vk::Image image, AllocationType type, AllocationLocation location
 	);
 
+	void free(SubAllocation subAllocation);
 	void getMemoryTypes();
 	void updateData(SubAllocation& allocation, std::vector<std::byte> data);
 };

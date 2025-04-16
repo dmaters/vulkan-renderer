@@ -1,5 +1,6 @@
 #include "Swapchain.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vulkan/vulkan.hpp>
@@ -9,67 +10,85 @@
 #include "Frame.hpp"
 #include "resources/Image.hpp"
 
-Swapchain::Swapchain(vk::Device& device, SwapchainCreateInfo& userInfo) {
+Swapchain::Swapchain(Instance& instance) :
+	m_device(instance.device),
+	m_physicalDevice(instance.physicalDevice),
+	m_surface(instance.surface),
+	m_surfaceFormat(instance.surfaceFormat),
+	m_graphicsIndex(instance.queueFamiliesIndices.graphicsIndex) {
+	createSwapchain();
+	createFrames();
+	createImages();
+}
+void Swapchain::createSwapchain() {
+	vk::SurfaceCapabilitiesKHR capabilities =
+		m_physicalDevice.getSurfaceCapabilitiesKHR(m_surface);
+	if (capabilities.currentExtent.width != UINT32_MAX)
+		m_resolution = capabilities.currentExtent;
+
 	vk::SwapchainCreateInfoKHR info;
-	info.surface = userInfo.surface;
-	info.minImageCount = BUFFERING_COUNT;
-	info.imageFormat = userInfo.format.format;
-	info.imageExtent = vk::Extent2D(userInfo.width, userInfo.height);
+	info.surface = m_surface;
+	info.minImageCount = 3;
+	info.imageFormat = m_surfaceFormat.format;
+	info.imageExtent = m_resolution;
 	info.imageArrayLayers = 1;
 	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst |
 	                  vk::ImageUsageFlagBits::eColorAttachment;
-	info.imageColorSpace = userInfo.format.colorSpace;
+	info.imageColorSpace = m_surfaceFormat.colorSpace;
 	info.imageSharingMode = vk::SharingMode::eExclusive;
 
 	info.queueFamilyIndexCount = 1;
-	info.pQueueFamilyIndices = { &userInfo.graphicsFamilyIndex };
+	info.pQueueFamilyIndices = &m_graphicsIndex;
 	info.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
 	info.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 	info.clipped = vk::True;
-	info.oldSwapchain = nullptr;
+	info.oldSwapchain = m_swapchain != nullptr ? m_swapchain : nullptr;
 
-	m_swapchain = device.createSwapchainKHR(info);
-	createFrames(device, userInfo.format.format, userInfo.graphicsFamilyIndex);
+	m_swapchain = m_device.createSwapchainKHR(info);
 }
 
-void Swapchain::createFrames(
-	vk::Device& device, vk::Format format, uint32_t familyIndex
-) {
-	m_frames.reserve(BUFFERING_COUNT);
-	m_images.reserve(BUFFERING_COUNT);
+void Swapchain::createFrames() {
+	m_frames.reserve(3);
 
 	vk::FenceCreateInfo fenceInfo { .flags =
 		                                vk::FenceCreateFlagBits::eSignaled };
-	std::vector<vk::Image> images = device.getSwapchainImagesKHR(m_swapchain);
 
 	vk::CommandPoolCreateInfo poolInfo;
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
-	poolInfo.queueFamilyIndex = familyIndex;
-	for (int i = 0; i < BUFFERING_COUNT; i++) {
+	poolInfo.queueFamilyIndex = m_graphicsIndex;
+	for (int i = 0; i < 3; i++) {
 		m_frames.push_back(Frame {
-
-			.commandPool = device.createCommandPool(poolInfo),
-			.fence = device.createFence(fenceInfo),
-			.imageAvailable = device.createSemaphore({}),
-			.renderFinished = device.createSemaphore({}),
+			.commandPool = m_device.createCommandPool(poolInfo),
+			.fence = m_device.createFence(fenceInfo),
+			.imageAvailable = m_device.createSemaphore({}),
+			.renderFinished = m_device.createSemaphore({}),
 		});
+	}
+}
+
+void Swapchain::createImages() {
+	std::vector<vk::Image> images = m_device.getSwapchainImagesKHR(m_swapchain);
+
+	m_images.reserve(3);
+	for (int i = 0; i < 3; i++) {
 		vk::ImageViewCreateInfo viewInfo {
 			.image = images[i],
 			.viewType = vk::ImageViewType::e2D,
-			.format = format,
+			.format = m_surfaceFormat.format,
 			.subresourceRange = vk::ImageSubresourceRange(
 				vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
 			),
 		};
-		vk::ImageView view = device.createImageView(viewInfo);
+		vk::ImageView view = m_device.createImageView(viewInfo);
+
 		m_images.push_back(
 			Image {
 				.image = images[i],
 				.view = view,
-				.format = format,
+				.format = m_surfaceFormat.format,
 				.size = {
-					.width = 800,
-					.height = 600,
+					.width = m_resolution.width,
+					.height = m_resolution.height,
 					.depth = 1,
 				},
 				.allocation = std::nullopt,
@@ -83,4 +102,14 @@ void Swapchain::createFrames(
 			}
 		);
 	}
+}
+void Swapchain::rebuild() {
+	m_images.clear();
+	createSwapchain();
+	createImages();
+}
+void Swapchain::flush() {
+	if (!m_oldSwapchain.has_value()) return;
+	m_device.destroySwapchainKHR(m_oldSwapchain.value());
+	m_oldSwapchain = std::nullopt;
 }

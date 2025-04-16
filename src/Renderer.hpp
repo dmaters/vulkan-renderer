@@ -33,7 +33,6 @@ private:
 
 	GlobalResources* m_globalData;
 
-	void createSwapchain();
 	void createRenderGraph();
 
 public:
