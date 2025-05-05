@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "Task.hpp"
+#include "material/Material.hpp"
 #include "material/MaterialManager.hpp"
 
 class RenderPass : public Task {
@@ -23,10 +24,11 @@ private:
 	Attachments m_attachments;
 
 protected:
-	std::shared_ptr<Material> m_material;
+	MaterialManager& m_materialManager;
 
 public:
-	RenderPass(std::shared_ptr<Material> material) : m_material(material) {}
+	RenderPass(MaterialManager& materialManager) :
+		m_materialManager(materialManager) {}
 	inline void setAttachments(Attachments attachments) {
 		m_attachments = attachments;
 	}

@@ -11,10 +11,8 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-#include "Shader.hpp"
-
 struct PipelineStateCreateInfo {
-	inline vk::PipelineInputAssemblyStateCreateInfo inputAssembly() {
+	vk::PipelineInputAssemblyStateCreateInfo inputAssembly() {
 		vk::PipelineInputAssemblyStateCreateInfo info {
 			.topology = vk::PrimitiveTopology::eTriangleList,
 
@@ -23,7 +21,7 @@ struct PipelineStateCreateInfo {
 		return info;
 	};
 
-	inline vk::PipelineViewportStateCreateInfo viewport() {
+	vk::PipelineViewportStateCreateInfo viewport() {
 		// Dynamic state viewport
 		vk::PipelineViewportStateCreateInfo info {
 			.viewportCount = 1,
@@ -34,7 +32,7 @@ struct PipelineStateCreateInfo {
 	};
 	std::array<vk::VertexInputAttributeDescription, 3> vertexAttributes;
 	std::array<vk::VertexInputBindingDescription, 1> vertexBindings;
-	inline vk::PipelineVertexInputStateCreateInfo vertex() {
+	vk::PipelineVertexInputStateCreateInfo vertex() {
 		vertexBindings = {
 			vk::VertexInputBindingDescription {
 											   .binding = 0,
@@ -72,7 +70,7 @@ struct PipelineStateCreateInfo {
 	};
 
 	std::array<vk::DynamicState, 2> states;
-	inline vk::PipelineDynamicStateCreateInfo dynamicState() {
+	vk::PipelineDynamicStateCreateInfo dynamicState() {
 		states[0] = vk::DynamicState::eViewport;
 		states[1] = vk::DynamicState::eScissor;
 
@@ -83,7 +81,7 @@ struct PipelineStateCreateInfo {
 		return info;
 	};
 
-	inline vk::PipelineRasterizationStateCreateInfo rasterization() {
+	vk::PipelineRasterizationStateCreateInfo rasterization() {
 		vk::PipelineRasterizationStateCreateInfo info {
 			.polygonMode = vk::PolygonMode::eFill,
 			.cullMode = vk::CullModeFlagBits::eBack,
@@ -95,7 +93,7 @@ struct PipelineStateCreateInfo {
 	};
 
 	std::array<vk::PipelineColorBlendAttachmentState, 1> colorblendStates;
-	inline vk::PipelineColorBlendStateCreateInfo colorBlend() {
+	vk::PipelineColorBlendStateCreateInfo colorBlend() {
 		colorblendStates = {
 			vk::PipelineColorBlendAttachmentState {
 
@@ -110,14 +108,14 @@ struct PipelineStateCreateInfo {
 		};
 	};
 
-	inline vk::PipelineMultisampleStateCreateInfo multiSample() {
+	vk::PipelineMultisampleStateCreateInfo multiSample() {
 		return {
 			.rasterizationSamples = vk::SampleCountFlagBits::e1,
 			.sampleShadingEnable = false,
 		};
 	}
 
-	inline vk::PipelineDepthStencilStateCreateInfo depthStencil() {
+	vk::PipelineDepthStencilStateCreateInfo depthStencil() {
 		return vk::PipelineDepthStencilStateCreateInfo {
 			.depthTestEnable = true,
 			.depthWriteEnable = true,
@@ -133,25 +131,15 @@ vk::PipelineLayout getLayout(
 	vk::Device& device, std::vector<vk::DescriptorSetLayout> layouts
 );
 
-Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
+std::optional<Pipeline> PipelineBuilder::BuildPipeline(
+	vk::Device& device, const PipelineBuildInfo& info
+) {
 	vk::GraphicsPipelineCreateInfo pipelineInfo;
 	PipelineStateCreateInfo helper;
 
-	// Shader Stages
-	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages {
-		vk::PipelineShaderStageCreateInfo {
-										   .stage = vk::ShaderStageFlagBits::eVertex,
-										   .module = Shader::GetShader(info.device, info.vertex),
-										   .pName = "main" },
-		vk::PipelineShaderStageCreateInfo {
-										   .stage = vk::ShaderStageFlagBits::eFragment,
-										   .module = Shader::GetShader(info.device, info.fragment),
-										   .pName = "main" }
-	};
-
 	pipelineInfo.flags = {};
 	pipelineInfo.stageCount = 1;
-	pipelineInfo.setStages(shaderStages);
+	pipelineInfo.setStages(info.shaderStages);
 
 	auto vertex = helper.vertex();
 	pipelineInfo.pVertexInputState = &vertex;
@@ -175,7 +163,14 @@ Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
 	auto dynamicState = helper.dynamicState();
 	pipelineInfo.pDynamicState = &dynamicState;
 
-	pipelineInfo.layout = getLayout(info.device, info.layouts);
+	pipelineInfo.layout = getLayout(
+		device,
+		{
+			info.globalSetLayout,
+			info.pipelineSetLayout,
+			info.instanceSetLayout,
+		}
+	);
 
 	pipelineInfo.renderPass = nullptr;
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
@@ -192,10 +187,13 @@ Pipeline PipelineBuilder::DefaultPipeline(const PipelineBuildInfo& info) {
 	pipelineInfo.basePipelineHandle = nullptr;
 	pipelineInfo.basePipelineIndex = 0;
 
-	auto res =
-		info.device.createGraphicsPipeline(vk::PipelineCache(), pipelineInfo);
+	auto res = device.createGraphicsPipeline(vk::PipelineCache(), pipelineInfo);
+	if (res.result != vk::Result::eSuccess) return std::nullopt;
 
-	return Pipeline(res.value, pipelineInfo.layout);
+	return Pipeline {
+		.pipeline = res.value,
+		.pipelineLayout = pipelineInfo.layout,
+	};
 }
 
 vk::PipelineLayout getLayout(

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -11,6 +13,7 @@
 
 #include "Instance.hpp"
 #include "Material.hpp"
+#include "ShaderEngine.hpp"
 #include "resources/ResourceManager.hpp"
 
 struct GlobalResources {
@@ -21,33 +24,45 @@ struct GlobalResources {
 
 	Camera camera;
 };
+typedef uint32_t MaterialInstanceIndex;
+typedef uint32_t MaterialIndex;
+
+struct MaterialInstance {
+	MaterialIndex index = 0;
+	MaterialInstanceIndex instance = 0;
+};
 
 class MaterialManager {
-public:
 private:
+	uint32_t m_materialCount = 0;
+
 	vk::Device& m_device;
 	vk::DescriptorPool m_pool;
-	std::vector<std::shared_ptr<Material>> m_materials;
+
+	std::unique_ptr<ShaderEngine> m_shaderEngine;
+	std::unordered_map<MaterialIndex, Material> m_materials;
+	std::unordered_map<PipelineIndex, MaterialIndex> m_pipelines;
+	std::unordered_set<MaterialIndex> m_brokenMaterials;
+
 	ResourceManager& m_resourceManager;
+
+	vk::DescriptorSet m_emptySet;
+	vk::DescriptorSet m_emptySetLayout;
+	vk::DescriptorSetLayout m_globalSetLayout;
+	std::array<vk::DescriptorSet, 3> m_globalSets;
 
 	vk::Sampler m_linearSampler;
 
-	// std::unordered_map<
-	// 	std::pair<std::filesystem::path, std::filesystem::path>,
-	// 	uint32_t>
-	// 	m_materialCache;
-
-	std::array<DescriptorSet, 3> m_globalSets;
 	BufferHandle m_cameraUBO;
 
-	uint32_t createMaterial(MaterialDescription& description);
+	void createGlobalDescriptorSet();
+	void createMaterial(MaterialDescription& description);
 
 public:
 	MaterialManager(Instance& instance, ResourceManager& resourceManager);
-	void updateDescriptorSets(uint8_t currentFrame);
+	void update(uint8_t currentFrame);
 
 	MaterialInstance instantiateMaterial(MaterialDescription& description);
-	inline std::shared_ptr<Material> getBaseMaterial() {
-		return m_materials[0];
-	}
+
+	Material& getMaterial(MaterialIndex index);
 };

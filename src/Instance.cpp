@@ -1,4 +1,5 @@
-#include <Instance.hpp>
+#include "Instance.hpp"
+
 #include <cstdint>
 #include <iostream>
 #include <string_view>
@@ -45,10 +46,13 @@ Instance Instance::Create(SDL_Window* window) {
 
 //// Instance
 const std::vector<const char*> instanceValidationLayers = {
-	"VK_LAYER_KHRONOS_validation"
+	"VK_LAYER_KHRONOS_validation",
 };
 const std::vector<const char*> instanceExtensionLayers {
-	vk::EXTDebugUtilsExtensionName, "VK_KHR_surface", "VK_KHR_win32_surface"
+	vk::EXTDebugUtilsExtensionName,
+	"VK_KHR_surface",
+	"VK_KHR_win32_surface",
+	"VK_EXT_debug_utils"
 };
 vk::Instance createInstance() {
 	vk::Instance instance = vk::createInstance(vk::InstanceCreateInfo {
@@ -162,7 +166,8 @@ const std::vector<const char*> deviceExtensions {
 	"VK_KHR_create_renderpass2",
 	"VK_KHR_multiview",
 	"VK_KHR_maintenance2",
-	"VK_KHR_synchronization2"
+	"VK_KHR_synchronization2",
+
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);

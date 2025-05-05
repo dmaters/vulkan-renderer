@@ -128,9 +128,7 @@ void Renderer::createRenderGraph() {
 		true
 	);
 
-	auto opaquePass = std::make_unique<OpaquePass>(
-		m_materialManager->getBaseMaterial(), true
-	);
+	auto opaquePass = std::make_unique<OpaquePass>(*m_materialManager, true);
 
 	m_renderGraph->addTask("main_pass", std::move(opaquePass));
 
@@ -138,6 +136,7 @@ void Renderer::createRenderGraph() {
 }
 
 void Renderer::render() {
+	m_materialManager->update(m_currentFrame);
 	vk::Extent2D resolution = m_swapchain->getResolution();
 	glm::mat4 proj = glm::perspectiveRH_ZO(
 		glm::radians(60.f),
@@ -153,6 +152,8 @@ void Renderer::render() {
 	};
 
 	m_renderGraph->submit(m_currentScene->getPrimitives());
+
+	m_currentFrame = (m_currentFrame + 1) % 3;
 };
 
 void Renderer::load(const std::filesystem::path& path) {

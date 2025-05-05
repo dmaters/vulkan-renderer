@@ -1,13 +1,15 @@
 #include "OpaquePass.hpp"
 
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
 #include "../RenderGraph.hpp"
-#include "Primitive.hpp"
 #include "RenderPass.hpp"
+#include "material/Material.hpp"
+#include "scene/Primitive.hpp"
 
 void OpaquePass::setup(
 	std::vector<ImageDependencyInfo>& requiredImages,
@@ -64,31 +66,52 @@ void OpaquePass::execute(
 	vk::CommandBuffer& commandBuffer, const Resources& resources
 ) {
 	RenderPass::execute(commandBuffer, resources);
+	std::unordered_map<MaterialIndex, std::vector<uint32_t>> materials;
 
-	for (auto primitive : resources.primitives) {
-		commandBuffer.pushConstants(
-			m_material->pipeline.pipelineLayout,
-			vk::ShaderStageFlagBits::eVertex,
-			0,
-			64,
-			&primitive.modelMatrix
+	for (int i = 0; i < resources.primitives.size(); i++) {
+		materials[resources.primitives[i].material.index].push_back(i);
+	}
+
+	for (auto& [materialIndex, primitives] : materials) {
+		Material& material = m_materialManager.getMaterial(materialIndex);
+		commandBuffer.bindPipeline(
+			vk::PipelineBindPoint::eGraphics, material.pipeline.pipeline
 		);
 
 		commandBuffer.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
-			m_material->pipeline.pipelineLayout,
-			1,
-			{ m_material->instanceSets[primitive.material.instanceIndex] },
-			nullptr
+			material.pipeline.pipelineLayout,
+			0,
+			{ material.globalSet, material.materialSet },
+			{}
 		);
 
-		commandBuffer.drawIndexed(
-			primitive.indexCount,
-			1,
-			primitive.baseIndex,
-			primitive.baseVertex,
-			0
-		);
+		for (auto primitive : resources.primitives) {
+			commandBuffer.pushConstants(
+				material.pipeline.pipelineLayout,
+				vk::ShaderStageFlagBits::eVertex,
+				0,
+				64,
+				&primitive.modelMatrix
+			);
+			if (!material.instanceSets.empty()) {
+				commandBuffer.bindDescriptorSets(
+					vk::PipelineBindPoint::eGraphics,
+					material.pipeline.pipelineLayout,
+					2,
+					{ material.instanceSets[primitive.material.instance] },
+					nullptr
+				);
+			}
+
+			commandBuffer.drawIndexed(
+				primitive.indexCount,
+				1,
+				primitive.baseIndex,
+				primitive.baseVertex,
+				0
+			);
+		}
 	}
 	commandBuffer.endRendering();
 }

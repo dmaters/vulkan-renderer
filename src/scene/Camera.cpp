@@ -27,9 +27,7 @@ glm::mat4 Camera::getViewVector() {
 	glm::vec3 rotatedPosition = rotation * m_position;
 
 	glm::mat4 viewMatrix = glm::lookAt(
-		glm::vec3(rotatedPosition),
-		glm::vec3(0),
-		glm::vec3(0, 1, 0)  // Up vector
+		glm::vec3(rotatedPosition), glm::vec3(0), glm::vec3(0, 1, 0)
 	);
 
 	return viewMatrix;

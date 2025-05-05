@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -10,10 +11,11 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
+#include "Material.hpp"
 #include "Pipeline.hpp"
+#include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/Pipeline.hpp"
-#include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"
@@ -21,11 +23,13 @@
 MaterialManager::MaterialManager(
 	Instance& instance, ResourceManager& resourceManager
 ) :
-	m_device(instance.device), m_resourceManager(resourceManager) {
+	m_device(instance.device),
+
+	m_resourceManager(resourceManager) {
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eUniformBuffer,
-								.descriptorCount = 1,
+								.descriptorCount = 100,
 								},
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eCombinedImageSampler,
@@ -43,6 +47,42 @@ MaterialManager::MaterialManager(
 
 	m_pool = m_device.createDescriptorPool(info);
 
+	vk::SamplerCreateInfo samplerInfo {
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.mipmapMode = vk::SamplerMipmapMode::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eRepeat,
+		.addressModeV = vk::SamplerAddressMode::eRepeat,
+		.addressModeW = vk::SamplerAddressMode::eRepeat,
+	};
+
+	m_linearSampler = m_device.createSampler(samplerInfo);
+
+	vk::DescriptorSetLayout emptyLayout =
+		m_device.createDescriptorSetLayout({});
+	m_emptySet = m_device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
+		.descriptorPool = m_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &emptyLayout,
+	})[0];
+
+	createGlobalDescriptorSet();
+
+	m_shaderEngine =
+		std::make_unique<ShaderEngine>(m_device, m_globalSetLayout);
+
+	MaterialDescription baseErrorMaterial = {
+		.pipelineName = "fallback_error",
+	};
+	createMaterial(baseErrorMaterial);
+
+	MaterialDescription basePBRMaterial = {
+		.pipelineName = "pbr",
+	};
+	createMaterial(basePBRMaterial);
+}
+
+void MaterialManager::createGlobalDescriptorSet() {
 	std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
@@ -116,116 +156,181 @@ MaterialManager::MaterialManager(
 
 		};
 		m_device.updateDescriptorSets({ gBufferInfo, lightBufferInfo }, {});
-		m_globalSets[i] = { .set = sets[i], .layout = layout };
+		m_globalSets[i] = sets[i];
 	}
 
-	vk::SamplerCreateInfo samplerInfo {
-		.magFilter = vk::Filter::eLinear,
-		.minFilter = vk::Filter::eLinear,
-		.mipmapMode = vk::SamplerMipmapMode::eLinear,
-		.addressModeU = vk::SamplerAddressMode::eRepeat,
-		.addressModeV = vk::SamplerAddressMode::eRepeat,
-		.addressModeW = vk::SamplerAddressMode::eRepeat,
-	};
-
-	m_linearSampler = m_device.createSampler(samplerInfo);
+	m_globalSetLayout = layout;
 }
-void MaterialManager::updateDescriptorSets(uint8_t currentFrame) {
-	for (auto& material : m_materials) {
-		material->globalSet = m_globalSets[currentFrame];
+void MaterialManager::update(uint8_t currentFrame) {
+	for (auto& [name, material] : m_materials) {
+		material.globalSet = m_globalSets[currentFrame];
 	}
-}
 
-uint32_t MaterialManager::createMaterial(MaterialDescription& description) {
-	auto key = std::pair(description.vertex, description.fragment);
-
-	// if (m_materialCache.contains(key)) return m_materialCache[key];
-
-	if (m_materials.size() > 0) return 0;
-
-	std::vector<vk::DescriptorSetLayoutBinding> resourcesLayouts;
-	std::vector<ImageHandle> textures;
-	for (const auto& resource : description.instanceResources) {
-		resourcesLayouts.push_back({ .binding = resource.binding,
-		                             .descriptorType = resource.type,
-		                             .descriptorCount = resource.count,
-		                             .stageFlags = resource.stage });
-		if (resource.type == vk::DescriptorType::eCombinedImageSampler) {
-			textures.push_back(m_resourceManager.loadImage(resource.path));
+	for (PipelineIndex index : m_shaderEngine->getUpdatedPipelines()) {
+		std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
+		MaterialIndex materialIndex = m_pipelines[index];
+		if (pipeline.has_value()) {
+			if (m_brokenMaterials.contains(materialIndex))
+				m_brokenMaterials.erase(materialIndex);
+			m_materials[materialIndex].pipeline = pipeline.value();
+		} else {
+			m_brokenMaterials.insert(materialIndex);
 		}
 	}
-	vk::DescriptorSetLayoutCreateInfo layoutInfo {
 
-		.bindingCount = (uint32_t)resourcesLayouts.size(),
-		.pBindings = resourcesLayouts.data()
-	};
-	vk::DescriptorSetLayout localLayout =
-		m_device.createDescriptorSetLayout(layoutInfo);
-
-	PipelineBuilder::PipelineBuildInfo pipelineInfo {
-		.device = m_device,
-		.vertex = description.vertex,
-		.fragment = description.fragment,
-		.layouts = { m_globalSets[0].layout, localLayout }
-	};
-	Pipeline pipeline = PipelineBuilder::DefaultPipeline(pipelineInfo);
-	m_materials.push_back(std::make_shared<Material>(Material {
-		.pipeline = pipeline,
-		.globalSet = m_globalSets[0],
-		.materialSet = {},
-		.instanceLayout = localLayout,
-	}));
-
-	uint32_t materialIndex = m_materials.size() - 1;
-
-	// m_materialCache[key] = materialIndex;
-
-	return materialIndex;
+	m_shaderEngine->flushRetiredPipelines();
 }
+
+void writeToDescriptorSet(
+	vk::Device& device,
+	ResourceManager& resourceManager,
+	vk::DescriptorSet set,
+	std::vector<vk::DescriptorSetLayoutBinding> layoutBindings,
+	std::unordered_map<uint32_t, BufferHandle>& buffers,
+	std::unordered_map<uint32_t, ImageHandle>& images,
+	vk::Sampler linearSampler
+) {
+	std::vector<vk::WriteDescriptorSet> writeInfos;
+
+	for (const auto& resource : layoutBindings) {
+		if (buffers.contains(resource.binding)) {
+			Buffer& buffer =
+				resourceManager.getBuffer(buffers[resource.binding]);
+
+			vk::DescriptorBufferInfo bufferInfo {
+				.buffer = buffer.buffer,
+				.offset = 0,
+				.range = buffer.size,
+			};
+
+			writeInfos.push_back(vk::WriteDescriptorSet {
+				.dstSet = set,
+				.dstBinding = (uint32_t)(resource.binding),
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eUniformBuffer,
+				.pBufferInfo = &bufferInfo,
+			});
+			continue;
+		}
+		if (images.contains(resource.binding)) {
+			Image& image = resourceManager.getImage(images[resource.binding]);
+			vk::DescriptorImageInfo imageInfo {
+				.sampler = linearSampler,
+				.imageView = image.view,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+			};
+
+			writeInfos.push_back({
+				.dstSet = set,
+				.dstBinding = (uint32_t)(resource.binding),
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+				.pImageInfo = &imageInfo,
+
+			});
+			continue;
+		}
+		assert(false);
+	}
+
+	device.updateDescriptorSets(
+		writeInfos.size(), writeInfos.data(), 0, nullptr
+	);
+}
+
+void MaterialManager::createMaterial(MaterialDescription& description) {
+	MaterialIndex index = m_materialCount;
+	m_materialCount++;
+
+	PipelineIndex pipelineIndex =
+		m_shaderEngine->getIndex(description.pipelineName);
+	m_pipelines[pipelineIndex] = index;
+
+	std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
+
+	if (!pipeline.has_value()) {
+		m_brokenMaterials.insert(index);
+		return;
+	}
+
+	Material material {
+		.pipeline = pipeline.value(),
+		.globalSet = m_globalSets[0],
+	};
+
+	const PipelineMetadata& metadata =
+		m_shaderEngine->getPipelineMetadata(pipelineIndex);
+	if (metadata.materialResources.size() > 0) {
+		vk::DescriptorSetAllocateInfo descriptorInfo {
+			.descriptorPool = m_pool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &metadata.layouts.materialSetLayout
+		};
+
+		vk::DescriptorSet materialSet =
+			m_device.allocateDescriptorSets(descriptorInfo)[0];
+
+		writeToDescriptorSet(
+			m_device,
+			m_resourceManager,
+			materialSet,
+			metadata.materialResources,
+			description.buffers,
+			description.textures,
+			m_linearSampler
+		);
+
+		material.materialSet = materialSet;
+
+	} else
+		material.materialSet = m_emptySet;
+
+	m_materials[index] = material;
+}
+
 MaterialInstance MaterialManager::instantiateMaterial(
 	MaterialDescription& description
 ) {
-	Material& material = *m_materials[createMaterial(description)];
-	vk::DescriptorSetAllocateInfo descriptorInfo {
-		.descriptorPool = m_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &material.instanceLayout
-	};
+	PipelineIndex pipelineIndex =
+		m_shaderEngine->getIndex(description.pipelineName);
 
-	vk::DescriptorSet set = m_device.allocateDescriptorSets(descriptorInfo)[0];
+	const PipelineMetadata& metadata =
+		m_shaderEngine->getPipelineMetadata(pipelineIndex);
+	MaterialIndex materialIndex = m_pipelines[pipelineIndex];
+	Material& material = m_materials[materialIndex];
 
-	std::vector<vk::WriteDescriptorSet> writeInfos;
-
-	int binding = 0;
-	std::vector<ImageHandle> textures;
-	for (const auto& resource : description.instanceResources) {
-		if (resource.type == vk::DescriptorType::eCombinedImageSampler) {
-			textures.push_back(m_resourceManager.loadImage(resource.path));
-		}
-	}
-	for (const auto& texture : textures) {
-		Image& image = m_resourceManager.getImage(texture);
-		vk::DescriptorImageInfo imageInfo {
-			.sampler = m_linearSampler,
-			.imageView = image.view,
-			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+	if (metadata.instanceResources.size() > 0) {
+		vk::DescriptorSetAllocateInfo descriptorInfo {
+			.descriptorPool = m_pool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &metadata.layouts.instanceSetLayout
 		};
 
-		writeInfos.push_back(vk::WriteDescriptorSet {
-			.dstSet = set,
-			.dstBinding = (uint32_t)(binding),
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-			.pImageInfo = &imageInfo,
-		});
+		vk::DescriptorSet instanceSet =
+			m_device.allocateDescriptorSets(descriptorInfo)[0];
 
-		binding++;
+		writeToDescriptorSet(
+			m_device,
+			m_resourceManager,
+			instanceSet,
+			metadata.instanceResources,
+			description.buffers,
+			description.textures,
+			m_linearSampler
+		);
+
+		material.instanceSets.push_back(instanceSet);
 	}
 
-	m_device.updateDescriptorSets(
-		writeInfos.size(), writeInfos.data(), 0, nullptr
-	);
+	return {
+		.index = materialIndex,
+		.instance = (uint32_t)material.instanceSets.size() - 1,
+	};
+}
 
-	material.instanceSets.push_back(set);
-	return { (uint32_t)material.instanceSets.size() - 1 };
+Material& MaterialManager::getMaterial(MaterialIndex index) {
+	if (m_brokenMaterials.contains(index))
+		return m_materials[0];
+	else
+		return m_materials[index];
 }

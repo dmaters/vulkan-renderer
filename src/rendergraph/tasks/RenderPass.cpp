@@ -103,9 +103,6 @@ void RenderPass::execute(
 			vk::Viewport { 0, 0, (float)width, (float)height, 0, 1 }
     }
 	);
-	commandBuffer.bindPipeline(
-		vk::PipelineBindPoint::eGraphics, m_material->pipeline.pipeline
-	);
 
 	Buffer& vertexBuffer =
 		resources.resourceManager.getNamedBuffer("vertex_buffer");
@@ -115,13 +112,5 @@ void RenderPass::execute(
 	commandBuffer.bindVertexBuffers(0, { vertexBuffer.buffer }, { 0 });
 	commandBuffer.bindIndexBuffer(
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
-	);
-
-	commandBuffer.bindDescriptorSets(
-		vk::PipelineBindPoint::eGraphics,
-		m_material->pipeline.pipelineLayout,
-		0,
-		{ m_material->globalSet.set },
-		{}
 	);
 }

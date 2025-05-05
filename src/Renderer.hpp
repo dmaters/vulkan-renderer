@@ -33,6 +33,8 @@ private:
 
 	GlobalResources* m_globalData;
 
+	uint32_t m_currentFrame = 0;
+
 	void createRenderGraph();
 
 public:

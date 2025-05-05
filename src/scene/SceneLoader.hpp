@@ -4,10 +4,12 @@
 #include <assimp/scene.h>
 
 #include <filesystem>
+#include <unordered_map>
 
 #include "Primitive.hpp"
 #include "PrimitiveManager.hpp"
 #include "Scene.hpp"
+#include "material/Material.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -15,6 +17,8 @@ class SceneLoader {
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 	PrimitiveManager m_primitiveManager;
+
+	std::unordered_map<uint16_t, MaterialInstance> m_materialCache;
 
 	Primitive loadMesh(aiMesh& mesh);
 	std::vector<Primitive> loadNode(aiNode& root, const aiScene& importedScene);

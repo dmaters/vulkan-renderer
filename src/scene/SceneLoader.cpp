@@ -13,10 +13,12 @@
 #include <cstdint>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
 #include "Primitive.hpp"
+#include "material/Material.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -127,7 +129,7 @@ std::vector<Primitive> SceneLoader::loadNode(
 			aiMesh* mesh = importedScene.mMeshes[root.mMeshes[i]];
 			Primitive primitive = loadMesh(*mesh);
 
-			primitive.material.instanceIndex = mesh->mMaterialIndex;
+			primitive.material = m_materialCache[mesh->mMaterialIndex];
 			primitive.modelMatrix = transform;
 			nodePrimitives.push_back(primitive);
 		}
@@ -145,23 +147,23 @@ std::vector<Primitive> SceneLoader::loadNode(
 void SceneLoader::loadMaterials(
 	const aiScene& scene, std::filesystem::path& texturePath
 ) {
-	std::set<uint32_t> materialCache;
-	// std::unordered_map<aiString, ImageHandle> textureCache;
-
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
 		aiString path;
-		MaterialDescription::DefaultMaterialTextures defaultTextures;
 
+		std::unordered_map<uint32_t, ImageHandle> pbrImages;
 		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			defaultTextures.albedo =
-				texturePath / std::filesystem::path(path.C_Str());
+			pbrImages[0] = m_resourceManager.loadImage(
+				texturePath / std::filesystem::path(path.C_Str())
+			);
 		}
-
-		auto defaultDescription = MaterialDescription::Default(defaultTextures);
-		m_materialManager.instantiateMaterial(defaultDescription);
+		MaterialDescription desc {
+			.pipelineName = "pbr",
+			.textures = pbrImages,
+		};
+		m_materialCache[i] = m_materialManager.instantiateMaterial(desc);
 	}
 }
 

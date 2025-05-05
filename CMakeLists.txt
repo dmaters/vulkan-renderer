@@ -17,6 +17,7 @@ file(GLOB_RECURSE LOCAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/s
 add_executable(${PROJECT_NAME} ${LOCAL_SOURCES})
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
+target_link_libraries(${PROJECT_NAME} PRIVATE "$ENV{VULKAN_SDK}/lib/slang.lib")
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${PROJECT_NAME} PRIVATE assimp)
@@ -31,30 +32,6 @@ if(MSVC)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-
-set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
-
-file(GLOB_RECURSE GLSL_SOURCE_FILES
-    "resources/shaders/*.frag"
-    "resources/shaders/*.vert"
-)
-
-foreach(GLSL ${GLSL_SOURCE_FILES})
-    get_filename_component(FILE_NAME ${GLSL} NAME)
-    set(SPIRV "${CMAKE_BINARY_DIR}/resources/shaders/${FILE_NAME}.spv")
-    add_custom_command(
-        OUTPUT ${SPIRV}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/resources/shaders"
-        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
-        DEPENDS ${GLSL})
-    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-endforeach(GLSL)
-
-add_custom_target(
-    Shaders
-    DEPENDS ${SPIRV_BINARY_FILES}
-)
-add_dependencies(${PROJECT_NAME} Shaders)
 
 add_custom_target(resources ALL)
 add_custom_command(TARGET resources PRE_BUILD
