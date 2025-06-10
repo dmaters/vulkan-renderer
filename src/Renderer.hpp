@@ -31,8 +31,6 @@ private:
 	std::unique_ptr<Swapchain> m_swapchain;
 	std::unique_ptr<Scene> m_currentScene;
 
-	GlobalResources* m_globalData;
-
 	uint32_t m_currentFrame = 0;
 
 	void createRenderGraph();

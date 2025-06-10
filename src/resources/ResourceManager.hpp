@@ -6,8 +6,11 @@
 #include <optional>
 #include <set>
 #include <string_view>
+#include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "Buffer.hpp"
 #include "Image.hpp"
@@ -28,10 +31,16 @@ public:
 	struct ImageDescription;
 	struct BufferDescription;
 
+	struct BufferCopy;
+
 private:
 	vk::Device m_device;
 	vk::CommandPool m_commandPool;
 	vk::Queue m_queue;
+
+	uint32_t m_transferIndex = 0;
+	uint32_t m_graphicsIndex = 0;
+
 	MemoryAllocator& m_memoryAllocator;
 	std::map<uint32_t, Image> m_images;
 	std::map<uint32_t, Buffer> m_buffers;
@@ -94,9 +103,7 @@ public:
 
 	void copyToBuffer(const std::vector<std::byte>& bytes, BufferHandle);
 
-	void copyBuffer(
-		BufferHandle source, BufferHandle destination, vk::BufferCopy offset
-	);
+	void copyBuffers(std::vector<BufferCopy>& info);
 	void copyToImage(
 		BufferHandle origin, ImageHandle destination, vk::BufferImageCopy offset
 	);
@@ -125,4 +132,12 @@ struct ResourceManager::BufferDescription {
 	vk::BufferUsageFlags usage;
 	AllocationLocation location;
 	bool transient = false;
+};
+
+struct ResourceManager::BufferCopy {
+	BufferHandle origin;
+	uint8_t originAccessIndex = 0;
+	BufferHandle destination;
+	uint8_t destinationAccessIndex = 0;
+	vk::BufferCopy copy;
 };

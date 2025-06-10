@@ -18,7 +18,7 @@ private:
 
 public:
 	const std::vector<Primitive>& getPrimitives() const { return m_primitives; }
-	const std::vector<Light>& getLights() const { return m_lights; }
+	const std::vector<Light> getLights() const { return m_lights; }
 
 	Camera& getCamera() { return camera; }
 

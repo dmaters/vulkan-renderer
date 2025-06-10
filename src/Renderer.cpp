@@ -13,7 +13,9 @@
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
 #include "Swapchain.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
+#include "material/MaterialManager_impl.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "rendergraph/tasks/BufferCopy.hpp"
 #include "rendergraph/tasks/OpaquePass.hpp"
@@ -40,64 +42,15 @@ Renderer::Renderer(SDL_Window* window) {
 	m_resourceManager =
 		std::make_unique<ResourceManager>(m_instance, *m_memoryAllocator);
 
-	m_resourceManager->createBuffer(
-		"gset_buffer_local",
-		{
-			.size = sizeof(GlobalResources),
-			.usage = vk::BufferUsageFlagBits::eTransferSrc,
-			.location = AllocationLocation::Host,
-		}
-	);
-
-	Buffer& globalBuffer =
-		m_resourceManager->getNamedBuffer("gset_buffer_local");
-	m_globalData = (GlobalResources*)globalBuffer.allocation.address;
+	m_materialManager =
+		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 
 	m_renderGraph = std::make_unique<RenderGraph>(
 		m_instance, *m_swapchain, *m_resourceManager
 	);
-	m_renderGraph->addBuffer(
-		"gset_buffer",
-		{
-			.size = sizeof(GlobalResources),
-			.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                 vk::BufferUsageFlagBits::eUniformBuffer,
-			.location = AllocationLocation::Device,
-			.transient = true,
-		}
-	);
-	m_resourceManager->createBuffer(
-		"light_buffer",
-		{
-			.size = (uint32_t)sizeof(Light::uLightData),
-			.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                 vk::BufferUsageFlagBits::eUniformBuffer,
-			.location = AllocationLocation::Device,
-			.transient = false,
-		}
-	);
-	m_materialManager =
-		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 }
 
 void Renderer::createRenderGraph() {
-	Buffer& globalBuffer =
-		m_resourceManager->getNamedBuffer("gset_buffer_local");
-
-	auto copyDescriptorBufferPass = std::make_unique<BufferCopy>(BufferCopy::BufferCopyInfo{
-		.origin = {
-			.name = "gset_buffer_local",
-			.length = globalBuffer.size,
-		},
-		.destination = {
-			.name = "gset_buffer",
-			.length = globalBuffer.size,
-			
-		}
-	});
-
-	m_renderGraph->addTask("data_update", std::move(copyDescriptorBufferPass));
-
 	vk::Extent2D resolution = m_swapchain->getResolution();
 
 	m_renderGraph->addImage(
@@ -146,10 +99,16 @@ void Renderer::render() {
 	);
 
 	proj[1][1] *= -1;
-	m_globalData->camera = {
-		.view = m_currentScene->getCamera().getViewVector(),
-		.projection = proj,
-	};
+
+	glm::mat4 view = m_currentScene->getCamera().getViewVector();
+
+	m_materialManager->updateGlobalBuffer<MaterialDefinitions::ViewProjection>(
+		"view_projection",
+		[proj, view](MaterialDefinitions::ViewProjection& viewProj) {
+			viewProj.view = view;
+			viewProj.projection = proj;
+		}
+	);
 
 	m_renderGraph->submit(m_currentScene->getPrimitives());
 
@@ -169,20 +128,18 @@ void Renderer::load(const std::filesystem::path& path) {
 		.intensity = 0.2,
 	});
 
-	auto& lights = m_currentScene->getLights();
+	auto lights = m_currentScene->getLights();
 
-	Light::uLightData lightData = { .count = (uint32_t)lights.size() };
-	for (int i = 0; i < lights.size(); i++) {
-		const Light& light = lights[i];
-		lightData.lights[i] = light.getShaderObject();
-	}
-	BufferHandle handle =
-		m_resourceManager->getNamedBufferHandle("light_buffer");
+	m_materialManager->updateGlobalBuffer<MaterialDefinitions::Lights>(
+		"light_buffer",
 
-	std::byte* raw = (std::byte*)&lightData;
-	std::vector<std::byte> lightDataRaw(raw, raw + sizeof(Light::uLightData));
-
-	m_resourceManager->copyToBuffer(lightDataRaw, handle);
+		[lights](MaterialDefinitions::Lights& lightUBO) {
+			lightUBO.count = lights.size();
+			for (int i = 0; i < lights.size(); i++) {
+				lightUBO.lights[i] = lights[i].getShaderObject();
+			}
+		}
+	);
 
 	createRenderGraph();
 }

@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
@@ -252,9 +253,7 @@ ImageHandle ResourceManager::registerImage(Image image) {
 	m_images[handle.value] = image;
 	return handle;
 }
-void ResourceManager::copyBuffer(
-	BufferHandle origin, BufferHandle destination, vk::BufferCopy offset
-) {
+void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
 		.level = vk::CommandBufferLevel::ePrimary,
@@ -268,15 +267,46 @@ void ResourceManager::copyBuffer(
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
 	};
 	commandBuffer.begin(beginInfo);
+	std::vector<vk::BufferMemoryBarrier2> barriers;
 
-	commandBuffer.copyBuffer(
-		m_buffers[origin.value].buffer,
-		m_buffers[destination.value].buffer,
-		offset
-	);
+	for (auto &copyInfo : info) {
+		Buffer &destination = m_buffers[copyInfo.destination.value];
+		commandBuffer.copyBuffer(
+			m_buffers[copyInfo.origin.value].buffer,
+			m_buffers[copyInfo.destination.value].buffer,
+			copyInfo.copy
+		);
+
+		barriers.push_back({
+			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+			.dstStageMask =
+				destination.bufferAccess[copyInfo.destinationAccessIndex]
+					.accessStage,
+			.dstAccessMask =
+				destination.bufferAccess[copyInfo.destinationAccessIndex]
+					.accessType,
+			.srcQueueFamilyIndex = m_transferIndex,
+			.dstQueueFamilyIndex = m_graphicsIndex,
+			.buffer = destination.buffer,
+			.offset = destination.bufferAccess[copyInfo.destinationAccessIndex]
+		                  .offset,
+			.size = destination.bufferAccess[copyInfo.destinationAccessIndex]
+		                .length,
+
+		});
+	}
+
+	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
+		.bufferMemoryBarrierCount = (uint32_t)barriers.size(),
+		.pBufferMemoryBarriers = barriers.data(),
+	});
+
 	commandBuffer.end();
-	vk::SubmitInfo submitInfo { .commandBufferCount = 1,
-		                        .pCommandBuffers = &commandBuffer };
+	vk::SubmitInfo submitInfo {
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+	};
 
 	m_queue.submit({ submitInfo });
 };
@@ -365,7 +395,9 @@ void ResourceManager::copyToBuffer(
 		data.data(),
 		data.size()
 	);
-
-	copyBuffer(staging, handle, { .size = data.size() });
+	std::vector<BufferCopy> copyInfo = {
+		BufferCopy { staging, 0, handle, 0, { .size = data.size() } }
+	};
+	copyBuffers(copyInfo);
 	free(staging);
 }
