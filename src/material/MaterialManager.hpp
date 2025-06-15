@@ -48,13 +48,12 @@ private:
 
 	std::unique_ptr<ShaderEngine> m_shaderEngine;
 	std::unordered_map<MaterialIndex, Material> m_materials;
-	std::unordered_map<PipelineIndex, MaterialIndex> m_pipelines;
-	std::unordered_set<MaterialIndex> m_brokenMaterials;
+	std::unordered_map<MaterialIndex, PipelineIndex> m_pipelines;
 
 	std::unordered_map<std::string_view, MirroredBuffer> m_globalBuffers;
 
-	std::unordered_map<MaterialIndex, std::vector<MirroredBuffer>>
-		m_materialData;
+	struct MaterialData;
+	std::unordered_map<MaterialIndex, MaterialData> m_materialData;
 
 	ResourceManager& m_resourceManager;
 
@@ -93,3 +92,31 @@ public:
 	template <typename T, typename F>
 	void updateGlobalBuffer(std::string_view name, F updateFunction);
 };
+
+template <typename T, typename F>
+void MaterialManager::updateMaterialData(
+	MaterialIndex index, F updateFunction
+) {
+	T data = getMaterialData<T>(index);
+	updateFunction(data);
+	syncData(m_materialData[index]);
+}
+
+template <typename T, typename F>
+void MaterialManager::updateGlobalBuffer(
+	std::string_view name, F updateFunction
+) {
+	assert(m_globalBuffers.contains(name));
+	MirroredBuffer mbuffer = m_globalBuffers[name];
+	Buffer& buffer = m_resourceManager.getBuffer(mbuffer.localBuffer);
+
+	assert(buffer.size == sizeof(T));
+
+	updateFunction(*reinterpret_cast<T*>(buffer.allocation.address));
+	syncData({ mbuffer });
+}
+
+struct MaterialManager::MaterialData {
+	std::vector<MirroredBuffer> materialBuffers;
+	std::vector<class Ty>
+}

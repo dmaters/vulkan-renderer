@@ -10,29 +10,6 @@
 #include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
-template <typename T, typename F>
-void MaterialManager::updateMaterialData(
-	MaterialIndex index, F updateFunction
-) {
-	T data = getMaterialData<T>(index);
-	updateFunction(data);
-	syncData(m_materialData[index]);
-}
-
-template <typename T, typename F>
-void MaterialManager::updateGlobalBuffer(
-	std::string_view name, F updateFunction
-) {
-	assert(m_globalBuffers.contains(name));
-	MirroredBuffer mbuffer = m_globalBuffers[name];
-	Buffer& buffer = m_resourceManager.getBuffer(mbuffer.localBuffer);
-
-	assert(buffer.size == sizeof(T));
-
-	updateFunction(*reinterpret_cast<T*>(buffer.allocation.address));
-	syncData({ mbuffer });
-}
-
 template <>
 void MaterialManager::createMaterialData<MaterialDefinitions::PBRMaterial>(
 	MaterialIndex index

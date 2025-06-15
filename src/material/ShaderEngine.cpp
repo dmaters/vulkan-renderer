@@ -178,41 +178,36 @@ std::optional<Pipeline> ShaderEngine::createPipeline(
 	return pipeline;
 }
 
-void ShaderEngine::createPipelines() {
-	for (auto& [name, metadata] : _get_defined_pipelines()) {
-		PipelineIndex index = m_pipelineCount;
-		m_pipelineCount++;
-		vk::DescriptorSetLayout materialLayout;
-		vk::DescriptorSetLayout instanceLayout;
+PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata& metadata) {
+	PipelineIndex index = m_pipelineCount;
+	m_pipelineCount++;
+	vk::DescriptorSetLayout materialLayout;
+	vk::DescriptorSetLayout instanceLayout;
 
-		getPipelineLayouts(metadata, materialLayout, instanceLayout);
-		metadata.layouts = {
-			.materialSetLayout = materialLayout,
-			.instanceSetLayout = instanceLayout,
-		};
-		auto pipeline = createPipeline(metadata);
+	getPipelineLayouts(metadata, materialLayout, instanceLayout);
+	metadata.layouts = {
+		.materialSetLayout = materialLayout,
+		.instanceSetLayout = instanceLayout,
+	};
+	auto pipeline = createPipeline(metadata);
 
-		if (name == "fallback_error") m_pipelines[0] = pipeline.value();
+	if (!pipeline.has_value())
+		m_brokenPipelines.insert(index);
+	else
+		m_pipelines[index] = pipeline.value();
 
-		if (!pipeline.has_value())
-			m_brokenPipelines.insert(index);
-		else
-			m_pipelines[index] = pipeline.value();
+	m_pipelineMetadatas[index] = metadata;
 
-		m_pipelineMetadatas[index] = metadata;
+	if (!metadata.modules.vertex.empty())
+		m_modules[std::filesystem::path(SHADER_PATH) / metadata.modules.vertex]
+			.insert(index);
 
-		m_names[name] = index;
+	if (!metadata.modules.fragment.empty())
+		m_modules
+			[std::filesystem::path(SHADER_PATH) / metadata.modules.fragment]
+				.insert(index);
 
-		if (!metadata.modules.vertex.empty())
-			m_modules
-				[std::filesystem::path(SHADER_PATH) / metadata.modules.vertex]
-					.insert(index);
-
-		if (!metadata.modules.fragment.empty())
-			m_modules
-				[std::filesystem::path(SHADER_PATH) / metadata.modules.fragment]
-					.insert(index);
-	}
+	return index;
 }
 
 std::vector<PipelineIndex> ShaderEngine::getUpdatedPipelines() {
@@ -307,32 +302,4 @@ void ShaderEngine::_monitor() {
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
-}
-
-std::unordered_map<std::string_view, PipelineMetadata>
-ShaderEngine::_get_defined_pipelines() {
-	return {
-		{
-         "fallback_error", {
-			.modules = {
-				.vertex= "fallback_error_vert.slang",
-				.fragment = "fallback_error_frag.slang",
-			},
-			}, },
-		{
-         "pbr", { 
-			.modules =
-			{
-				.vertex = "standard_forward_vert.slang",
-		      	.fragment = "standard_forward_frag.slang",
-		 	},
-			.instanceResources = {vk::DescriptorSetLayoutBinding{
-				.binding = 0,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.descriptorCount= 1,
-				.stageFlags = vk::ShaderStageFlagBits::eFragment,
-			},}, 
-			},
-		},
-	};
 }

@@ -6,6 +6,7 @@
 #include <optional>
 #include <set>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -30,7 +31,6 @@ class ResourceManager {
 public:
 	struct ImageDescription;
 	struct BufferDescription;
-
 	struct BufferCopy;
 
 private:
@@ -42,10 +42,10 @@ private:
 	uint32_t m_graphicsIndex = 0;
 
 	MemoryAllocator& m_memoryAllocator;
-	std::map<uint32_t, Image> m_images;
-	std::map<uint32_t, Buffer> m_buffers;
-	std::map<std::string_view, uint32_t> m_imageNames;
-	std::map<std::string_view, uint32_t> m_bufferNames;
+	std::unordered_map<uint32_t, Image> m_images;
+	std::unordered_map<uint32_t, Buffer> m_buffers;
+	std::unordered_map<std::string_view, uint32_t> m_imageNames;
+	std::unordered_map<std::string_view, uint32_t> m_bufferNames;
 
 	// TODO: indexing, for now we can't initialize more than 2^32 resources
 	uint32_t m_resourceCounter = 0;

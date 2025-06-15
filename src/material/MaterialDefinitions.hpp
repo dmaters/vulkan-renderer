@@ -33,5 +33,6 @@ struct PBRMaterial : public Material {
 };
 
 struct SimpleMaterial {};
+struct ErrorFallback {};
 
 }  // namespace MaterialDefinitions
