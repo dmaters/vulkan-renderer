@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 
+#include "AttachmentGroup.hpp"
 #include "Pipeline.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -9,7 +10,10 @@ struct Material {
 	Pipeline pipeline;
 	vk::DescriptorSet globalSet;
 	vk::DescriptorSet materialSet;
+	vk::DescriptorSet attachmentSet;
 	std::vector<vk::DescriptorSet> instanceSets;
+
+	std::optional<AttachmentGroup> frameBuffer;
 };
 
 struct MaterialDescription {

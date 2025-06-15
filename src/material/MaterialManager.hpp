@@ -28,7 +28,11 @@ struct GlobalResources {
 };
 typedef uint32_t MaterialInstanceIndex;
 typedef uint32_t MaterialIndex;
-typedef std::pair<BufferHandle, BufferHandle> MirroredBuffer;
+
+struct MirroredBuffer {
+	BufferHandle localBuffer;
+	BufferHandle deviceBuffer;
+};
 
 struct MaterialInstance {
 	MaterialIndex index = 0;

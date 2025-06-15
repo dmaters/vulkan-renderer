@@ -146,10 +146,12 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	auto set = m_device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& dynamicDataBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["view_projection"].second);
+	Buffer& dynamicDataBuffer = m_resourceManager.getBuffer(
+		m_globalBuffers["view_projection"].deviceBuffer
+	);
 	Buffer& lightBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].second);
+		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].deviceBuffer
+	    );
 
 	vk::DescriptorBufferInfo dynamicDescriptorInfo {
 		.buffer = dynamicDataBuffer.buffer,
@@ -363,11 +365,11 @@ void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
 	std::vector<ResourceManager::BufferCopy> info;
 
 	for (auto buffer : buffers) {
-		uint32_t size = m_resourceManager.getBuffer(buffer.first).size;
+		uint32_t size = m_resourceManager.getBuffer(buffer.localBuffer).size;
 
 		info.push_back({
-			.origin = buffer.first,
-			.destination = buffer.second,
+			.origin = buffer.deviceBuffer,
+			.destination = buffer.localBuffer,
 			.copy = {
 					 .srcOffset = 0,
 					 .dstOffset = 0,
