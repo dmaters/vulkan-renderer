@@ -1,19 +1,58 @@
-
+#pragma once
 
 #include <cassert>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "MaterialDefinitions.hpp"
 #include "MaterialManager.hpp"
+#include "Pipeline.hpp"
 #include "memory/Allocation.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 template <>
-void MaterialManager::createMaterialData<MaterialDefinitions::PBRMaterial>(
-	MaterialIndex index
-) {
+MaterialIndex
+MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
+	MaterialIndex index = m_materialCount;
+	m_materialCount++;
+
+	std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
+		vk::DescriptorSetLayoutBinding { .binding = 0 }
+	};
+	vk::DescriptorSetLayout materialLayout =
+		m_device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo {
+			.bindingCount = (uint32_t)materialBindings.size(),
+			.pBindings = materialBindings.data(),
+		});
+
+	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
+		.modules = {
+					.vertex = "resources/shaders/standard_forward_vert.slang",
+					.fragment = "resources/shaders/standard_forward_frag.slang",
+					},
+		.layouts = {
+			m_globalSetLayout,
+			materialLayout,
+			m_emptySetLayout,
+		}
+    });
+
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+	};
+	m_materialMetadata[index] = metadata;
+
+	return index;
+}
+
+template <>
+MaterialManager::MaterialData MaterialManager::createMaterialData<
+	MaterialDefinitions::PBRMaterial>(MaterialIndex index) {
 	BufferHandle mirror =
 		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
 			.size = sizeof(MaterialDefinitions::PBRMaterial::BaseValues),
@@ -29,8 +68,15 @@ void MaterialManager::createMaterialData<MaterialDefinitions::PBRMaterial>(
 			.location = AllocationLocation::Device,
 		});
 
-	m_materialData[index][0] = MirroredBuffer(mirror, buffer);
-	m_materialData[index][1] = m_globalBuffers["light_buffer"];
+	MaterialMetadata metadata = m_materialMetadata[index];
+
+	return {
+		.pipeline = metadata.pipeline,
+		.materialBuffers = {
+			MirroredBuffer(mirror, buffer),
+            m_globalBuffers["light_buffer"],
+		},
+	};
 };
 
 template <>
@@ -38,7 +84,8 @@ MaterialDefinitions::PBRMaterial MaterialManager::getMaterialData(
 	MaterialIndex index
 ) {
 	assert(m_materialData.contains(index));
-	std::vector<MirroredBuffer>& buffers = m_materialData[index];
+	std::vector<MirroredBuffer>& buffers =
+		m_materialData[index].materialBuffers;
 
 	Buffer& mirroredBuffer =
 		m_resourceManager.getBuffer(buffers[0].localBuffer);

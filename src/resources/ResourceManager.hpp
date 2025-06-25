@@ -27,6 +27,34 @@ struct ImageHandle {
 	uint32_t value;
 };
 
+struct ResourceUsage {
+	enum class Type : uint8_t {
+		WRITE = 0,
+		READ_WRITE = 1,
+		READ = 2,
+	};
+	Type type;
+	vk::AccessFlags2 access;
+	vk::PipelineStageFlags2 stage;
+
+	bool operator==(const ResourceUsage& b) const {
+		return (type == Type::READ && b.type == ResourceUsage::Type::READ) ||
+		       (type == Type::WRITE && b.type == ResourceUsage::Type::WRITE);
+	}
+};
+
+struct ResourceDependency {
+	enum class Kind {
+		RenderTarget,
+		Sampler,
+		Buffer,
+	};
+
+	std::string_view name;
+	Kind kind;
+	ResourceUsage usage;
+};
+
 class ResourceManager {
 public:
 	struct ImageDescription;
@@ -49,6 +77,14 @@ private:
 
 	// TODO: indexing, for now we can't initialize more than 2^32 resources
 	uint32_t m_resourceCounter = 0;
+
+	static const std::unordered_map<std::string_view, BufferDescription>
+		s_defaultNamedBufferData;
+	static const std::unordered_map<std::string_view, ImageDescription>
+		s_defaultNamedImageData;
+
+	static const std::unordered_map<std::string_view, float>
+		s_framebufferDependentRatio;
 
 public:
 	ResourceManager(Instance& instance, MemoryAllocator& memoryAllocator);
@@ -122,6 +158,7 @@ struct ResourceManager::ImageDescription {
 	uint32_t width = 1;
 	uint32_t height = 1;
 	uint32_t depth = 1;
+	uint32_t miplevels = 1;
 	vk::Format format;
 	vk::ImageUsageFlags usage;
 	bool transient = false;

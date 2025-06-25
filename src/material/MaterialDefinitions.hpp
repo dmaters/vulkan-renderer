@@ -20,9 +20,13 @@ struct ViewProjection {
 	glm::mat4 projection;
 };
 
-struct Material {};
+struct LightingMaterial {};
 
-struct PBRMaterial : public Material {
+struct PBRMaterialUniforms {
+	uint32_t albedo;
+};
+
+struct PBRMaterial {
 	struct BaseValues {
 		glm::vec3 baseColor;
 	};

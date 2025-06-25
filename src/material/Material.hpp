@@ -1,21 +1,16 @@
 #pragma once
 
 #include <unordered_map>
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_handles.hpp>
 
-#include "AttachmentGroup.hpp"
 #include "Pipeline.hpp"
 #include "resources/ResourceManager.hpp"
 
-struct Sets {
-	vk::DescriptorSet globalSet;
-	vk::DescriptorSet materialSet;
-	std::vector<vk::DescriptorSet> instanceSets;
-}
-
 struct Material {
 	Pipeline pipeline;
-	Sets sets;
+	vk::DescriptorSet materialSet;
+	bool instantiable;
 };
 
 struct MaterialDescription {

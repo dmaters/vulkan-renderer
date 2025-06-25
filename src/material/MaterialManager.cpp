@@ -1,6 +1,6 @@
 #include "MaterialManager.hpp"
 
-#include <cstddef>
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -13,10 +13,8 @@
 #include "Instance.hpp"
 #include "Material.hpp"
 #include "MaterialDefinitions.hpp"
-#include "Pipeline.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
-#include "material/Pipeline.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -72,15 +70,12 @@ MaterialManager::MaterialManager(
 	m_shaderEngine =
 		std::make_unique<ShaderEngine>(m_device, m_globalSetLayout);
 
-	MaterialDescription baseErrorMaterial = {
-		.pipelineName = "fallback_error",
-	};
-	createMaterial<MaterialDefinitions::SimpleMaterial>(baseErrorMaterial);
+	registerMaterial<MaterialDefinitions::SimpleMaterial>();
 
 	MaterialDescription basePBRMaterial = {
 		.pipelineName = "pbr",
 	};
-	createMaterial<MaterialDefinitions::PBRMaterial>(basePBRMaterial);
+	registerMaterial<MaterialDefinitions::PBRMaterial>();
 }
 void MaterialManager::createGlobalBuffers() {
 	BufferHandle mLightBuffer = m_resourceManager.createBuffer({
@@ -146,7 +141,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	auto set = m_device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& dynamicDataBuffer = m_resourceManager.getBuffer(
+	Buffer& cameraBuffer = m_resourceManager.getBuffer(
 		m_globalBuffers["view_projection"].deviceBuffer
 	);
 	Buffer& lightBuffer =
@@ -154,15 +149,15 @@ void MaterialManager::createGlobalDescriptorSet() {
 	    );
 
 	vk::DescriptorBufferInfo dynamicDescriptorInfo {
-		.buffer = dynamicDataBuffer.buffer,
-		.offset = dynamicDataBuffer.bufferAccess[0].offset,
-		.range = sizeof(GlobalResources::Camera)
+		.buffer = cameraBuffer.buffer,
+		.offset = cameraBuffer.bufferAccess[0].offset,
+		.range = cameraBuffer.size,
 	};
 
 	vk::DescriptorBufferInfo lightDescriptorInfo {
 		.buffer = lightBuffer.buffer,
 		.offset = lightBuffer.bufferAccess[0].offset,
-		.range = sizeof(MaterialDefinitions::Lights)
+		.range = lightBuffer.size
 	};
 
 	vk::WriteDescriptorSet gBufferInfo {
@@ -191,18 +186,6 @@ void MaterialManager::createGlobalDescriptorSet() {
 	m_globalSetLayout = layout;
 }
 void MaterialManager::update(uint8_t currentFrame) {
-	for (PipelineIndex index : m_shaderEngine->getUpdatedPipelines()) {
-		std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
-		MaterialIndex materialIndex = m_pipelines[index];
-		if (pipeline.has_value()) {
-			if (m_brokenMaterials.contains(materialIndex))
-				m_brokenMaterials.erase(materialIndex);
-			m_materials[materialIndex].pipeline = pipeline.value();
-		} else {
-			m_brokenMaterials.insert(materialIndex);
-		}
-	}
-
 	m_shaderEngine->flushRetiredPipelines();
 }
 
@@ -263,102 +246,15 @@ void writeToDescriptorSet(
 	);
 }
 
-template <typename T>
-void MaterialManager::createMaterial(MaterialDescription& description) {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
-
-	PipelineIndex pipelineIndex =
-		m_shaderEngine->getIndex(description.pipelineName);
-	m_pipelines[pipelineIndex] = index;
-
-	std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
-
-	if (!pipeline.has_value()) {
-		m_brokenMaterials.insert(index);
-		return;
-	}
-
+Material MaterialManager::getMaterial(MaterialIndex index) {
+	assert(m_materialData.contains(index));
+	MaterialData& data = m_materialData[index];
 	Material material {
-		.pipeline = pipeline.value(),
-		.globalSet = m_globalSet,
+		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
+		.materialSet = data.materialSet,
 	};
 
-	const PipelineMetadata& metadata =
-		m_shaderEngine->getPipelineMetadata(pipelineIndex);
-	if (metadata.materialResources.size() > 0) {
-		vk::DescriptorSetAllocateInfo descriptorInfo {
-			.descriptorPool = m_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &metadata.layouts.materialSetLayout
-		};
-
-		vk::DescriptorSet materialSet =
-			m_device.allocateDescriptorSets(descriptorInfo)[0];
-
-		writeToDescriptorSet(
-			m_device,
-			m_resourceManager,
-			materialSet,
-			metadata.materialResources,
-			description.buffers,
-			description.textures,
-			m_linearSampler
-		);
-
-		material.materialSet = materialSet;
-
-	} else
-		material.materialSet = m_emptySet;
-
-	m_materials[index] = material;
-}
-
-MaterialInstance MaterialManager::instantiateMaterial(
-	MaterialDescription& description
-) {
-	PipelineIndex pipelineIndex =
-		m_shaderEngine->getIndex(description.pipelineName);
-
-	const PipelineMetadata& metadata =
-		m_shaderEngine->getPipelineMetadata(pipelineIndex);
-	MaterialIndex materialIndex = m_pipelines[pipelineIndex];
-	Material& material = m_materials[materialIndex];
-
-	if (metadata.instanceResources.size() > 0) {
-		vk::DescriptorSetAllocateInfo descriptorInfo {
-			.descriptorPool = m_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &metadata.layouts.instanceSetLayout
-		};
-
-		vk::DescriptorSet instanceSet =
-			m_device.allocateDescriptorSets(descriptorInfo)[0];
-
-		writeToDescriptorSet(
-			m_device,
-			m_resourceManager,
-			instanceSet,
-			metadata.instanceResources,
-			description.buffers,
-			description.textures,
-			m_linearSampler
-		);
-
-		material.instanceSets.push_back(instanceSet);
-	}
-
-	return {
-		.index = materialIndex,
-		.instance = (uint32_t)material.instanceSets.size() - 1,
-	};
-}
-
-Material& MaterialManager::getMaterial(MaterialIndex index) {
-	if (m_brokenMaterials.contains(index))
-		return m_materials[0];
-	else
-		return m_materials[index];
+	return material;
 }
 
 void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {

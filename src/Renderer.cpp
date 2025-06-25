@@ -81,10 +81,6 @@ void Renderer::createRenderGraph() {
 		true
 	);
 
-	auto opaquePass = std::make_unique<OpaquePass>(*m_materialManager, true);
-
-	m_renderGraph->addTask("main_pass", std::move(opaquePass));
-
 	m_renderGraph->build();
 }
 

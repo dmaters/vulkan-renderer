@@ -14,12 +14,14 @@
 
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
+#include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 
 struct Primitive;
 struct Resources {
 	ResourceManager& resourceManager;
+	MaterialManager& materialManager;
 	const std::vector<Primitive>& primitives;
 	uint8_t currentFrame;
 };

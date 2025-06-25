@@ -163,14 +163,7 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	auto dynamicState = helper.dynamicState();
 	pipelineInfo.pDynamicState = &dynamicState;
 
-	pipelineInfo.layout = getLayout(
-		device,
-		{
-			info.globalSetLayout,
-			info.pipelineSetLayout,
-			info.instanceSetLayout,
-		}
-	);
+	pipelineInfo.layout = getLayout(device, info.setLayouts);
 
 	pipelineInfo.renderPass = nullptr;
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
@@ -204,13 +197,13 @@ vk::PipelineLayout getLayout(
 							   .stageFlags = vk::ShaderStageFlagBits::eVertex,
 							   .offset = 0,
 							   .size = 64,
-							   }
+							   },
 	};
-	vk::PipelineLayoutCreateInfo info { .setLayoutCount =
-		                                    (uint32_t)layouts.size(),
-		                                .pSetLayouts = layouts.data(),
-		                                .pushConstantRangeCount = 1,
-		                                .pPushConstantRanges = ranges.data()
+	vk::PipelineLayoutCreateInfo info {
+		.setLayoutCount = (uint32_t)layouts.size(),
+		.pSetLayouts = layouts.data(),
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = ranges.data(),
 
 	};
 	return device.createPipelineLayout(info);
