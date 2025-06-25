@@ -24,28 +24,27 @@ RenderGraph::RenderGraph(
 	m_instance(instance),
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager) {
-	m_mainQueue = m_instance.device.getQueue(
+	m_graphicQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.graphicsIndex, 0
 	);
 }
 void RenderGraph::addImage(
 	std::string_view name,
-	const ResourceManager::ImageDescription& description,
-	bool swapchainDependent
+	ResourceManager::ImageDescription description,
+	uint8_t swapchainResolutionMultiplier
 ) {
-	m_internalResources.insert(name);
+	m_imageCreationInfos[name] = description;
 
-	if (swapchainDependent) m_swapchainDependentImages[name] = description;
-
-	m_resourceManager.createImage(name, description);
+	if (swapchainResolutionMultiplier != 0)
+		m_swapchainDependentImages[name] = swapchainResolutionMultiplier;
 }
 
 void RenderGraph::addBuffer(
-	std::string_view name, const ResourceManager::BufferDescription& description
+	std::string_view name, ResourceManager::BufferDescription description
 ) {
-	m_internalResources.insert(name);
-	m_resourceManager.createBuffer(name, description);
+	m_bufferCreationsInfos[name] = description;
 }
+
 bool isWriteOperation(vk::AccessFlags2 flags) {
 	return flags & vk::AccessFlagBits2::eColorAttachmentWrite ||
 	       flags & vk::AccessFlagBits2::eDepthStencilAttachmentWrite ||
@@ -428,7 +427,7 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = { &frame.renderFinished };
 
-	m_mainQueue.submit({ submitInfo }, { frame.fence });
+	m_graphicQueue.submit({ submitInfo }, { frame.fence });
 
 	vk::PresentInfoKHR presentInfo {};
 	presentInfo.waitSemaphoreCount = 1;
@@ -439,32 +438,71 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 
 	presentInfo.pImageIndices = &imageIndex;
 	try {
-		auto _ = m_mainQueue.presentKHR(presentInfo);
+		auto _ = m_graphicQueue.presentKHR(presentInfo);
 	} catch (const vk::OutOfDateKHRError& _) {
 		rebuildSwapchain();
 	}
 	m_currentFrame = (m_currentFrame + 1) % 3;
 }
 
-void RenderGraph::addTask(std::string_view name, std::unique_ptr<Task> task) {
-	m_registeredTask[name] = RegisteredTask {
-		.task = std::move(task),
-	};
-	m_builder.addTask(name, *m_registeredTask[name].task);
+std::optional<std::array<Barriers, 3>> buildBarrier(
+	const std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>&
+		imageBarriers,
+	const std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>&
+		bufferBarriers,
+	ResourceManager& resourceManager
+) {
+	if (imageBarriers.size() == 0 && bufferBarriers.size() == 0)
+		return std::nullopt;
+
+	std::array<Barriers, 3> barriers;
+	for (int i = 0; i < 3; i++) {
+		auto& barrier = barriers[i];
+
+		std::vector<vk::ImageMemoryBarrier2> compiledImageBarriers;
+
+		for (auto& [name, imageBarrier] : imageBarriers) {
+			auto compiledBarrier = imageBarrier;
+			const auto& image = resourceManager.getNamedImage(name);
+			compiledBarrier.image = image.image;
+			uint8_t accessIndex = image.transient ? i : 0;
+
+			compiledBarrier.subresourceRange = vk::ImageSubresourceRange {
+				.aspectMask = image.getAspectFlags(),
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = accessIndex,
+				.layerCount = 1,
+			};
+
+			compiledImageBarriers.push_back(compiledBarrier);
+		}
+
+		std::vector<vk::BufferMemoryBarrier2> compiledBufferBarriers;
+		for (auto& [name, bufferBarrier] : bufferBarriers) {
+			auto compiledBarrier = bufferBarrier;
+			const auto& buffer = resourceManager.getNamedBuffer(name);
+			compiledBarrier.buffer = buffer.buffer;
+			uint8_t accessIndex = buffer.transient ? i : 0;
+
+			compiledBarrier.offset = buffer.bufferAccess[accessIndex].offset;
+			compiledBarrier.size = buffer.bufferAccess[accessIndex].length;
+
+			compiledBufferBarriers.push_back(compiledBarrier);
+		}
+
+		barrier.imageBarriers = compiledImageBarriers;
+		barrier.bufferBarriers = compiledBufferBarriers;
+	}
+	return barriers;
 }
 
-void RenderGraph::build() {
-	auto res = m_builder.build(m_internalResources, m_resourceManager);
+void RenderGraph::build(GraphData graphData) {
 	m_nodes.clear();
-	for (auto& taskData : res.tasks) {
+	for (auto& taskData : graphData.tasks) {
 		m_nodes.push_back(taskData.name);
-		m_registeredTask[taskData.name].barriers = taskData.barrier;
-		m_registeredTask[taskData.name].images = taskData.requiredImages;
-		m_registeredTask[taskData.name].buffers = taskData.requiredBuffers;
+		m_registeredTask[taskData.name] = taskData;
 	}
 
-	for (auto& [image, imageDependency] : res.requiredLayouts) {
-		m_uninitializedImages[image] = imageDependency;
-	}
 	m_initialized = false;
 }
