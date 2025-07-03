@@ -12,6 +12,6 @@ struct Primitive {
 	uint32_t baseVertex;
 	uint32_t baseIndex;
 	uint32_t indexCount;
-	MaterialInstance material;
+	std::vector<MaterialInstance> materials;
 	glm::mat4x4 modelMatrix;
 };

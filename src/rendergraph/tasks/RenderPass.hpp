@@ -4,26 +4,28 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
-#include "Task.hpp"
 #include "material/MaterialManager.hpp"
-#include "rendergraph/RenderGraphBuilder.hpp"
 
-class RenderPass : Task {
+struct Resources;
+struct ResourceDependency;
+
+class RenderPass {
 public:
 private:
 	MaterialIndex m_material;
-	std::vector<ResourceDependency> m_dependencies;
+	std::vector<MaterialManager::ResourceDependency> m_dependencies;
 
 public:
 	RenderPass(
-		MaterialIndex material, std::vector<ResourceDependency> dependencies
-	);
+		MaterialIndex material,
+		std::vector<MaterialManager::ResourceDependency> dependencies
+	) :
+		m_material(material), m_dependencies(dependencies) {}
 
 	void setup(
-		std::vector<ImageDependencyInfo>& requiredImages,
-		std::vector<BufferDependencyInfo>& requiredBuffers
-	) override;
+		std::unordered_map<std::string_view, ResourceDependency>& images,
+		std::unordered_map<std::string_view, ResourceDependency>& buffers
+	);
 
-	void execute(vk::CommandBuffer& buffer, const Resources& resources)
-		override;
+	void execute(vk::CommandBuffer& buffer, const Resources& resources);
 };

@@ -1,10 +1,13 @@
 #pragma once
 
-#include <optional>
+#include <string_view>
+#include <unordered_map>
+#include <vulkan/vulkan.hpp>
 
-#include "Task.hpp"
+struct Resources;
+struct ResourceDependency;
 
-class BufferCopy : public Task {
+class BufferCopy {
 public:
 	struct BufferSlice {
 		std::string name;
@@ -21,11 +24,10 @@ public:
 private:
 public:
 	void setup(
-		std::vector<ImageDependencyInfo>& requiredImages,
-		std::vector<BufferDependencyInfo>& requiredBuffers
-	) override;
-	void execute(vk::CommandBuffer& buffer, const Resources& resources)
-		override;
+		std::unordered_map<std::string_view, ResourceDependency>& images,
+		std::unordered_map<std::string_view, ResourceDependency>& buffers
+	);
+	void execute(vk::CommandBuffer& buffer, const Resources& resources);
 
 	BufferCopy(BufferCopyInfo info) : m_info(info) {}
 };

@@ -10,30 +10,23 @@
 #include "rendergraph/RenderGraphBuilder.hpp"
 #include "scene/Primitive.hpp"
 
-RenderPass::RenderPass(
-	MaterialIndex material, std::vector<ResourceDependency> dependencies
-) :
-	m_material(material), m_dependencies(dependencies) {}
-
 void RenderPass::setup(
-	std::vector<ImageDependencyInfo>& requiredImages,
-	std::vector<BufferDependencyInfo>& requiredBuffers
+	std::unordered_map<std::string_view, ResourceDependency>& images,
+	std::unordered_map<std::string_view, ResourceDependency>& buffers
 ) {
 	for (auto& dependency : m_dependencies) {
 		switch (dependency.kind) {
-			case ResourceDependency::Kind::RenderTarget:
-			case ResourceDependency::Kind::Sampler:
-				requiredImages.push_back({
-					.name = dependency.name,
+			case MaterialManager::ResourceDependency::Kind::RenderTarget:
+			case MaterialManager::ResourceDependency::Kind::Sampler:
+				images[dependency.name] = {
 					.usage = dependency.usage,
 					.requiredLayout = vk::ImageLayout::eAttachmentOptimal,
-				});
+				};
 				break;
-			case ResourceDependency::Kind::Buffer:
-				requiredBuffers.push_back({
-					.name = dependency.name,
+			case MaterialManager::ResourceDependency::Kind::Buffer:
+				buffers[dependency.name] = {
 					.usage = dependency.usage,
-				});
+				};
 				break;
 		}
 	}
@@ -41,7 +34,7 @@ void RenderPass::setup(
 
 std::vector<vk::WriteDescriptorSet> getTransientResources(
 	vk::CommandBuffer& commandBuffer,
-	const std::vector<ResourceDependency> dependencies,
+	const std::vector<MaterialManager::ResourceDependency> dependencies,
 	const Resources& resources,
 	std::vector<vk::DescriptorImageInfo>& imageInfo,
 	std::vector<vk::DescriptorBufferInfo>& bufferInfo
@@ -51,7 +44,8 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 	uint32_t bindingCount = 0;
 
 	for (auto& dependency : dependencies) {
-		if (dependency.kind == ResourceDependency::Kind::Sampler) {
+		if (dependency.kind ==
+		    MaterialManager::ResourceDependency::Kind::Sampler) {
 			Image& image =
 				resources.resourceManager.getNamedImage(dependency.name);
 
@@ -69,7 +63,8 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 				.pImageInfo = &imageInfo.back(),
 			});
 		}
-		if (dependency.kind == ResourceDependency::Kind::Buffer) {
+		if (dependency.kind ==
+		    MaterialManager::ResourceDependency::Kind::Buffer) {
 			Buffer& buffer =
 				resources.resourceManager.getNamedBuffer(dependency.name);
 
@@ -93,7 +88,7 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 
 void setupAttachments(
 	vk::CommandBuffer& commandBuffer,
-	const std::vector<ResourceDependency> dependencies,
+	const std::vector<MaterialManager::ResourceDependency> dependencies,
 	const Resources& resources
 ) {
 	std::vector<vk::RenderingAttachmentInfo> attachments;
@@ -104,7 +99,9 @@ void setupAttachments(
 	uint8_t width = 0, height = 0;
 
 	for (auto& dependency : dependencies) {
-		if (dependency.kind != ResourceDependency::Kind::RenderTarget) continue;
+		if (dependency.kind !=
+		    MaterialManager::ResourceDependency::Kind::RenderTarget)
+			continue;
 
 		Image& attachment =
 			resources.resourceManager.getNamedImage(dependency.name);
@@ -185,14 +182,13 @@ void RenderPass::execute(
 	const Material& material =
 		resources.materialManager.getMaterial(m_material);
 
-	vk::DescriptorSet staticTextures =
-		resources.materialManager.getStaticTextureSet();
+	vk::DescriptorSet globalSet = resources.materialManager.getGlobalSet();
 
 	commandBuffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		material.pipeline.pipelineLayout,
 		0,
-		{ material.materialSet, staticTextures },
+		{ globalSet, material.materialSet },
 		{}
 	);
 
@@ -214,14 +210,14 @@ void RenderPass::execute(
 		);
 
 	for (const Primitive& primitive : resources.primitives) {
-		if (primitive.material.index != m_material) continue;
+		if (primitive.materials[0].index != m_material) continue;
 
 		struct PushConstants {
 			glm::mat4 transform;
 			uint32_t instanceIndex;
 		};
 		PushConstants data = { primitive.modelMatrix,
-			                   primitive.material.instance };
+			                   primitive.materials[0].instance };
 		commandBuffer.pushConstants(
 			material.pipeline.pipelineLayout,
 			vk::ShaderStageFlagBits::eAll,

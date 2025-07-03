@@ -16,7 +16,6 @@
 
 typedef uint32_t MaterialInstanceIndex;
 typedef uint32_t MaterialIndex;
-typedef uint32_t TargetGroupIndex;
 
 struct MirroredBuffer {
 	BufferHandle localBuffer;
@@ -31,10 +30,10 @@ struct MaterialInstance {
 class MaterialManager {
 public:
 	struct MaterialMetadata;
+	struct ResourceDependency;
 
 private:
 	struct MaterialData;
-	struct TargetGroup;
 
 	uint32_t m_materialCount = 0;
 
@@ -46,8 +45,7 @@ private:
 
 	std::unordered_map<MaterialIndex, MaterialData> m_materialData;
 	std::unordered_map<MaterialIndex, MaterialMetadata> m_materialMetadata;
-
-	std::unordered_map<TargetGroupIndex, TargetGroup> m_targetGroups;
+	std::unordered_map<std::string_view, MaterialIndex> m_names;
 
 	ResourceManager& m_resourceManager;
 
@@ -55,6 +53,8 @@ private:
 	vk::DescriptorSetLayout m_emptySetLayout;
 	vk::DescriptorSet m_globalSet;
 	vk::DescriptorSetLayout m_globalSetLayout;
+
+	std::vector<ImageHandle> m_staticTextureGroup;
 
 	vk::Sampler m_linearSampler;
 
@@ -67,8 +67,6 @@ private:
 	MaterialIndex registerMaterial();
 	template <typename T>
 	MaterialData createMaterialData(MaterialIndex index);
-	template <typename T>
-	TargetGroupIndex createTargetGroup();
 
 	template <typename T>
 	T getMaterialData(MaterialIndex index);
@@ -78,9 +76,11 @@ private:
 public:
 	MaterialManager(Instance& instance, ResourceManager& resourceManager);
 	void update(uint8_t currentFrame);
-	MaterialInstance instantiateMaterial(MaterialDescription& description);
 
 	Material getMaterial(MaterialIndex index);
+	MaterialIndex getMaterialIndex(std::string_view name) const {
+		return m_names.at(name);
+	}
 
 	template <typename T, typename F>
 	void updateMaterialData(MaterialIndex index, F updateFunction);
@@ -88,50 +88,34 @@ public:
 	template <typename T, typename F>
 	void updateGlobalBuffer(std::string_view name, F updateFunction);
 
-	vk::DescriptorSet getStaticTextureSet() const;
+	uint32_t registerTextureGroup(const std::vector<ImageHandle>& textures);
+
+	vk::DescriptorSet getGlobalSet() const { return m_globalSet; };
 
 	std::vector<MaterialIndex> getMaterials() const;
-	const MaterialMetadata& getMaterialMetadata(MaterialIndex index) {
-		assert(m_materialMetadata.contains(index));
-		return m_materialMetadata[index];
+
+	const std::unordered_map<MaterialIndex, MaterialMetadata>&
+	getMaterialMetadatas() const {
+		return m_materialMetadata;
 	}
 };
 
 struct MaterialManager::MaterialData {
 	PipelineIndex pipeline;
-	TargetGroupIndex attachmentIndex;
-
 	std::vector<MirroredBuffer> materialBuffers;
 	vk::DescriptorSet materialSet;
-
-	struct AttachmentBinding {
-		enum class BindingType {
-			RENDERTARGET_COLOR,
-			RENDERTARGET_DEPTH,
-			SAMPLER,
-			IMAGE,
-			BUFFER,
-		};
-
-		ImageHandle image;
-		BufferHandle buffer;
-	};
-
-	std::vector<AttachmentBinding> bindings;
 };
 
 struct MaterialManager::MaterialMetadata {
 	std::string_view name;
 	PipelineIndex pipeline;
+
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings;
 	vk::DescriptorSetLayout materialLayout;
-	std::vector<ResourceDependency> namedResourceDependencies;
-	bool enabled = true;
-};
 
-struct MaterialManager::TargetGroup {
-	std::unordered_map<std::string_view, ImageHandle> images;
-	std::unordered_map<std::string_view, ImageHandle> buffers;
+	std::vector<MaterialManager::ResourceDependency> namedResourceDependencies;
+
+	bool enabled = true;
 };
 
 template <typename T, typename F>
@@ -156,3 +140,15 @@ void MaterialManager::updateGlobalBuffer(
 	updateFunction(*reinterpret_cast<T*>(buffer.allocation.address));
 	syncData({ mbuffer });
 }
+
+struct MaterialManager::ResourceDependency {
+	enum class Kind {
+		RenderTarget,
+		Sampler,
+		Buffer,
+	};
+
+	std::string_view name;
+	Kind kind;
+	ResourceUsage usage;
+};

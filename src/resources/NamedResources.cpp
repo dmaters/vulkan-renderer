@@ -7,7 +7,7 @@
 #include "resources/ResourceManager.hpp"
 
 const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
-	ResourceManager::s_defaultNamedBufferData = {
+	ResourceManager::_defaultNamedBufferData = {
 		{ "buffer_vertex",
          ResourceManager::BufferDescription {
 			  .size = 12 << 1,
@@ -27,7 +27,7 @@ const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
 };
 
 const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
-	ResourceManager::s_defaultNamedImageData = {
+	ResourceManager::_defaultNamedImageData = {
 		{
          "gbuffer_albedo",   {
 				.width = 800,
@@ -70,7 +70,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "main_depth", {
+         "depth", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -79,4 +79,13 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
 				.transient = true,
 			}, }
+};
+
+const std::unordered_map<std::string_view, int8_t>
+	ResourceManager::_swapchainRatio = {
+		{ "gbuffer_albedo",   1 },
+		{ "gbuffer_normal",   1 },
+		{ "gbuffer_worldpos", 1 },
+		{ "main_color",       1 },
+		{ "depth",            1 },
 };

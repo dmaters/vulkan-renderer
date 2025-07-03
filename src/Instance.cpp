@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string_view>
+#include <vulkan/vulkan_structs.hpp>
 
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
@@ -167,7 +168,7 @@ const std::vector<const char*> deviceExtensions {
 	"VK_KHR_multiview",
 	"VK_KHR_maintenance2",
 	"VK_KHR_synchronization2",
-
+	"VK_EXT_descriptor_indexing"
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
@@ -183,8 +184,16 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 								   .pQueuePriorities = std::array<float, 1> { 1.f }.data(),
 								   }
 	};
-
+	vk::PhysicalDeviceVulkan12Features vulkan12Features {
+		.descriptorIndexing = true,
+		.descriptorBindingSampledImageUpdateAfterBind = true,
+		.descriptorBindingUpdateUnusedWhilePending = true,
+		.descriptorBindingPartiallyBound = true,
+		.descriptorBindingVariableDescriptorCount = true,
+		.runtimeDescriptorArray = true,
+	};
 	vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature {
+		.pNext = &vulkan12Features,
 		.dynamicRendering = true,
 	};
 	vk::PhysicalDeviceSynchronization2FeaturesKHR syncronizationFeature {

@@ -17,7 +17,7 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Pipeline.hpp"
-static constexpr std::string_view SHADER_PATH = "../resources/shaders/";
+
 ShaderEngine::ShaderEngine(
 	vk::Device& device, vk::DescriptorSetLayout globalLayout
 ) :
@@ -44,7 +44,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	};
 	slang::ISession* session;
 
-	const char* searchPaths[] = { SHADER_PATH.data() };
+	const char* searchPaths[] = { "resources/shaders/" };
 
 	m_session->createSession(
 		{
@@ -118,9 +118,7 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 	std::vector<vk::PipelineShaderStageCreateInfo> modules;
 
 	if (!metadata.modules.vertex.empty()) {
-		auto res = loadModule(
-			std::filesystem::path(SHADER_PATH) / metadata.modules.vertex
-		);
+		auto res = loadModule(metadata.modules.vertex);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
@@ -131,9 +129,7 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 	}
 
 	if (!metadata.modules.fragment.empty()) {
-		auto res = loadModule(
-			std::filesystem::path(SHADER_PATH) / metadata.modules.fragment
-		);
+		auto res = loadModule(metadata.modules.fragment);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
@@ -162,13 +158,10 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 	m_pipelineMetadatas[index] = metadata;
 
 	if (!metadata.modules.vertex.empty())
-		m_modules[std::filesystem::path(SHADER_PATH) / metadata.modules.vertex]
-			.insert(index);
+		m_modules[metadata.modules.vertex].insert(index);
 
 	if (!metadata.modules.fragment.empty())
-		m_modules
-			[std::filesystem::path(SHADER_PATH) / metadata.modules.fragment]
-				.insert(index);
+		m_modules[metadata.modules.fragment].insert(index);
 
 	return index;
 }

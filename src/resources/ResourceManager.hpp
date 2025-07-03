@@ -43,23 +43,18 @@ struct ResourceUsage {
 	}
 };
 
-struct ResourceDependency {
-	enum class Kind {
-		RenderTarget,
-		Sampler,
-		Buffer,
-	};
-
-	std::string_view name;
-	Kind kind;
-	ResourceUsage usage;
-};
-
 class ResourceManager {
 public:
 	struct ImageDescription;
 	struct BufferDescription;
 	struct BufferCopy;
+
+	static const std::unordered_map<std::string_view, BufferDescription>
+		_defaultNamedBufferData;
+	static const std::unordered_map<std::string_view, ImageDescription>
+		_defaultNamedImageData;
+
+	static const std::unordered_map<std::string_view, int8_t> _swapchainRatio;
 
 private:
 	vk::Device m_device;
@@ -77,14 +72,6 @@ private:
 
 	// TODO: indexing, for now we can't initialize more than 2^32 resources
 	uint32_t m_resourceCounter = 0;
-
-	static const std::unordered_map<std::string_view, BufferDescription>
-		s_defaultNamedBufferData;
-	static const std::unordered_map<std::string_view, ImageDescription>
-		s_defaultNamedImageData;
-
-	static const std::unordered_map<std::string_view, float>
-		s_framebufferDependentRatio;
 
 public:
 	ResourceManager(Instance& instance, MemoryAllocator& memoryAllocator);

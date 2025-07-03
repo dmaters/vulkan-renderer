@@ -36,15 +36,40 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 		.layouts = {
 			m_globalSetLayout,
 			materialLayout,
-			m_emptySetLayout,
 		}
     });
 
-	MaterialMetadata metadata = {
-		.pipeline = pipeline,
-		.materialBindings = materialBindings,
-		.materialLayout = materialLayout,
-	};
+	MaterialMetadata
+		metadata = { .pipeline = pipeline,
+		             .materialBindings = materialBindings,
+		             .materialLayout = materialLayout,
+		             .namedResourceDependencies = 
+	{
+		{
+			.name = "main_color",
+			.kind = ResourceDependency::Kind::RenderTarget,
+			.usage = {
+				.type = ResourceUsage::Type::WRITE,
+				.access =
+					vk::AccessFlagBits2::eColorAttachmentWrite,
+				.stage = vk::PipelineStageFlagBits2::
+					eColorAttachmentOutput,
+			},
+		},  
+		{
+			.name = "depth",
+			.kind = ResourceDependency::Kind::RenderTarget,
+			.usage = {
+				.type = ResourceUsage::Type::WRITE,
+				.access =
+					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+				.stage = vk::PipelineStageFlagBits2::
+					eEarlyFragmentTests,
+				},
+		 },
+	},
+		
+};
 	m_materialMetadata[index] = metadata;
 
 	return index;
@@ -53,16 +78,31 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 template <>
 MaterialManager::MaterialData MaterialManager::createMaterialData<
 	MaterialDefinitions::PBRMaterial>(MaterialIndex index) {
-	BufferHandle mirror =
+	BufferHandle mirrorBase =
 		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
 			.size = sizeof(MaterialDefinitions::PBRMaterial::BaseValues),
 			.usage = vk::BufferUsageFlagBits::eTransferSrc,
 			.location = AllocationLocation::Host,
 		});
 
-	BufferHandle buffer =
+	BufferHandle bufferBase =
 		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
 			.size = sizeof(MaterialDefinitions::PBRMaterial::BaseValues),
+			.usage = vk::BufferUsageFlagBits::eUniformBuffer |
+	                 vk::BufferUsageFlagBits::eTransferDst,
+			.location = AllocationLocation::Device,
+		});
+
+	BufferHandle mirrorInstance =
+		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
+			.size = sizeof(MaterialDefinitions::PBRMaterial::BaseValues),
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+			.location = AllocationLocation::Host,
+		});
+
+	BufferHandle bufferInstance =
+		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
+			.size = sizeof(MaterialDefinitions::PBRMaterialUniforms),
 			.usage = vk::BufferUsageFlagBits::eUniformBuffer |
 	                 vk::BufferUsageFlagBits::eTransferDst,
 			.location = AllocationLocation::Device,
@@ -73,7 +113,8 @@ MaterialManager::MaterialData MaterialManager::createMaterialData<
 	return {
 		.pipeline = metadata.pipeline,
 		.materialBuffers = {
-			MirroredBuffer(mirror, buffer),
+			MirroredBuffer(mirrorBase, bufferBase),
+			MirroredBuffer(mirrorInstance, bufferInstance),
             m_globalBuffers["light_buffer"],
 		},
 	};
@@ -83,16 +124,27 @@ template <>
 MaterialDefinitions::PBRMaterial MaterialManager::getMaterialData(
 	MaterialIndex index
 ) {
-	assert(m_materialData.contains(index));
+	if (!m_materialData.contains(index)) {
+		m_materialData[index] =
+			createMaterialData<MaterialDefinitions::PBRMaterial>(index);
+	}
 	std::vector<MirroredBuffer>& buffers =
 		m_materialData[index].materialBuffers;
 
-	Buffer& mirroredBuffer =
+	Buffer& mirroredBufferBase =
 		m_resourceManager.getBuffer(buffers[0].localBuffer);
-	assert(mirroredBuffer.size != sizeof(MaterialDefinitions::PBRMaterial));
+	assert(mirroredBufferBase.size != sizeof(MaterialDefinitions::PBRMaterial));
+
+	Buffer& mirroredBufferInstance =
+		m_resourceManager.getBuffer(buffers[0].localBuffer);
+
 	MaterialDefinitions::PBRMaterial result = {
 		.base_values = (MaterialDefinitions::PBRMaterial::BaseValues*)
-		                   mirroredBuffer.allocation.address,
+		                   mirroredBufferBase.allocation.address,
+		.instances =
+			(std::array<MaterialDefinitions::PBRMaterialUniforms, 512>*)
+				mirroredBufferInstance.allocation.address,
+
 		.light_data =
 			(const MaterialDefinitions::Lights*)m_resourceManager
 				.getBuffer(m_globalBuffers["light_buffer"].localBuffer)

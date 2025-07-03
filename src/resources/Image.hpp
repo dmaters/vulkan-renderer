@@ -3,17 +3,12 @@
 #include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "memory/MemoryAllocator.hpp"
 
 struct ImageAccess {
 	vk::ImageView view;
 	vk::ImageLayout layout;
-	vk::AccessFlags2 accessType;
-	vk::PipelineStageFlags2 accessStage;
 };
 
 struct Image {

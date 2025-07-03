@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -27,18 +26,17 @@ MaterialManager::MaterialManager(
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eUniformBuffer,
-								.descriptorCount = 100,
+								.descriptorCount = 200,
 								},
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eCombinedImageSampler,
-								.descriptorCount = 20,
+								.descriptorCount = 150,
 								}
 	};
 
 	vk::DescriptorPoolCreateInfo info {
-		.flags = {},
-		// TODO : keep count of sets for materials
-		.maxSets = 512,
+		.flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
+		.maxSets = 128,
 		.poolSizeCount = 1,
 		.pPoolSizes = sizes.data()
 	};
@@ -56,12 +54,11 @@ MaterialManager::MaterialManager(
 
 	m_linearSampler = m_device.createSampler(samplerInfo);
 
-	vk::DescriptorSetLayout emptyLayout =
-		m_device.createDescriptorSetLayout({});
+	m_emptySetLayout = m_device.createDescriptorSetLayout({});
 	m_emptySet = m_device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
 		.descriptorPool = m_pool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = &emptyLayout,
+		.pSetLayouts = &m_emptySetLayout,
 	})[0];
 
 	createGlobalBuffers();
@@ -70,12 +67,7 @@ MaterialManager::MaterialManager(
 	m_shaderEngine =
 		std::make_unique<ShaderEngine>(m_device, m_globalSetLayout);
 
-	registerMaterial<MaterialDefinitions::SimpleMaterial>();
-
-	MaterialDescription basePBRMaterial = {
-		.pipelineName = "pbr",
-	};
-	registerMaterial<MaterialDefinitions::PBRMaterial>();
+	m_names["pbr"] = registerMaterial<MaterialDefinitions::PBRMaterial>();
 }
 void MaterialManager::createGlobalBuffers() {
 	BufferHandle mLightBuffer = m_resourceManager.createBuffer({
@@ -107,7 +99,9 @@ void MaterialManager::createGlobalBuffers() {
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
-	std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
+	// Non esiste piu un global set, sta roba puoi obliterarla
+
+	std::array<vk::DescriptorSetLayoutBinding, 3> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
@@ -121,11 +115,32 @@ void MaterialManager::createGlobalDescriptorSet() {
 										.descriptorCount = 1,
 										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
 										.pImmutableSamplers = {},
+										},
+		vk::DescriptorSetLayoutBinding {
+										.binding = 2,
+										.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+										.descriptorCount = 512,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.pImmutableSamplers = {},
 										}
 	};
 
+	std::array<vk::DescriptorBindingFlags, 3> bindingFlags = {
+		vk::DescriptorBindingFlags {},
+		vk::DescriptorBindingFlags {},
+
+		vk::DescriptorBindingFlagBits::ePartiallyBound |
+			vk::DescriptorBindingFlagBits::eUpdateAfterBind
+	};
+
+	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
+		.bindingCount = bindingFlags.size(),
+		.pBindingFlags = bindingFlags.data()
+	};
+
 	vk::DescriptorSetLayoutCreateInfo layoutInfo {
-		.flags = {},
+		.pNext = &flagsInfo,
+		.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
 		.bindingCount = bindings.size(),
 		.pBindings = bindings.data(),
 	};
@@ -144,44 +159,44 @@ void MaterialManager::createGlobalDescriptorSet() {
 	Buffer& cameraBuffer = m_resourceManager.getBuffer(
 		m_globalBuffers["view_projection"].deviceBuffer
 	);
-	Buffer& lightBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].deviceBuffer
-	    );
 
-	vk::DescriptorBufferInfo dynamicDescriptorInfo {
+	vk::DescriptorBufferInfo cameraDescriptorInfo {
 		.buffer = cameraBuffer.buffer,
 		.offset = cameraBuffer.bufferAccess[0].offset,
 		.range = cameraBuffer.size,
 	};
 
-	vk::DescriptorBufferInfo lightDescriptorInfo {
-		.buffer = lightBuffer.buffer,
-		.offset = lightBuffer.bufferAccess[0].offset,
-		.range = lightBuffer.size
-	};
-
-	vk::WriteDescriptorSet gBufferInfo {
+	vk::WriteDescriptorSet cameraWriteDescriptor {
 		.dstSet = set,
 		.dstBinding = 0,
 		.descriptorCount = 1,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.pImageInfo = {},
-		.pBufferInfo = &dynamicDescriptorInfo,
+		.pBufferInfo = &cameraDescriptorInfo,
 		.pTexelBufferView = {},
-
 	};
 
-	vk::WriteDescriptorSet lightBufferInfo {
+	Buffer& lightBuffer =
+		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].deviceBuffer
+	    );
+
+	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
+		.buffer = lightBuffer.buffer,
+		.offset = lightBuffer.bufferAccess[0].offset,
+		.range = lightBuffer.size,
+	};
+	vk::WriteDescriptorSet lightBufferWriteDescriptor {
 		.dstSet = set,
 		.dstBinding = 1,
 		.descriptorCount = 1,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.pImageInfo = {},
-		.pBufferInfo = &lightDescriptorInfo,
+		.pBufferInfo = &lightBufferDescriptorInfo,
 		.pTexelBufferView = {},
-
 	};
-	m_device.updateDescriptorSets({ gBufferInfo, lightBufferInfo }, {});
+	m_device.updateDescriptorSets(
+		{ cameraWriteDescriptor, lightBufferWriteDescriptor }, {}
+	);
 	m_globalSet = set;
 	m_globalSetLayout = layout;
 }
@@ -275,4 +290,37 @@ void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
 	}
 
 	m_resourceManager.copyBuffers(info);
+}
+
+uint32_t MaterialManager::registerTextureGroup(
+	const std::vector<ImageHandle>& textures
+) {
+	uint32_t offset = m_staticTextureGroup.size();
+
+	m_staticTextureGroup.insert(
+		m_staticTextureGroup.end(), textures.begin(), textures.end()
+	);
+
+	std::vector<vk::DescriptorImageInfo> info;
+	for (auto& handle : textures) {
+		Image& image = m_resourceManager.getImage(handle);
+
+		info.push_back({
+			.sampler = m_linearSampler,
+			.imageView = image.accesses[0].view,
+			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+		});
+	}
+
+	vk::WriteDescriptorSet writeInfo = {
+		.dstSet = m_globalSet,
+		.dstBinding = 2,
+		.dstArrayElement = offset,
+		.descriptorCount = (uint32_t)textures.size(),
+		.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+		.pImageInfo = info.data(),
+	};
+
+	m_device.updateDescriptorSets({ writeInfo }, {});
+	return offset;
 }

@@ -11,9 +11,6 @@
 struct BufferAccess {
 	uint32_t length;
 	uint32_t offset = 0;
-	vk::AccessFlags2 accessType = vk::AccessFlagBits2::eNone;
-	vk::PipelineStageFlags2 accessStage =
-		vk::PipelineStageFlagBits2::eBottomOfPipe;
 };
 
 struct Buffer {

@@ -5,30 +5,29 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "rendergraph/RenderGraph.hpp"
+#include "rendergraph/RenderGraphBuilder.hpp"
 
 void ImageCopy::setup(
-	std::vector<ImageDependencyInfo>& requiredImages,
-	std::vector<BufferDependencyInfo>& requiredBuffers
+	std::unordered_map<std::string_view, ResourceDependency>& images,
+	std::unordered_map<std::string_view, ResourceDependency>& buffers
 ) {
-	requiredImages.push_back( {
-		.name = m_origin,
+	images[m_origin] = {
 		.usage =  {
 				  .type = ResourceUsage::Type::READ,
 				  .access = vk::AccessFlagBits2::eTransferRead,
 				  .stage = vk::PipelineStageFlagBits2::eTransfer,
 				  },
 		.requiredLayout = vk::ImageLayout::eTransferSrcOptimal
-	});
+	};
 
-	requiredImages.push_back({
-		.name = m_destination,
+	images[m_destination] = {
 		.usage = {
 				  .type = ResourceUsage::Type::WRITE,
 				  .access = vk::AccessFlagBits2::eTransferWrite,
 				  .stage = vk::PipelineStageFlagBits2::eTransfer,
 				  },
 		.requiredLayout = vk::ImageLayout::eTransferDstOptimal
-	});
+	};
 };
 
 void ImageCopy::execute(

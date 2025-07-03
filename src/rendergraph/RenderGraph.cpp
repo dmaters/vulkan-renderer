@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <variant>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -15,15 +16,21 @@
 #include "RenderGraph.hpp"
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
+#include "material/MaterialManager.hpp"
 #include "resources/Image.hpp"
 #include "resources/ResourceManager.hpp"
+#include "tasks/ImageCopy.hpp"
 
 RenderGraph::RenderGraph(
-	Instance& instance, Swapchain& swapchain, ResourceManager& resourceManager
+	Instance& instance,
+	Swapchain& swapchain,
+	ResourceManager& resourceManager,
+	MaterialManager& materialManager
 ) :
 	m_instance(instance),
 	m_swapchain(swapchain),
-	m_resourceManager(resourceManager) {
+	m_resourceManager(resourceManager),
+	m_materialManager(materialManager) {
 	m_graphicQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.graphicsIndex, 0
 	);
@@ -45,136 +52,35 @@ void RenderGraph::addBuffer(
 	m_bufferCreationsInfos[name] = description;
 }
 
-bool isWriteOperation(vk::AccessFlags2 flags) {
-	return flags & vk::AccessFlagBits2::eColorAttachmentWrite ||
-	       flags & vk::AccessFlagBits2::eDepthStencilAttachmentWrite ||
-	       flags & vk::AccessFlagBits2::eTransferWrite;
-}
-
-bool isBarrierNeeded(vk::AccessFlags2 current, vk::AccessFlags2 operation) {
-	return isWriteOperation(current) ^ isWriteOperation(operation);
-}
-
-bool RenderGraph::addImageBarrier(
-	ImageDependencyInfo& imageReference, vk::ImageMemoryBarrier2& imageBarrier
-) {
-	Image& image = m_resourceManager.getNamedImage(imageReference.name);
-
-	uint8_t accessIndex = image.transient ? m_currentFrame : 0;
-
-	vk::AccessFlags2 currentAccess = image.accesses[accessIndex].accessType;
-	vk::PipelineStageFlags2 currentStage =
-		image.accesses[accessIndex].accessStage;
-
-	image.accesses[accessIndex].accessType = imageReference.usage.access;
-	image.accesses[accessIndex].accessStage = imageReference.usage.stage;
-
-	if (!isBarrierNeeded(currentAccess, imageReference.usage.access) &&
-	    image.accesses[accessIndex].layout ==
-	        imageReference.requiredLayout.value_or(
-				image.accesses[accessIndex].layout
-			))
-		return false;
-
-	imageBarrier = vk::ImageMemoryBarrier2{
-			.srcStageMask = currentStage,
-			.srcAccessMask = currentAccess,
-			.dstStageMask = imageReference.usage.stage,
-			.dstAccessMask = imageReference.usage.access,
-			.oldLayout = image.accesses[accessIndex].layout,
-			.newLayout = imageReference.requiredLayout.value_or(image.accesses[accessIndex].layout),
-			.image = image.image,
-			.subresourceRange = {
-							 .aspectMask =
-		                             image.getAspectFlags(),
-							.baseMipLevel = 0,
-							.levelCount = 1,
-							.baseArrayLayer = accessIndex,
-							.layerCount = 1,
-						},
-
-		};
-	image.accesses[accessIndex].layout = imageReference.requiredLayout.value_or(
-		image.accesses[accessIndex].layout
-	);
-
-	return true;
-}
-
-void RenderGraph::addMemoryBarriers(
-	vk::CommandBuffer& commandBuffer, std::string_view taskName
-) {
-	RegisteredTask& task = m_registeredTask[taskName];
-
+void RenderGraph::writeMemoryBarrier(
+	vk::CommandBuffer& commandBuffer, GraphData::TaskData& task
+) const {
 	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
-	for (auto& imageReference : task.images) {
-		Image& image = m_resourceManager.getNamedImage(imageReference.name);
+	for (auto& [name, barrier] : task.barriers.imageBarriers) {
+		Image& image = m_resourceManager.getImage(m_images.at(name));
+
 		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
 
-		if (m_internalResources.contains(imageReference.name)) {
-			image.accesses[accessIndex].accessStage =
-				imageReference.usage.stage;
-			image.accesses[accessIndex].accessType =
-				imageReference.usage.access;
-			image.accesses[accessIndex].layout =
-				imageReference.requiredLayout.value_or(
-					image.accesses[accessIndex].layout
-				);
-			continue;
-		}
-
-		vk::ImageMemoryBarrier2 barrier;
-		if (addImageBarrier(imageReference, barrier))
-			imageBarriers.push_back(barrier);
-		image.accesses[accessIndex].layout =
-			imageReference.requiredLayout.value_or(
-				image.accesses[accessIndex].layout
-			);
+		barrier.image = image.image;
+		barrier.subresourceRange = {
+			.aspectMask = image.getAspectFlags(),
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = accessIndex,
+			.layerCount = 1,
+		};
+		imageBarriers.push_back(barrier);
 	}
 	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
 
-	for (auto& bufferReference : task.buffers) {
-		Buffer& buffer = m_resourceManager.getNamedBuffer(bufferReference.name);
+	for (auto& [name, barrier] : task.barriers.bufferBarriers) {
+		Buffer& buffer = m_resourceManager.getBuffer(m_buffers.at(name));
 		uint8_t accessIndex = buffer.transient ? m_currentFrame : 0;
 
-		buffer.bufferAccess[accessIndex].accessStage =
-			bufferReference.usage.stage;
-		vk::AccessFlags2 currentAccess =
-			buffer.bufferAccess[accessIndex].accessType;
-		buffer.bufferAccess[accessIndex].accessType =
-			bufferReference.usage.access;
-
-		if (m_internalResources.contains(bufferReference.name) ||
-		    !isBarrierNeeded(currentAccess, bufferReference.usage.access))
-			continue;
-
-		bufferBarriers.push_back(vk::BufferMemoryBarrier2 {
-			.srcStageMask = buffer.bufferAccess[accessIndex].accessStage,
-			.srcAccessMask = buffer.bufferAccess[accessIndex].accessType,
-			.dstStageMask = bufferReference.usage.stage,
-			.dstAccessMask = bufferReference.usage.access,
-			.buffer = buffer.buffer,
-			.offset = buffer.bufferAccess[accessIndex].offset,
-			.size = buffer.bufferAccess[accessIndex].length,
-		});
+		barrier.offset = buffer.bufferAccess[accessIndex].offset;
+		bufferBarriers.push_back(barrier);
 	}
-	if (task.barriers.has_value()) {
-		auto& localImageBarriers =
-			task.barriers.value()[m_currentFrame].imageBarriers;
-		imageBarriers.insert(
-			imageBarriers.end(),
-			localImageBarriers.begin(),
-			localImageBarriers.end()
-		);
 
-		auto& localBufferBarriers =
-			task.barriers.value()[m_currentFrame].bufferBarriers;
-		bufferBarriers.insert(
-			bufferBarriers.end(),
-			localBufferBarriers.begin(),
-			localBufferBarriers.end()
-		);
-	}
 	if (imageBarriers.size() == 0 && bufferBarriers.size() == 0) return;
 
 	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
@@ -189,20 +95,23 @@ void RenderGraph::addMemoryBarriers(
 void RenderGraph::outputToSwapchain(
 	vk::CommandBuffer& commandBuffer, uint32_t index
 ) {
-	Image& resultImage = m_resourceManager.getNamedImage("main_color");
+	Image& resultImage = m_resourceManager.getImage(m_images.at("main_color"));
 	Image& swapchainImage = m_swapchain.getImage(index);
 
-	vk::ImageMemoryBarrier2 sourceBarrier;
-	ImageDependencyInfo sourceInfo = {
-		.name = "main_color",
-		.usage = {
-			.type = ResourceUsage::Type::READ,
-			.access = vk::AccessFlagBits2::eTransferRead,
-			.stage = vk::PipelineStageFlagBits2::eTransfer,
-		},
-		.requiredLayout = vk::ImageLayout::eTransferSrcOptimal,
+	vk::ImageMemoryBarrier2 sourceBarrier = {
+		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+		.dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+		.oldLayout = resultImage.accesses[m_currentFrame].layout,
+		.newLayout = vk::ImageLayout::eTransferDstOptimal,
+		.image = resultImage.image,
+		.subresourceRange = {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = m_currentFrame,
+			.layerCount = 1,
+		}
 	};
-	addImageBarrier(sourceInfo, sourceBarrier);
 
 	vk::ImageMemoryBarrier2 swapchainBarrier = {
 		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
@@ -218,6 +127,7 @@ void RenderGraph::outputToSwapchain(
 			.layerCount = 1,
 		}
 	};
+
 	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
 		.imageMemoryBarrierCount = 2,
 		.pImageMemoryBarriers =
@@ -288,7 +198,8 @@ void RenderGraph::outputToSwapchain(
                                                     swapchainBarrier }
 				.data()
     });
-
+	resultImage.accesses[m_currentFrame].layout =
+		vk::ImageLayout::eColorAttachmentOptimal;
 	swapchainImage.accesses[0].layout = vk::ImageLayout::ePresentSrcKHR;
 }
 
@@ -326,37 +237,55 @@ void RenderGraph::clearUnusedResources() {
 void RenderGraph::rebuildSwapchain() {
 	m_swapchain.rebuild();
 
-	for (auto& [name, info] : m_swapchainDependentImages) {
+	for (auto& [name, _] : m_images) {
+		if (!m_swapchainDependentImages.contains(name) ||
+		    !m_images.contains(name))
+			continue;
 		m_unusedImages[2].push_back(m_resourceManager.getNamedImageHandle(name)
 		);
 
 		vk::Extent2D resolution = m_swapchain.getResolution();
+		ResourceManager::ImageDescription info = m_imageCreationInfos[name];
+		uint8_t multiplier = m_swapchainDependentImages[name];
+		float ratio = multiplier > 1 ? (1 / multiplier) : (1 * -multiplier);
 
-		info.width = resolution.width;
-		info.height = resolution.height;
+		info.width = resolution.width * ratio;
+		info.height = resolution.height * ratio;
 
 		m_resourceManager.createImage(name, info);
 	}
-	m_initialized = false;
+
 	m_swapchainFlushCounter = 2;
 }
 
-void RenderGraph::initializeExternalImages(vk::CommandBuffer& commandBuffer) {
+void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
-	for (auto& [name, dependency] : m_uninitializedImages) {
-		vk::ImageMemoryBarrier2 barrier;
-		uint8_t currentFrame = m_currentFrame;
-		for (int i = 0; i < 3; i++) {
-			m_currentFrame = i;
-			if (addImageBarrier(dependency, barrier)) {
-				imageBarriers.push_back(barrier);
-			}
-		}
 
-		m_currentFrame = currentFrame;
+	for (auto& [name, statuses] : m_data.imageStatuses) {
+		auto& [initialLayout, finalLayout] = statuses;
+
+		Image& image = m_resourceManager.getImage(m_images[name]);
+		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
+
+		if (image.accesses[accessIndex].layout == initialLayout) continue;
+
+		imageBarriers.push_back({
+			.oldLayout = image.accesses[accessIndex].layout,
+			.newLayout = initialLayout,
+			.image = image.image,
+			.subresourceRange = {
+								 .aspectMask = image.getAspectFlags(),
+								 .baseMipLevel = 0,
+								 .levelCount = 1,
+								 .baseArrayLayer = accessIndex,
+								 .layerCount = 1,
+								 },
+        });
+
+		image.accesses[accessIndex].layout = finalLayout;
 	}
 
-	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
+	buffer.pipelineBarrier2(vk::DependencyInfo {
 		.imageMemoryBarrierCount = (uint32_t)imageBarriers.size(),
 		.pImageMemoryBarriers = imageBarriers.data(),
 	});
@@ -382,22 +311,24 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 	});
 
-	if (!m_initialized) {
-		initializeExternalImages(commandBuffer);
-		m_initialized = true;
-	}
+	writeInitialSyncronizationBarrier(commandBuffer);
 
 	const Resources resources {
 		.resourceManager = m_resourceManager,
+		.materialManager = m_materialManager,
 		.primitives = primitives,
 		.currentFrame = m_currentFrame,
 	};
 
-	for (auto& node : m_nodes) {
-		RegisteredTask& task = m_registeredTask[node];
+	for (auto& node : m_data.tasks) {
+		writeMemoryBarrier(commandBuffer, node);
 
-		addMemoryBarriers(commandBuffer, node);
-		task.task->execute(commandBuffer, resources);
+		std::visit(
+			[&commandBuffer, &resources](auto&& t) {
+				t.execute(commandBuffer, resources);
+			},
+			node.task
+		);
 	}
 
 	vk::AcquireNextImageInfoKHR acquireInfo;
@@ -445,64 +376,18 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 	m_currentFrame = (m_currentFrame + 1) % 3;
 }
 
-std::optional<std::array<Barriers, 3>> buildBarrier(
-	const std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>&
-		imageBarriers,
-	const std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>&
-		bufferBarriers,
-	ResourceManager& resourceManager
-) {
-	if (imageBarriers.size() == 0 && bufferBarriers.size() == 0)
-		return std::nullopt;
-
-	std::array<Barriers, 3> barriers;
-	for (int i = 0; i < 3; i++) {
-		auto& barrier = barriers[i];
-
-		std::vector<vk::ImageMemoryBarrier2> compiledImageBarriers;
-
-		for (auto& [name, imageBarrier] : imageBarriers) {
-			auto compiledBarrier = imageBarrier;
-			const auto& image = resourceManager.getNamedImage(name);
-			compiledBarrier.image = image.image;
-			uint8_t accessIndex = image.transient ? i : 0;
-
-			compiledBarrier.subresourceRange = vk::ImageSubresourceRange {
-				.aspectMask = image.getAspectFlags(),
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = accessIndex,
-				.layerCount = 1,
-			};
-
-			compiledImageBarriers.push_back(compiledBarrier);
-		}
-
-		std::vector<vk::BufferMemoryBarrier2> compiledBufferBarriers;
-		for (auto& [name, bufferBarrier] : bufferBarriers) {
-			auto compiledBarrier = bufferBarrier;
-			const auto& buffer = resourceManager.getNamedBuffer(name);
-			compiledBarrier.buffer = buffer.buffer;
-			uint8_t accessIndex = buffer.transient ? i : 0;
-
-			compiledBarrier.offset = buffer.bufferAccess[accessIndex].offset;
-			compiledBarrier.size = buffer.bufferAccess[accessIndex].length;
-
-			compiledBufferBarriers.push_back(compiledBarrier);
-		}
-
-		barrier.imageBarriers = compiledImageBarriers;
-		barrier.bufferBarriers = compiledBufferBarriers;
-	}
-	return barriers;
-}
-
 void RenderGraph::build(GraphData graphData) {
-	m_nodes.clear();
-	for (auto& taskData : graphData.tasks) {
-		m_nodes.push_back(taskData.name);
-		m_registeredTask[taskData.name] = taskData;
+	m_data = graphData;
+
+	for (auto& image : m_data.transientImagesRequired) {
+		if (image == "result") continue;
+
+		m_images[image] =
+			m_resourceManager.createImage(m_imageCreationInfos[image]);
 	}
 
-	m_initialized = false;
+	for (auto& buffer : m_data.transientImagesRequired) {
+		m_buffers[buffer] =
+			m_resourceManager.createBuffer(m_bufferCreationsInfos[buffer]);
+	}
 }

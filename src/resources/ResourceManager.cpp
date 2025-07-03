@@ -138,8 +138,6 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 		.accesses = std::vector<ImageAccess>(!description.transient ?1 : 3, ImageAccess{
 			.view = views[0],
 			.layout = vk::ImageLayout::eUndefined,
-			.accessType = vk::AccessFlagBits2::eNone,
-			.accessStage = vk::PipelineStageFlagBits2::eNone,
 		}),
 		.transient = description.transient
 	};
@@ -280,12 +278,8 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 		barriers.push_back({
 			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
 			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-			.dstStageMask =
-				destination.bufferAccess[copyInfo.destinationAccessIndex]
-					.accessStage,
-			.dstAccessMask =
-				destination.bufferAccess[copyInfo.destinationAccessIndex]
-					.accessType,
+			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+			.dstAccessMask = vk::AccessFlagBits2::eNone,
 			.srcQueueFamilyIndex = m_transferIndex,
 			.dstQueueFamilyIndex = m_graphicsIndex,
 			.buffer = destination.buffer,

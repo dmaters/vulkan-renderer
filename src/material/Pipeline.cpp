@@ -194,15 +194,16 @@ vk::PipelineLayout getLayout(
 ) {
 	std::array<vk::PushConstantRange, 1> ranges {
 		vk::PushConstantRange {
-							   .stageFlags = vk::ShaderStageFlagBits::eVertex,
+							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
+		                  vk::ShaderStageFlagBits::eFragment,
 							   .offset = 0,
-							   .size = 64,
+							   .size = 68,
 							   },
 	};
 	vk::PipelineLayoutCreateInfo info {
 		.setLayoutCount = (uint32_t)layouts.size(),
 		.pSetLayouts = layouts.data(),
-		.pushConstantRangeCount = 1,
+		.pushConstantRangeCount = ranges.size(),
 		.pPushConstantRanges = ranges.data(),
 
 	};

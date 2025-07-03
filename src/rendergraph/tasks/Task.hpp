@@ -1,17 +1,11 @@
 #pragma once
 
+#include <variant>
 #include <vulkan/vulkan.hpp>
 
-#include "../RenderGraphBuilder.hpp"
+#include "BufferCopy.hpp"
+#include "ImageCopy.hpp"
+#include "RenderPass.hpp"
+#include "resources/Buffer.hpp"
 
-struct Resources;
-class Task {
-public:
-	virtual void setup(
-		std::vector<ImageDependencyInfo>& requiredImages,
-		std::vector<BufferDependencyInfo>& requiredBuffers
-	) = 0;
-	virtual void execute(
-		vk::CommandBuffer& buffer, const Resources& resources
-	) = 0;
-};
+using Task = std::variant<RenderPass, ImageCopy, BufferCopy>;

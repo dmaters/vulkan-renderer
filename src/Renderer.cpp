@@ -12,13 +12,14 @@
 
 #include "Instance.hpp"
 #include "Rendergraph/RenderGraph.hpp"
+#include "Rendergraph/RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "material/MaterialManager_impl.hpp"
 #include "memory/MemoryAllocator.hpp"
-#include "rendergraph/tasks/BufferCopy.hpp"
-#include "rendergraph/tasks/OpaquePass.hpp"
+#include "rendergraph/tasks/ImageCopy.hpp"
+#include "rendergraph/tasks/RenderPass.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"
 #include "scene/Scene.hpp"
@@ -46,42 +47,34 @@ Renderer::Renderer(SDL_Window* window) {
 		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
 
 	m_renderGraph = std::make_unique<RenderGraph>(
-		m_instance, *m_swapchain, *m_resourceManager
+		m_instance, *m_swapchain, *m_resourceManager, *m_materialManager
 	);
 }
 
 void Renderer::createRenderGraph() {
 	vk::Extent2D resolution = m_swapchain->getResolution();
 
-	m_renderGraph->addImage(
-		"main_color",
-		ResourceManager::ImageDescription {
-			.width = resolution.width,
-			.height = resolution.height,
-			.format = vk::Format::eB8G8R8A8Unorm,
-			.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                 vk::ImageUsageFlagBits::eTransferSrc |
-	                 vk::ImageUsageFlagBits::eTransferDst,
+	for (const auto& [name, desc] : ResourceManager::_defaultNamedImageData) {
+		auto it = ResourceManager::_swapchainRatio.find(name);
+		int8_t ratio =
+			(it != ResourceManager::_swapchainRatio.end()) ? it->second : 0;
+		m_renderGraph->addImage(name, desc, ratio);
+	}
 
-			.transient = true,
+	for (const auto& [name, desc] : ResourceManager::_defaultNamedBufferData) {
+		m_renderGraph->addBuffer(name, desc);
+	}
+	RenderGraphBuilder builder;
 
-		},
-		true
-	);
-	m_renderGraph->addImage(
-		"main_depth",
-		ResourceManager::ImageDescription {
-			.width = resolution.width,
-			.height = resolution.height,
-			.format = vk::Format::eD16Unorm,
-			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
-	                 vk::ImageUsageFlagBits::eTransferDst,
-			.transient = true,
-		},
-		true
-	);
+	for (const auto& [index, metadata] :
+	     m_materialManager->getMaterialMetadatas()) {
+		builder.addTask(RenderPass(index, metadata.namedResourceDependencies));
+	}
 
-	m_renderGraph->build();
+	builder.addTask(ImageCopy("main_color", "result"));
+
+	GraphData data = builder.build();
+	m_renderGraph->build(data);
 }
 
 void Renderer::render() {

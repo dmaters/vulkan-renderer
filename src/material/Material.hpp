@@ -14,7 +14,6 @@ struct Material {
 };
 
 struct MaterialDescription {
-	std::string pipelineName;
 	std::unordered_map<uint32_t, ImageHandle> textures;
 	std::unordered_map<uint32_t, BufferHandle> buffers;
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <glm/glm.hpp>
 
 namespace MaterialDefinitions {
@@ -31,6 +32,7 @@ struct PBRMaterial {
 		glm::vec3 baseColor;
 	};
 	BaseValues* base_values;
+	std::array<PBRMaterialUniforms, 512>* instances;
 
 	const Lights* light_data;
 	const ViewProjection* view_projection;
