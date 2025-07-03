@@ -37,7 +37,6 @@ private:
 
 	uint32_t m_materialCount = 0;
 
-	vk::Device& m_device;
 	vk::DescriptorPool m_pool;
 
 	std::unique_ptr<ShaderEngine> m_shaderEngine;
@@ -74,7 +73,8 @@ private:
 	void syncData(std::vector<MirroredBuffer> buffers);
 
 public:
-	MaterialManager(Instance& instance, ResourceManager& resourceManager);
+	MaterialManager(ResourceManager& resourceManager);
+
 	void update(uint8_t currentFrame);
 
 	Material getMaterial(MaterialIndex index);

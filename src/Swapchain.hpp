@@ -13,12 +13,6 @@
 
 class Swapchain {
 private:
-	vk::Device& m_device;
-	vk::PhysicalDevice& m_physicalDevice;
-	vk::SurfaceKHR& m_surface;
-	vk::SurfaceFormatKHR m_surfaceFormat;
-	uint32_t m_graphicsIndex;
-
 	vk::SwapchainKHR m_swapchain = nullptr;
 	std::optional<vk::SwapchainKHR> m_oldSwapchain;
 
@@ -32,7 +26,7 @@ private:
 	void createSwapchain();
 
 public:
-	Swapchain(Instance& instance);
+	Swapchain();
 
 	const Frame& getFrame(uint8_t index) { return m_frames[index]; }
 	Image& getImage(uint8_t index) { return m_images.at(index); }

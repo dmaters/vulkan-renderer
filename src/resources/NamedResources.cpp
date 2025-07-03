@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_enums.hpp>
 
 #include "memory/MemoryAllocator.hpp"
+#include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
 const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
@@ -88,4 +89,10 @@ const std::unordered_map<std::string_view, int8_t>
 		{ "gbuffer_worldpos", 1 },
 		{ "main_color",       1 },
 		{ "depth",            1 },
+};
+
+struct BaseResources {
+	BufferHandle vertex;
+	BufferHandle index;
+	BufferHandle camera;
 };

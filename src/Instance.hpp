@@ -20,6 +20,9 @@ struct Instance {
 	vk::Instance instance;
 
 	QueueFamilies queueFamiliesIndices;
+	static Instance& Create(SDL_Window* window);
+	static Instance& Get() { return _instance; }
 
-	static Instance Create(SDL_Window* window);
+private:
+	static Instance _instance;
 };

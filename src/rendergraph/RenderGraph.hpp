@@ -25,7 +25,6 @@ public:
 private:
 	struct Node;
 
-	Instance& m_instance;
 	Swapchain& m_swapchain;
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
@@ -65,7 +64,6 @@ private:
 
 public:
 	RenderGraph(
-		Instance& instance,
 		Swapchain& swapchain,
 		ResourceManager& resourceManager,
 		MaterialManager& materialManager

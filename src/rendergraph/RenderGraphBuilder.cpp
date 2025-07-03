@@ -92,7 +92,7 @@ void RenderGraphBuilder::addTask(Task task) {
 		.buffers = buffers,
 	});
 
-	for (auto& [name, reference] : images) {
+	for (const auto& [name, reference] : images) {
 		if (!m_imageReferences.contains(name))
 			m_imageReferences[name] = std::vector<ResourceTaskReference>();
 
@@ -102,7 +102,7 @@ void RenderGraphBuilder::addTask(Task task) {
 			.requiredLayout = reference.requiredLayout,
 		});
 	}
-	for (auto& [name, reference] : buffers) {
+	for (const auto& [name, reference] : buffers) {
 		if (!m_bufferReferences.contains(name))
 			m_bufferReferences[name] = std::vector<ResourceTaskReference>();
 

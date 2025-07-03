@@ -167,6 +167,8 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 }
 
 void ShaderEngine::flushRetiredPipelines() {
+	vk::Device& device = Instance::Get().device;
+
 	std::lock_guard<std::mutex> lock(m_mutex);
 	for (auto& [retiredPipeline, frameCount] : m_retiredPipelines) {
 		frameCount--;
@@ -177,8 +179,8 @@ void ShaderEngine::flushRetiredPipelines() {
 		m_retiredPipelines.end(),
 		[&](const std::pair<Pipeline, uint8_t>& info) {
 			if (info.second == 0) {
-				m_device.destroyPipeline(info.first.pipeline);
-				m_device.destroyPipelineLayout(info.first.pipelineLayout);
+				device.destroyPipeline(info.first.pipeline);
+				device.destroyPipelineLayout(info.first.pipelineLayout);
 
 				return true;
 			}

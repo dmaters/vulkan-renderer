@@ -17,12 +17,10 @@
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
-MaterialManager::MaterialManager(
-	Instance& instance, ResourceManager& resourceManager
-) :
-	m_device(instance.device),
-
+MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_resourceManager(resourceManager) {
+	vk::Device& device = Instance::Get().device;
+
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eUniformBuffer,
@@ -41,7 +39,7 @@ MaterialManager::MaterialManager(
 		.pPoolSizes = sizes.data()
 	};
 
-	m_pool = m_device.createDescriptorPool(info);
+	m_pool = device.createDescriptorPool(info);
 
 	vk::SamplerCreateInfo samplerInfo {
 		.magFilter = vk::Filter::eLinear,
@@ -52,10 +50,10 @@ MaterialManager::MaterialManager(
 		.addressModeW = vk::SamplerAddressMode::eRepeat,
 	};
 
-	m_linearSampler = m_device.createSampler(samplerInfo);
+	m_linearSampler = device.createSampler(samplerInfo);
 
-	m_emptySetLayout = m_device.createDescriptorSetLayout({});
-	m_emptySet = m_device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
+	m_emptySetLayout = device.createDescriptorSetLayout({});
+	m_emptySet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
 		.descriptorPool = m_pool,
 		.descriptorSetCount = 1,
 		.pSetLayouts = &m_emptySetLayout,
@@ -64,8 +62,7 @@ MaterialManager::MaterialManager(
 	createGlobalBuffers();
 	createGlobalDescriptorSet();
 
-	m_shaderEngine =
-		std::make_unique<ShaderEngine>(m_device, m_globalSetLayout);
+	m_shaderEngine = std::make_unique<ShaderEngine>(m_globalSetLayout);
 
 	m_names["pbr"] = registerMaterial<MaterialDefinitions::PBRMaterial>();
 }
@@ -99,7 +96,7 @@ void MaterialManager::createGlobalBuffers() {
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
-	// Non esiste piu un global set, sta roba puoi obliterarla
+	vk::Device& device = Instance::Get().device;
 
 	std::array<vk::DescriptorSetLayoutBinding, 3> bindings {
 		vk::DescriptorSetLayoutBinding {
@@ -146,7 +143,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 	};
 
 	vk::DescriptorSetLayout layout =
-		m_device.createDescriptorSetLayout(layoutInfo);
+		device.createDescriptorSetLayout(layoutInfo);
 
 	vk::DescriptorSetAllocateInfo allocateInfo {
 		.descriptorPool = m_pool,
@@ -154,7 +151,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pSetLayouts = &layout,
 	};
 
-	auto set = m_device.allocateDescriptorSets(allocateInfo)[0];
+	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
 	Buffer& cameraBuffer = m_resourceManager.getBuffer(
 		m_globalBuffers["view_projection"].deviceBuffer
@@ -194,7 +191,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pBufferInfo = &lightBufferDescriptorInfo,
 		.pTexelBufferView = {},
 	};
-	m_device.updateDescriptorSets(
+	device.updateDescriptorSets(
 		{ cameraWriteDescriptor, lightBufferWriteDescriptor }, {}
 	);
 	m_globalSet = set;
@@ -321,6 +318,6 @@ uint32_t MaterialManager::registerTextureGroup(
 		.pImageInfo = info.data(),
 	};
 
-	m_device.updateDescriptorSets({ writeInfo }, {});
+	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
 	return offset;
 }

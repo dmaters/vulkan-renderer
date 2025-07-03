@@ -22,8 +22,6 @@ typedef uint32_t PipelineIndex;
 
 class ShaderEngine {
 private:
-	vk::Device& m_device;
-
 	slang::IGlobalSession* m_session;
 
 	std::unordered_map<PipelineIndex, Pipeline> m_pipelines;
@@ -55,7 +53,7 @@ private:
 	_get_defined_pipelines();
 
 public:
-	ShaderEngine(vk::Device& device, vk::DescriptorSetLayout globalLayout);
+	ShaderEngine(vk::DescriptorSetLayout globalLayout);
 	~ShaderEngine();
 
 	PipelineIndex registerPipeline(const PipelineMetadata metadata);

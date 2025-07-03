@@ -17,7 +17,6 @@
 class Renderer {
 public:
 private:
-	Instance m_instance;
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
 	vk::CommandPool m_commandPool;

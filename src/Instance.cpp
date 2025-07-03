@@ -17,7 +17,7 @@ vk::PhysicalDevice getPhysicalDevice(vk::Instance instance);
 vk::Device createDevice(vk::PhysicalDevice physicalDevice);
 Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device);
 
-Instance Instance::Create(SDL_Window* window) {
+Instance& Instance::Create(SDL_Window* window) {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init();
 	vk::Instance instance = createInstance();
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
@@ -35,7 +35,7 @@ Instance Instance::Create(SDL_Window* window) {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 	auto formats = physicalDevice.getSurfaceFormatsKHR(surface);
 
-	return {
+	Instance::_instance = {
 		.device = device,
 		.surface = surface,
 		.surfaceFormat = formats[0],
@@ -43,6 +43,7 @@ Instance Instance::Create(SDL_Window* window) {
 		.instance = instance,
 		.queueFamiliesIndices = getQueueFamilies(physicalDevice),
 	};
+	return _instance;
 }
 
 //// Instance

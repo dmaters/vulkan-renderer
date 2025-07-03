@@ -28,26 +28,25 @@
 Renderer::Renderer(SDL_Window* window) {
 	if (window == nullptr) return;
 
-	m_instance = Instance::Create(window);
+	Instance& instance = Instance::Create(window);
 
-	m_graphicsQueue = m_instance.device.getQueue(
-		m_instance.queueFamiliesIndices.graphicsIndex, 0
+	m_graphicsQueue = instance.device.getQueue(
+		instance.queueFamiliesIndices.graphicsIndex, 0
 	);
 
-	m_presentQueue = m_instance.device.getQueue(
-		m_instance.queueFamiliesIndices.presentIndex, 0
-	);
-	m_swapchain = std::make_unique<Swapchain>(m_instance);
+	m_presentQueue =
+		instance.device.getQueue(instance.queueFamiliesIndices.presentIndex, 0);
+	m_swapchain = std::make_unique<Swapchain>();
 
-	m_memoryAllocator = std::make_unique<MemoryAllocator>(m_instance);
+	m_memoryAllocator = std::make_unique<MemoryAllocator>(instance);
 	m_resourceManager =
-		std::make_unique<ResourceManager>(m_instance, *m_memoryAllocator);
+		std::make_unique<ResourceManager>(instance, *m_memoryAllocator);
 
 	m_materialManager =
-		std::make_unique<MaterialManager>(m_instance, *m_resourceManager);
+		std::make_unique<MaterialManager>(instance, *m_resourceManager);
 
 	m_renderGraph = std::make_unique<RenderGraph>(
-		m_instance, *m_swapchain, *m_resourceManager, *m_materialManager
+		instance, *m_swapchain, *m_resourceManager, *m_materialManager
 	);
 }
 
