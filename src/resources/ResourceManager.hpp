@@ -4,18 +4,13 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <set>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "Buffer.hpp"
 #include "Image.hpp"
-#include "Instance.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 
@@ -57,29 +52,55 @@ public:
 	static const std::unordered_map<std::string_view, int8_t> _swapchainRatio;
 
 private:
-	MemoryAllocator& m_memoryAllocator;
+	MemoryAllocator m_memoryAllocator;
 
 	vk::CommandPool m_commandPool;
 	vk::Queue m_queue;
 	std::unordered_map<uint32_t, Image> m_images;
 	std::unordered_map<uint32_t, Buffer> m_buffers;
-	uint32_t m_resourceCounter = 0;
+
+	std::unordered_map<std::string_view, ImageHandle> m_imageNames;
+	std::unordered_map<std::string_view, BufferHandle> m_bufferNames;
+
+	uint32_t m_resourceCounter = 1;
 
 public:
-	ResourceManager(Instance& instance, MemoryAllocator& memoryAllocator);
+	ResourceManager();
 
 	BufferHandle createStagingBuffer(uint32_t size);
-	BufferHandle createBuffer(const BufferDescription& description);
-
-	ImageHandle createImage(const ImageDescription& description);
-
 	ImageHandle loadImage(const std::filesystem::path& path);
 
-	Image& getImage(ImageHandle handle) { return m_images[handle.value]; }
+	BufferHandle createBuffer(const BufferDescription& description);
+	ImageHandle createImage(const ImageDescription& description);
 
+	Image& getImage(ImageHandle handle) { return m_images[handle.value]; }
 	Buffer& getBuffer(BufferHandle handle) { return m_buffers[handle.value]; }
 
-	ImageHandle registerImage(Image image);
+	void setName(std::string_view name, ImageHandle image);
+	void setName(std::string_view name, BufferHandle buffer);
+
+	ImageHandle getNamedImageIndex(std::string_view name) {
+		return m_imageNames.at(name);
+	}
+	BufferHandle getNamedBufferIndex(std::string_view name) {
+		return m_bufferNames.at(name);
+	}
+
+	Image& getNamedImage(std::string_view name) {
+		return m_images.at(m_imageNames.at(name).value);
+	}
+	Buffer& getNamedBuffer(std::string_view name) {
+		return m_buffers.at(m_bufferNames.at(name).value);
+	}
+
+	ImageHandle getNamedImageHandle(std::string_view name) {
+		return m_imageNames.at(name);
+	}
+	BufferHandle getNamedBufferHandle(std::string_view name) {
+		return m_bufferNames.at(name);
+	}
+
+	ImageHandle registerImage(Image image, ImageHandle handle = { 0 });
 
 	void copyToBuffer(const std::vector<std::byte>& bytes, BufferHandle);
 

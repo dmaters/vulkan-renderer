@@ -6,7 +6,9 @@
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
 #include "Material.hpp"
@@ -35,7 +37,7 @@ public:
 private:
 	struct MaterialData;
 
-	uint32_t m_materialCount = 0;
+	uint32_t m_materialCount = 1;
 
 	vk::DescriptorPool m_pool;
 
@@ -71,6 +73,12 @@ private:
 	T getMaterialData(MaterialIndex index);
 
 	void syncData(std::vector<MirroredBuffer> buffers);
+
+	vk::DescriptorSet createSet(
+		std::vector<vk::DescriptorSetLayoutBinding>& bindings,
+		vk::DescriptorSetLayout layout,
+		std::vector<BufferHandle>& materialBuffersHandles
+	);
 
 public:
 	MaterialManager(ResourceManager& resourceManager);
@@ -151,4 +159,5 @@ struct MaterialManager::ResourceDependency {
 	std::string_view name;
 	Kind kind;
 	ResourceUsage usage;
+	std::optional<vk::ImageLayout> requiredLayout;
 };

@@ -11,9 +11,11 @@
 #include "Allocation.hpp"
 #include "Instance.hpp"
 
-MemoryAllocator::MemoryAllocator(Instance& instance) : m_instance(instance) {
+MemoryAllocator::MemoryAllocator() {
+	Instance& instance = Instance::Get();
+
 	vk::PhysicalDeviceMemoryProperties properties =
-		m_instance.physicalDevice.getMemoryProperties();
+		instance.physicalDevice.getMemoryProperties();
 
 	for (int i = properties.memoryTypeCount; i >= 0; i--) {
 		vk::MemoryType type = properties.memoryTypes[i];
@@ -70,25 +72,27 @@ bool MemoryAllocator::getSubAllocation(
 SubAllocation MemoryAllocator::allocate(
 	vk::Buffer buffer, AllocationType type, AllocationLocation location
 ) {
+	vk::Device& device = Instance::Get().device;
 	vk::MemoryRequirements requirements =
-		m_instance.device.getBufferMemoryRequirements(buffer);
+		device.getBufferMemoryRequirements(buffer);
 	SubAllocation subAllocation;
 	vk::DeviceMemory memory;
 	getSubAllocation(subAllocation, memory, requirements, type, location);
-	m_instance.device.bindBufferMemory(buffer, memory, subAllocation.offset);
+	device.bindBufferMemory(buffer, memory, subAllocation.offset);
 	return subAllocation;
 }
 
 SubAllocation MemoryAllocator::allocate(
 	vk::Image image, AllocationType type, AllocationLocation location
 ) {
+	vk::Device& device = Instance::Get().device;
 	vk::MemoryRequirements requirements =
-		m_instance.device.getImageMemoryRequirements(image);
+		device.getImageMemoryRequirements(image);
 	SubAllocation subAllocation;
 
 	vk::DeviceMemory memory;
 	getSubAllocation(subAllocation, memory, requirements, type, location);
-	m_instance.device.bindImageMemory(
+	device.bindImageMemory(
 		image, memory, vk::DeviceSize { subAllocation.offset }
 	);
 
@@ -98,17 +102,19 @@ SubAllocation MemoryAllocator::allocate(
 bool MemoryAllocator::allocate(
 	Allocation& allocation, AllocationType type, AllocationLocation location
 ) {
+	vk::Device& device = Instance::Get().device;
+
 	vk::MemoryAllocateInfo info {
 		.allocationSize = 256ull << 20,
 		.memoryTypeIndex = m_memoryType[location],
 	};
 
 	allocation = {
-		.memory = m_instance.device.allocateMemory(info),
+		.memory = device.allocateMemory(info),
 	};
 	if (location == AllocationLocation::Host) {
 		allocation.address =
-			m_instance.device.mapMemory(allocation.memory, 0, 256ull << 20);
+			device.mapMemory(allocation.memory, 0, 256ull << 20);
 	}
 	return true;
 }

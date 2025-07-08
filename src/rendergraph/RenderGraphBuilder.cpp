@@ -6,6 +6,7 @@
 #include <optional>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
@@ -127,7 +128,7 @@ GraphData RenderGraphBuilder::build() {
 	}
 
 	std::vector<GraphData::TaskData> tasks;
-	std::set<TaskIndex> visitedTasks;
+	std::unordered_set<TaskIndex> visitedTasks;
 	std::queue<TaskIndex> tasksToVisit;
 
 	std::unordered_set<std::string_view> requiredImages;
@@ -238,9 +239,7 @@ GraphData RenderGraphBuilder::build() {
 		auto firstLayout = std::find_if(taskRef.begin(), taskRef.end(), find);
 		auto lastLayout = std::find_if(taskRef.rbegin(), taskRef.rend(), find);
 
-		if (firstLayout == taskRef.end() ||
-		    firstLayout->requiredLayout == lastLayout->requiredLayout)
-			continue;
+		if (firstLayout == taskRef.end()) continue;
 
 		imageStatus[name] = {
 			firstLayout->requiredLayout.value(),

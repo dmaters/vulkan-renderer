@@ -10,6 +10,7 @@
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
 
 #include "SDL3/SDL_vulkan.h"
+std::optional<Instance> Instance::_instance;
 
 vk::Instance createInstance();
 void setupDebug(vk::Instance instance);
@@ -43,7 +44,7 @@ Instance& Instance::Create(SDL_Window* window) {
 		.instance = instance,
 		.queueFamiliesIndices = getQueueFamilies(physicalDevice),
 	};
-	return _instance;
+	return _instance.value();
 }
 
 //// Instance

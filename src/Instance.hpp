@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
 struct SDL_Window;
 struct Instance {
+public:
 	struct QueueFamilies {
 		uint32_t graphicsIndex = 0;
 		uint32_t transferIndex = 0;
@@ -21,8 +23,8 @@ struct Instance {
 
 	QueueFamilies queueFamiliesIndices;
 	static Instance& Create(SDL_Window* window);
-	static Instance& Get() { return _instance; }
+	static Instance& Get() { return _instance.value(); }
 
 private:
-	static Instance _instance;
+	static std::optional<Instance> _instance;
 };

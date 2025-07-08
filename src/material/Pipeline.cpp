@@ -169,7 +169,8 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
 		.colorAttachmentCount = 1,
 		.pColorAttachmentFormats =
-			std::array<vk::Format, 1> { vk::Format::eB8G8R8A8Unorm }.data(),
+			std::array<vk::Format, 1> { vk::Format::eR16G16B16A16Sfloat }.data(
+			),
 		.depthAttachmentFormat = vk::Format::eD16Unorm,
 
 	};

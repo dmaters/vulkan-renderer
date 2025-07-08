@@ -36,7 +36,8 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.depth = 1,
 				.miplevels = 1,
 				.format = vk::Format::eR8G8B8A8Srgb,
-				.usage = vk::ImageUsageFlagBits::eColorAttachment,
+				.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                     vk::ImageUsageFlagBits::eInputAttachment,
 				.transient = true,
 			}, },
 		{
@@ -46,7 +47,8 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.depth = 1,
 				.miplevels = 1,
 				.format = vk::Format::eR16G16B16A16Sfloat,
-				.usage = vk::ImageUsageFlagBits::eColorAttachment,
+				.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                     vk::ImageUsageFlagBits::eInputAttachment,
 				.transient = true,
 			}, },
 		{
@@ -56,7 +58,8 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.depth = 1,
 				.miplevels = 1,
 				.format = vk::Format::eR16G16B16A16Sfloat,
-				.usage = vk::ImageUsageFlagBits::eColorAttachment,
+				.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                     vk::ImageUsageFlagBits::eInputAttachment,
 				.transient = true,
 			}, },
 
@@ -67,7 +70,8 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.depth = 1,
 				.miplevels = 1,
 				.format = vk::Format::eR16G16B16A16Sfloat,
-				.usage = vk::ImageUsageFlagBits::eColorAttachment,
+				.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                     vk::ImageUsageFlagBits::eTransferSrc,
 				.transient = true,
 			}, },
 		{
@@ -89,10 +93,4 @@ const std::unordered_map<std::string_view, int8_t>
 		{ "gbuffer_worldpos", 1 },
 		{ "main_color",       1 },
 		{ "depth",            1 },
-};
-
-struct BaseResources {
-	BufferHandle vertex;
-	BufferHandle index;
-	BufferHandle camera;
 };

@@ -18,6 +18,7 @@
 #include "material/MaterialManager.hpp"
 #include "material/MaterialManager_impl.hpp"
 #include "memory/MemoryAllocator.hpp"
+#include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/tasks/ImageCopy.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "resources/ResourceManager.hpp"
@@ -25,60 +26,53 @@
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
 
-Renderer::Renderer(SDL_Window* window) {
+Renderer::Renderer(SDL_Window* window) :
+	m_instance(Instance::Create(window)),
+	m_resourceManager(),
+	m_materialManager(m_resourceManager),
+	m_swapchain(),
+	m_renderGraph(m_swapchain, m_resourceManager, m_materialManager) {
 	if (window == nullptr) return;
 
-	Instance& instance = Instance::Create(window);
-
-	m_graphicsQueue = instance.device.getQueue(
-		instance.queueFamiliesIndices.graphicsIndex, 0
+	m_graphicsQueue = m_instance.device.getQueue(
+		m_instance.queueFamiliesIndices.graphicsIndex, 0
 	);
 
-	m_presentQueue =
-		instance.device.getQueue(instance.queueFamiliesIndices.presentIndex, 0);
-	m_swapchain = std::make_unique<Swapchain>();
-
-	m_memoryAllocator = std::make_unique<MemoryAllocator>(instance);
-	m_resourceManager =
-		std::make_unique<ResourceManager>(instance, *m_memoryAllocator);
-
-	m_materialManager =
-		std::make_unique<MaterialManager>(instance, *m_resourceManager);
-
-	m_renderGraph = std::make_unique<RenderGraph>(
-		instance, *m_swapchain, *m_resourceManager, *m_materialManager
+	m_presentQueue = m_instance.device.getQueue(
+		m_instance.queueFamiliesIndices.presentIndex, 0
 	);
 }
 
 void Renderer::createRenderGraph() {
-	vk::Extent2D resolution = m_swapchain->getResolution();
-
 	for (const auto& [name, desc] : ResourceManager::_defaultNamedImageData) {
 		auto it = ResourceManager::_swapchainRatio.find(name);
 		int8_t ratio =
 			(it != ResourceManager::_swapchainRatio.end()) ? it->second : 0;
-		m_renderGraph->addImage(name, desc, ratio);
+		m_renderGraph.addImage(name, desc, ratio);
 	}
 
 	for (const auto& [name, desc] : ResourceManager::_defaultNamedBufferData) {
-		m_renderGraph->addBuffer(name, desc);
+		m_renderGraph.addBuffer(name, desc);
 	}
 	RenderGraphBuilder builder;
 
 	for (const auto& [index, metadata] :
-	     m_materialManager->getMaterialMetadatas()) {
+	     m_materialManager.getMaterialMetadatas()) {
 		builder.addTask(RenderPass(index, metadata.namedResourceDependencies));
 	}
 
-	builder.addTask(ImageCopy("main_color", "result"));
-
 	GraphData data = builder.build();
-	m_renderGraph->build(data);
+	m_renderGraph.build(data);
 }
 
 void Renderer::render() {
-	m_materialManager->update(m_currentFrame);
-	vk::Extent2D resolution = m_swapchain->getResolution();
+	m_materialManager.update(m_currentFrame);
+	vk::Extent2D resolution = m_swapchain.getResolution();
+
+	if (resolution == vk::Extent2D(0)) {
+		m_swapchain.rebuild();
+		return;
+	}
 	glm::mat4 proj = glm::perspectiveRH_ZO(
 		glm::radians(60.f),
 		(float)resolution.width / resolution.height,
@@ -90,7 +84,7 @@ void Renderer::render() {
 
 	glm::mat4 view = m_currentScene->getCamera().getViewVector();
 
-	m_materialManager->updateGlobalBuffer<MaterialDefinitions::ViewProjection>(
+	m_materialManager.updateGlobalBuffer<MaterialDefinitions::ViewProjection>(
 		"view_projection",
 		[proj, view](MaterialDefinitions::ViewProjection& viewProj) {
 			viewProj.view = view;
@@ -98,14 +92,14 @@ void Renderer::render() {
 		}
 	);
 
-	m_renderGraph->submit(m_currentScene->getPrimitives());
+	m_renderGraph.submit(m_currentScene->getPrimitives());
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
 };
 
 void Renderer::load(const std::filesystem::path& path) {
-	SceneLoader loader(*m_resourceManager, *m_materialManager);
-	m_currentScene = std::make_unique<Scene>(loader.load(path));
+	SceneLoader loader(m_resourceManager, m_materialManager);
+	m_currentScene = loader.load(path);
 	glm::mat3 orientation = glm::mat3(1);
 	orientation[1] = glm::vec3(0, 0, 1);
 	orientation[2] = glm::vec3(0, -1, 0);
@@ -118,7 +112,7 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	auto lights = m_currentScene->getLights();
 
-	m_materialManager->updateGlobalBuffer<MaterialDefinitions::Lights>(
+	m_materialManager.updateGlobalBuffer<MaterialDefinitions::Lights>(
 		"light_buffer",
 
 		[lights](MaterialDefinitions::Lights& lightUBO) {

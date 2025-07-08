@@ -35,9 +35,6 @@ private:
 		m_imageCreationInfos;
 	std::unordered_map<std::string_view, uint8_t> m_swapchainDependentImages;
 
-	std::unordered_map<std::string_view, ImageHandle> m_images;
-	std::unordered_map<std::string_view, BufferHandle> m_buffers;
-
 	std::array<std::vector<ImageHandle>, 3> m_unusedImages;
 	std::array<std::vector<BufferHandle>, 3> m_unusedBuffers;
 	uint8_t m_swapchainFlushCounter = 0;
@@ -45,6 +42,7 @@ private:
 	vk::Queue m_graphicQueue;
 
 	GraphData m_data;
+	ImageHandle m_resultHandle = { 0 };
 
 	uint8_t m_currentFrame = 0;
 
@@ -54,7 +52,6 @@ private:
 		vk::CommandBuffer& commandBuffer, GraphData::TaskData& task
 	) const;
 
-	void buildGraph();
 	void initializeExternalImages(vk::CommandBuffer& commandBuffer);
 
 	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);

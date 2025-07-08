@@ -1,5 +1,7 @@
 #include "ResourceManager.hpp"
 
+#include <vulkan/vulkan_core.h>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -22,10 +24,8 @@
 
 #include <filesystem>
 
-ResourceManager::ResourceManager(
-	Instance &instance, MemoryAllocator &memoryAllocator
-) :
-	m_memoryAllocator(memoryAllocator) {
+ResourceManager::ResourceManager() {
+	Instance &instance = Instance::Get();
 	m_queue = instance.device.getQueue(
 		instance.queueFamiliesIndices.transferIndex, 0
 	);
@@ -225,7 +225,27 @@ ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
 	free(staging);
 	return image;
 }
-
+void ResourceManager::setName(std::string_view name, ImageHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eImage,
+			.objectHandle = (uint64_t)(VkImage)m_images.at(handle.value).image,
+			.pObjectName = name.data(),
+		}
+	);
+	m_imageNames[name] = handle;
+}
+void ResourceManager::setName(std::string_view name, BufferHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eBuffer,
+			.objectHandle =
+				(uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
+			.pObjectName = name.data(),
+		}
+	);
+	m_bufferNames[name] = handle;
+}
 BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
 	vk::BufferCreateInfo info {
 		.size = size,
@@ -248,9 +268,11 @@ BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
 
 	return handle;
 }
-ImageHandle ResourceManager::registerImage(Image image) {
-	ImageHandle handle { m_resourceCounter };
-	m_resourceCounter++;
+ImageHandle ResourceManager::registerImage(Image image, ImageHandle handle) {
+	if (handle.value == 0) {
+		handle = { m_resourceCounter };
+		m_resourceCounter++;
+	}
 
 	m_images[handle.value] = image;
 	return handle;
@@ -332,7 +354,7 @@ void ResourceManager::copyToImage(
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eUndefined,
         .newLayout = vk::ImageLayout::eTransferDstOptimal,
-        .image = m_images[destination.value].image,
+        .image = m_images.at(destination.value).image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
@@ -347,7 +369,7 @@ void ResourceManager::copyToImage(
 	});
 	commandBuffer.copyBufferToImage(
 		m_buffers[origin.value].buffer,
-		m_images[destination.value].image,
+		m_images.at(destination.value).image,
 		vk::ImageLayout::eTransferDstOptimal,
 		{ offset }
 	);
@@ -356,7 +378,7 @@ void ResourceManager::copyToImage(
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eTransferDstOptimal,
         .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-        .image = m_images[destination.value].image,
+        .image = m_images.at(destination.value).image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,

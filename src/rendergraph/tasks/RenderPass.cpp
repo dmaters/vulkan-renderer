@@ -17,10 +17,15 @@ void RenderPass::setup(
 	for (auto& dependency : m_dependencies) {
 		switch (dependency.kind) {
 			case MaterialManager::ResourceDependency::Kind::RenderTarget:
+				images[dependency.name] = {
+					.usage = dependency.usage,
+					.requiredLayout = dependency.requiredLayout,
+				};
+				break;
 			case MaterialManager::ResourceDependency::Kind::Sampler:
 				images[dependency.name] = {
 					.usage = dependency.usage,
-					.requiredLayout = vk::ImageLayout::eAttachmentOptimal,
+					.requiredLayout = dependency.requiredLayout,
 				};
 				break;
 			case MaterialManager::ResourceDependency::Kind::Buffer:
@@ -96,7 +101,7 @@ void setupAttachments(
 	std::vector<vk::RenderingAttachmentInfo> colorAttachments;
 	std::optional<vk::RenderingAttachmentInfo> depthAttachment;
 
-	uint8_t width = 0, height = 0;
+	uint32_t width = 0, height = 0;
 
 	for (auto& dependency : dependencies) {
 		if (dependency.kind !=
@@ -164,9 +169,11 @@ void setupAttachments(
 	);
 
 	Buffer& vertexBuffer =
-		resources.resourceManager.getNamedBuffer("buffer_vertex");
+		resources.resourceManager.getNamedBuffer("vertex_buffer"
+
+	    );
 	Buffer& indexBuffer =
-		resources.resourceManager.getNamedBuffer("buffer_index");
+		resources.resourceManager.getNamedBuffer("index_buffer");
 
 	commandBuffer.bindVertexBuffers(0, { vertexBuffer.buffer }, { 0 });
 	commandBuffer.bindIndexBuffer(
@@ -181,6 +188,10 @@ void RenderPass::execute(
 
 	const Material& material =
 		resources.materialManager.getMaterial(m_material);
+
+	commandBuffer.bindPipeline(
+		vk::PipelineBindPoint::eGraphics, material.pipeline.pipeline
+	);
 
 	vk::DescriptorSet globalSet = resources.materialManager.getGlobalSet();
 
@@ -220,7 +231,8 @@ void RenderPass::execute(
 			                   primitive.materials[0].instance };
 		commandBuffer.pushConstants(
 			material.pipeline.pipelineLayout,
-			vk::ShaderStageFlagBits::eAll,
+			vk::ShaderStageFlagBits::eVertex |
+				vk::ShaderStageFlagBits::eFragment,
 			0,
 			sizeof(glm::mat4) + sizeof(uint32_t),
 			&data

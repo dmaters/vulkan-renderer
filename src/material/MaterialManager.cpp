@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -14,6 +15,7 @@
 #include "MaterialDefinitions.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
+#include "rendergraph/RenderGraphBuilder.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -125,7 +127,6 @@ void MaterialManager::createGlobalDescriptorSet() {
 	std::array<vk::DescriptorBindingFlags, 3> bindingFlags = {
 		vk::DescriptorBindingFlags {},
 		vk::DescriptorBindingFlags {},
-
 		vk::DescriptorBindingFlagBits::ePartiallyBound |
 			vk::DescriptorBindingFlagBits::eUpdateAfterBind
 	};
@@ -258,9 +259,53 @@ void writeToDescriptorSet(
 	);
 }
 
+vk::DescriptorSet MaterialManager::createSet(
+	std::vector<vk::DescriptorSetLayoutBinding>& bindings,
+	vk::DescriptorSetLayout layout,
+	std::vector<BufferHandle>& materialBuffersHandles
+) {
+	vk::Device& device = Instance::Get().device;
+
+	vk::DescriptorSetAllocateInfo allocateInfo {
+		.descriptorPool = m_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &layout,
+	};
+
+	auto set = device.allocateDescriptorSets(allocateInfo)[0];
+
+	std::vector<vk::DescriptorBufferInfo> buffersDescriptors;
+
+	for (BufferHandle handle : materialBuffersHandles) {
+		Buffer& buffer = m_resourceManager.getBuffer(handle);
+		buffersDescriptors.push_back({
+			.buffer = buffer.buffer,
+			.offset = buffer.bufferAccess[0].offset,
+			.range = buffer.size,
+		});
+	}
+
+	std::vector<vk::WriteDescriptorSet> writeInfos;
+	for (int i = 0; i < bindings.size(); i++) {
+		vk::DescriptorSetLayoutBinding binding = bindings[i];
+
+		writeInfos.push_back({
+			.dstSet = set,
+			.dstBinding = (uint32_t)i,
+			.dstArrayElement = 0,
+			.descriptorCount = binding.descriptorCount,
+			.descriptorType = binding.descriptorType,
+			.pImageInfo = nullptr,
+			.pBufferInfo = &buffersDescriptors.at(i),
+		});
+	}
+
+	device.updateDescriptorSets(writeInfos, {});
+	return set;
+}
+
 Material MaterialManager::getMaterial(MaterialIndex index) {
-	assert(m_materialData.contains(index));
-	MaterialData& data = m_materialData[index];
+	MaterialData& data = m_materialData.at(index);
 	Material material {
 		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
 		.materialSet = data.materialSet,
@@ -272,12 +317,12 @@ Material MaterialManager::getMaterial(MaterialIndex index) {
 void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
 	std::vector<ResourceManager::BufferCopy> info;
 
-	for (auto buffer : buffers) {
+	for (MirroredBuffer buffer : buffers) {
 		uint32_t size = m_resourceManager.getBuffer(buffer.localBuffer).size;
 
 		info.push_back({
-			.origin = buffer.deviceBuffer,
-			.destination = buffer.localBuffer,
+			.origin = buffer.localBuffer,
+			.destination = buffer.deviceBuffer,
 			.copy = {
 					 .srcOffset = 0,
 					 .dstOffset = 0,

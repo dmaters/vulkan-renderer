@@ -20,13 +20,24 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 	m_materialCount++;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
-		vk::DescriptorSetLayoutBinding { .binding = 0 }
+		{
+         .binding = 0,
+         .descriptorType = vk::DescriptorType::eUniformBuffer,
+         .descriptorCount = 1,
+		 },
+		{
+         .binding = 1,
+         .descriptorType = vk::DescriptorType::eUniformBuffer,
+         .descriptorCount = 1,
+		 }
 	};
 	vk::DescriptorSetLayout materialLayout =
-		m_device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo {
-			.bindingCount = (uint32_t)materialBindings.size(),
-			.pBindings = materialBindings.data(),
-		});
+		Instance::Get().device.createDescriptorSetLayout(
+			vk::DescriptorSetLayoutCreateInfo {
+				.bindingCount = (uint32_t)materialBindings.size(),
+				.pBindings = materialBindings.data(),
+			}
+		);
 
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
@@ -55,6 +66,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 				.stage = vk::PipelineStageFlagBits2::
 					eColorAttachmentOutput,
 			},
+			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
 		},  
 		{
 			.name = "depth",
@@ -66,10 +78,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 				.stage = vk::PipelineStageFlagBits2::
 					eEarlyFragmentTests,
 				},
+				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 		 },
 	},
 		
-};
+	};
+
 	m_materialMetadata[index] = metadata;
 
 	return index;
@@ -95,7 +109,7 @@ MaterialManager::MaterialData MaterialManager::createMaterialData<
 
 	BufferHandle mirrorInstance =
 		m_resourceManager.createBuffer(ResourceManager::BufferDescription {
-			.size = sizeof(MaterialDefinitions::PBRMaterial::BaseValues),
+			.size = sizeof(MaterialDefinitions::PBRMaterialUniforms),
 			.usage = vk::BufferUsageFlagBits::eTransferSrc,
 			.location = AllocationLocation::Host,
 		});
@@ -110,6 +124,11 @@ MaterialManager::MaterialData MaterialManager::createMaterialData<
 
 	MaterialMetadata metadata = m_materialMetadata[index];
 
+	std::vector<BufferHandle> materialBuffers = { bufferBase, bufferInstance };
+	vk::DescriptorSet materialSet = createSet(
+		metadata.materialBindings, metadata.materialLayout, materialBuffers
+	);
+
 	return {
 		.pipeline = metadata.pipeline,
 		.materialBuffers = {
@@ -117,6 +136,7 @@ MaterialManager::MaterialData MaterialManager::createMaterialData<
 			MirroredBuffer(mirrorInstance, bufferInstance),
             m_globalBuffers["light_buffer"],
 		},
+		.materialSet = materialSet
 	};
 };
 

@@ -33,7 +33,7 @@ private:
 	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>>
 		m_modules;
 
-	uint32_t m_pipelineCount = 0;
+	uint32_t m_pipelineCount = 1;
 
 	std::mutex m_mutex;
 	std::condition_variable m_cv;

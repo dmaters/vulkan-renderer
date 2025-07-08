@@ -11,18 +11,22 @@
 #include "Instance.hpp"
 #include "resources/Image.hpp"
 
-Swapchain::Swapchain(Instance& instance) {
-	createSwapchain();
-	createFrames();
-	createImages();
-}
-void Swapchain::createSwapchain() {
+Swapchain::Swapchain() {
 	Instance& instance = Instance::Get();
 
 	vk::SurfaceCapabilitiesKHR capabilities =
 		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
 	if (capabilities.currentExtent.width != UINT32_MAX)
 		m_resolution = capabilities.currentExtent;
+
+	if (m_resolution == vk::Extent2D(0)) return;
+
+	createSwapchain();
+	createFrames();
+	createImages();
+}
+void Swapchain::createSwapchain() {
+	Instance& instance = Instance::Get();
 
 	vk::SwapchainCreateInfoKHR info;
 	info.surface = instance.surface;
@@ -31,7 +35,7 @@ void Swapchain::createSwapchain() {
 	info.imageExtent = m_resolution;
 	info.imageArrayLayers = 1;
 	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst |
-	                  vk::ImageUsageFlagBits::eColorAttachment;
+	                  vk::ImageUsageFlagBits::eInputAttachment;
 	info.imageColorSpace = instance.surfaceFormat.colorSpace;
 	info.imageSharingMode = vk::SharingMode::eExclusive;
 
@@ -107,6 +111,15 @@ void Swapchain::createImages() {
 	}
 }
 void Swapchain::rebuild() {
+	Instance& instance = Instance::Get();
+
+	vk::SurfaceCapabilitiesKHR capabilities =
+		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
+	if (capabilities.currentExtent.width != UINT32_MAX)
+		m_resolution = capabilities.currentExtent;
+
+	if (m_resolution == vk::Extent2D(0)) return;
+
 	m_images.clear();
 	createSwapchain();
 	createImages();

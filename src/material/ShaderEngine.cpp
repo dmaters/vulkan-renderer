@@ -16,12 +16,11 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "Instance.hpp"
 #include "Pipeline.hpp"
 
-ShaderEngine::ShaderEngine(
-	vk::Device& device, vk::DescriptorSetLayout globalLayout
-) :
-	m_device(device), m_monitorThread(&ShaderEngine::_monitor, this) {
+ShaderEngine::ShaderEngine(vk::DescriptorSetLayout globalLayout) :
+	m_monitorThread(&ShaderEngine::_monitor, this) {
 	slang::createGlobalSession(&m_session);
 
 	{
@@ -102,7 +101,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 		return std::nullopt;
 	}
 
-	vk::ShaderModule module = m_device.createShaderModule({
+	vk::ShaderModule module = Instance::Get().device.createShaderModule({
 		.codeSize = kernelBlob->getBufferSize(),
 		.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
 	});
@@ -140,7 +139,8 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 	}
 
 	std::optional<Pipeline> pipeline = PipelineBuilder::BuildPipeline(
-		m_device, { .shaderStages = modules, .setLayouts = metadata.layouts }
+		Instance::Get().device,
+		{ .shaderStages = modules, .setLayouts = metadata.layouts }
 	);
 
 	return pipeline;

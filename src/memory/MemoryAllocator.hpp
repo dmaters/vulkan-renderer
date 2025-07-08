@@ -11,7 +11,6 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Allocation.hpp"
-#include "Instance.hpp"
 
 enum class AllocationLocation {
 	Device,
@@ -42,6 +41,8 @@ private:
 	std::map<AllocationLocation, uint32_t> m_memoryType;
 
 public:
+	MemoryAllocator();
+
 	SubAllocation allocate(
 		vk::Buffer buffer, AllocationType type, AllocationLocation location
 	);
