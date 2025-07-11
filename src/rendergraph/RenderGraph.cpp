@@ -271,6 +271,7 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 		if (image.accesses[accessIndex].layout == initialLayout) continue;
 
 		imageBarriers.push_back({
+		
 			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
 			.oldLayout = image.accesses[accessIndex].layout,
 			.newLayout = initialLayout,
@@ -303,6 +304,21 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 	auto _ = device.waitForFences({ frame.fence }, vk::True, 1000);
 	device.resetFences(frame.fence);
 
+	vk::AcquireNextImageInfoKHR acquireInfo;
+	acquireInfo.swapchain = m_swapchain.getSwapchain();
+	acquireInfo.timeout = 1500;
+	acquireInfo.semaphore = frame.imageAvailable;
+	acquireInfo.fence = nullptr;
+	acquireInfo.deviceMask = 1;
+
+	uint32_t imageIndex = 0;
+	try {
+		imageIndex = device.acquireNextImage2KHR(acquireInfo).value;
+	} catch (vk::OutOfDateKHRError& _) {
+		rebuildSwapchain();
+		return;
+	}
+
 	vk::CommandBufferAllocateInfo commandInfo;
 
 	commandInfo.commandBufferCount = 1;
@@ -334,20 +350,6 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 		);
 	}
 
-	vk::AcquireNextImageInfoKHR acquireInfo;
-	acquireInfo.swapchain = m_swapchain.getSwapchain();
-	acquireInfo.timeout = 1500;
-	acquireInfo.semaphore = frame.imageAvailable;
-	acquireInfo.fence = nullptr;
-	acquireInfo.deviceMask = 1;
-	uint32_t imageIndex = 0;
-	try {
-		imageIndex = device.acquireNextImage2KHR(acquireInfo).value;
-
-	} catch (vk::OutOfDateKHRError& _) {
-		rebuildSwapchain();
-	}
-
 	outputToSwapchain(commandBuffer, imageIndex);
 
 	commandBuffer.end();
@@ -376,14 +378,16 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 		auto _ = m_graphicQueue.presentKHR(presentInfo);
 	} catch (const vk::OutOfDateKHRError& _) {
 		rebuildSwapchain();
+		return;
 	}
-	m_currentFrame = (m_currentFrame + 1) % 3;
 
 	for (auto& [name, statuses] : m_data.imageStatuses) {
 		Image& image = m_resourceManager.getNamedImage(name);
 		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
 		image.accesses[accessIndex].layout = statuses.finalLayout;
 	}
+
+	m_currentFrame = (m_currentFrame + 1) % 3;
 }
 
 void RenderGraph::build(GraphData graphData) {

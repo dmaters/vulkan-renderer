@@ -57,7 +57,7 @@ bool BuddyAllocator::subAllocate(
 
 	while (m_tree[currentLevel].empty()) {
 		currentLevel += 1;
-		if (currentLevel > LEVELS) return false;
+		if (currentLevel >= LEVELS) return false;
 	}
 
 	while (currentLevel > baseLevel) {
