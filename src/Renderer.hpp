@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
@@ -17,19 +18,18 @@
 class Renderer {
 public:
 private:
-	Instance m_instance;
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
 	vk::CommandPool m_commandPool;
 	vk::DescriptorPool m_descriptorPool;
 
-	std::unique_ptr<MemoryAllocator> m_memoryAllocator;
-	std::unique_ptr<ResourceManager> m_resourceManager;
-	std::unique_ptr<MaterialManager> m_materialManager;
-	std::unique_ptr<RenderGraph> m_renderGraph;
+	Instance& m_instance;
+	ResourceManager m_resourceManager;
+	MaterialManager m_materialManager;
+	Swapchain m_swapchain;
+	RenderGraph m_renderGraph;
 
-	std::unique_ptr<Swapchain> m_swapchain;
-	std::unique_ptr<Scene> m_currentScene;
+	std::optional<Scene> m_currentScene;
 
 	uint32_t m_currentFrame = 0;
 

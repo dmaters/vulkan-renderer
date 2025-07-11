@@ -16,17 +16,12 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "Instance.hpp"
 #include "Pipeline.hpp"
-static constexpr std::string_view SHADER_PATH = "../resources/shaders/";
-ShaderEngine::ShaderEngine(
-	vk::Device& device, vk::DescriptorSetLayout globalLayout
-) :
-	m_device(device),
-	m_globalLayout(globalLayout),
+
+ShaderEngine::ShaderEngine(vk::DescriptorSetLayout globalLayout) :
 	m_monitorThread(&ShaderEngine::_monitor, this) {
 	slang::createGlobalSession(&m_session);
-
-	createPipelines();
 
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
@@ -48,7 +43,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	};
 	slang::ISession* session;
 
-	const char* searchPaths[] = { SHADER_PATH.data() };
+	const char* searchPaths[] = { "resources/shaders/" };
 
 	m_session->createSession(
 		{
@@ -106,7 +101,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 		return std::nullopt;
 	}
 
-	vk::ShaderModule module = m_device.createShaderModule({
+	vk::ShaderModule module = Instance::Get().device.createShaderModule({
 		.codeSize = kernelBlob->getBufferSize(),
 		.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
 	});
@@ -116,33 +111,13 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	return module;
 }
 
-void ShaderEngine::getPipelineLayouts(
-	PipelineMetadata& metadata,
-	vk::DescriptorSetLayout& materialLayout,
-	vk::DescriptorSetLayout& instanceLayout
-) {
-	vk::DescriptorSetLayoutCreateInfo materialLayoutInfo {
-		.bindingCount = (uint32_t)metadata.materialResources.size(),
-		.pBindings = metadata.materialResources.data(),
-	};
-	materialLayout = m_device.createDescriptorSetLayout(materialLayoutInfo);
-
-	vk::DescriptorSetLayoutCreateInfo instanceLayoutInfo {
-		.bindingCount = (uint32_t)metadata.instanceResources.size(),
-		.pBindings = metadata.instanceResources.data(),
-	};
-	instanceLayout = m_device.createDescriptorSetLayout(instanceLayoutInfo);
-}
-
-std::optional<Pipeline> ShaderEngine::createPipeline(
+std::optional<Pipeline> ShaderEngine::buildPipeline(
 	const PipelineMetadata& metadata
 ) {
 	std::vector<vk::PipelineShaderStageCreateInfo> modules;
 
 	if (!metadata.modules.vertex.empty()) {
-		auto res = loadModule(
-			std::filesystem::path(SHADER_PATH) / metadata.modules.vertex
-		);
+		auto res = loadModule(metadata.modules.vertex);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
@@ -153,9 +128,7 @@ std::optional<Pipeline> ShaderEngine::createPipeline(
 	}
 
 	if (!metadata.modules.fragment.empty()) {
-		auto res = loadModule(
-			std::filesystem::path(SHADER_PATH) / metadata.modules.fragment
-		);
+		auto res = loadModule(metadata.modules.fragment);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
@@ -166,92 +139,36 @@ std::optional<Pipeline> ShaderEngine::createPipeline(
 	}
 
 	std::optional<Pipeline> pipeline = PipelineBuilder::BuildPipeline(
-		m_device,
-		{
-			.shaderStages = modules,
-			.globalSetLayout = m_globalLayout,
-			.pipelineSetLayout = metadata.layouts.materialSetLayout,
-			.instanceSetLayout = metadata.layouts.instanceSetLayout,
-		}
+		Instance::Get().device,
+		{ .shaderStages = modules, .setLayouts = metadata.layouts }
 	);
 
 	return pipeline;
 }
 
-void ShaderEngine::createPipelines() {
-	for (auto& [name, metadata] : _get_defined_pipelines()) {
-		PipelineIndex index = m_pipelineCount;
-		m_pipelineCount++;
-		vk::DescriptorSetLayout materialLayout;
-		vk::DescriptorSetLayout instanceLayout;
+PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
+	PipelineIndex index = m_pipelineCount;
+	m_pipelineCount++;
 
-		getPipelineLayouts(metadata, materialLayout, instanceLayout);
-		metadata.layouts = {
-			.materialSetLayout = materialLayout,
-			.instanceSetLayout = instanceLayout,
-		};
-		auto pipeline = createPipeline(metadata);
+	auto pipeline = buildPipeline(metadata);
 
-		if (name == "fallback_error") m_pipelines[0] = pipeline.value();
+	assert(pipeline.has_value());
 
-		if (!pipeline.has_value())
-			m_brokenPipelines.insert(index);
-		else
-			m_pipelines[index] = pipeline.value();
+	m_pipelines[index] = pipeline.value();
+	m_pipelineMetadatas[index] = metadata;
 
-		m_pipelineMetadatas[index] = metadata;
+	if (!metadata.modules.vertex.empty())
+		m_modules[metadata.modules.vertex].insert(index);
 
-		m_names[name] = index;
+	if (!metadata.modules.fragment.empty())
+		m_modules[metadata.modules.fragment].insert(index);
 
-		if (!metadata.modules.vertex.empty())
-			m_modules
-				[std::filesystem::path(SHADER_PATH) / metadata.modules.vertex]
-					.insert(index);
-
-		if (!metadata.modules.fragment.empty())
-			m_modules
-				[std::filesystem::path(SHADER_PATH) / metadata.modules.fragment]
-					.insert(index);
-	}
-}
-
-std::vector<PipelineIndex> ShaderEngine::getUpdatedPipelines() {
-	std::vector<std::pair<PipelineIndex, std::optional<Pipeline>>>
-		modifiedPipelines;
-
-	{
-		std::lock_guard<std::mutex> lock(m_mutex);
-
-		if (m_modifiedPipelines.empty()) return {};
-
-		modifiedPipelines = m_modifiedPipelines.front();
-		m_modifiedPipelines.pop();
-	}
-
-	std::vector<PipelineIndex> modifiedIndices;
-
-	for (auto [index, pipeline] : modifiedPipelines) {
-		if (!m_brokenPipelines.contains(index)) {
-			Pipeline oldPipeline = m_pipelines[index];
-			m_retiredPipelines.push_back({ oldPipeline, 4 });
-		}
-
-		if (!pipeline.has_value()) {
-			m_brokenPipelines.insert(index);
-			m_pipelines.erase(index);
-		} else {
-			if (m_brokenPipelines.contains(index))
-				m_brokenPipelines.erase(index);
-
-			m_pipelines[index] = pipeline.value();
-		}
-
-		modifiedIndices.push_back(index);
-	}
-	return modifiedIndices;
+	return index;
 }
 
 void ShaderEngine::flushRetiredPipelines() {
+	vk::Device& device = Instance::Get().device;
+
 	std::lock_guard<std::mutex> lock(m_mutex);
 	for (auto& [retiredPipeline, frameCount] : m_retiredPipelines) {
 		frameCount--;
@@ -262,8 +179,8 @@ void ShaderEngine::flushRetiredPipelines() {
 		m_retiredPipelines.end(),
 		[&](const std::pair<Pipeline, uint8_t>& info) {
 			if (info.second == 0) {
-				m_device.destroyPipeline(info.first.pipeline);
-				m_device.destroyPipelineLayout(info.first.pipelineLayout);
+				device.destroyPipeline(info.first.pipeline);
+				device.destroyPipelineLayout(info.first.pipelineLayout);
 
 				return true;
 			}
@@ -293,46 +210,16 @@ void ShaderEngine::_monitor() {
 			if (currentTime == time) continue;
 			std::lock_guard<std::mutex> lock(m_mutex);
 
-			std::vector<std::pair<PipelineIndex, std::optional<Pipeline>>>
-				modifiedPipelines;
 			for (auto& index : m_modules[module]) {
-				const PipelineMetadata& metadata = getPipelineMetadata(index);
-				auto pipeline = createPipeline(metadata);
-				modifiedPipelines.push_back({ index, pipeline });
-			}
+				PipelineMetadata metadata = m_pipelineMetadatas[index];
+				auto pipeline = buildPipeline(metadata);
 
-			m_modifiedPipelines.push(modifiedPipelines);
+				if (pipeline.has_value())
+					m_modifiedPipelines[index] = pipeline.value();
+			}
 			lastEdited[module] = currentTime;
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
-}
-
-std::unordered_map<std::string_view, PipelineMetadata>
-ShaderEngine::_get_defined_pipelines() {
-	return {
-		{
-         "fallback_error", {
-			.modules = {
-				.vertex= "fallback_error_vert.slang",
-				.fragment = "fallback_error_frag.slang",
-			},
-			}, },
-		{
-         "pbr", { 
-			.modules =
-			{
-				.vertex = "standard_forward_vert.slang",
-		      	.fragment = "standard_forward_frag.slang",
-		 	},
-			.instanceResources = {vk::DescriptorSetLayoutBinding{
-				.binding = 0,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.descriptorCount= 1,
-				.stageFlags = vk::ShaderStageFlagBits::eFragment,
-			},}, 
-			},
-		},
-	};
 }

@@ -1,9 +1,9 @@
 #include "MaterialManager.hpp"
 
-#include <cstddef>
+#include <cassert>
 #include <cstdint>
 #include <memory>
-#include <optional>
+#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -13,39 +13,35 @@
 #include "Instance.hpp"
 #include "Material.hpp"
 #include "MaterialDefinitions.hpp"
-#include "Pipeline.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
-#include "material/Pipeline.hpp"
+#include "rendergraph/RenderGraphBuilder.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
-MaterialManager::MaterialManager(
-	Instance& instance, ResourceManager& resourceManager
-) :
-	m_device(instance.device),
-
+MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_resourceManager(resourceManager) {
+	vk::Device& device = Instance::Get().device;
+
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eUniformBuffer,
-								.descriptorCount = 100,
+								.descriptorCount = 200,
 								},
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eCombinedImageSampler,
-								.descriptorCount = 20,
+								.descriptorCount = 150,
 								}
 	};
 
 	vk::DescriptorPoolCreateInfo info {
-		.flags = {},
-		// TODO : keep count of sets for materials
-		.maxSets = 512,
+		.flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
+		.maxSets = 128,
 		.poolSizeCount = 1,
 		.pPoolSizes = sizes.data()
 	};
 
-	m_pool = m_device.createDescriptorPool(info);
+	m_pool = device.createDescriptorPool(info);
 
 	vk::SamplerCreateInfo samplerInfo {
 		.magFilter = vk::Filter::eLinear,
@@ -56,31 +52,21 @@ MaterialManager::MaterialManager(
 		.addressModeW = vk::SamplerAddressMode::eRepeat,
 	};
 
-	m_linearSampler = m_device.createSampler(samplerInfo);
+	m_linearSampler = device.createSampler(samplerInfo);
 
-	vk::DescriptorSetLayout emptyLayout =
-		m_device.createDescriptorSetLayout({});
-	m_emptySet = m_device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
+	m_emptySetLayout = device.createDescriptorSetLayout({});
+	m_emptySet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
 		.descriptorPool = m_pool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = &emptyLayout,
+		.pSetLayouts = &m_emptySetLayout,
 	})[0];
 
 	createGlobalBuffers();
 	createGlobalDescriptorSet();
 
-	m_shaderEngine =
-		std::make_unique<ShaderEngine>(m_device, m_globalSetLayout);
+	m_shaderEngine = std::make_unique<ShaderEngine>(m_globalSetLayout);
 
-	MaterialDescription baseErrorMaterial = {
-		.pipelineName = "fallback_error",
-	};
-	createMaterial<MaterialDefinitions::SimpleMaterial>(baseErrorMaterial);
-
-	MaterialDescription basePBRMaterial = {
-		.pipelineName = "pbr",
-	};
-	createMaterial<MaterialDefinitions::PBRMaterial>(basePBRMaterial);
+	m_names["pbr"] = registerMaterial<MaterialDefinitions::PBRMaterial>();
 }
 void MaterialManager::createGlobalBuffers() {
 	BufferHandle mLightBuffer = m_resourceManager.createBuffer({
@@ -112,7 +98,9 @@ void MaterialManager::createGlobalBuffers() {
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
-	std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
+	vk::Device& device = Instance::Get().device;
+
+	std::array<vk::DescriptorSetLayoutBinding, 3> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
@@ -126,17 +114,37 @@ void MaterialManager::createGlobalDescriptorSet() {
 										.descriptorCount = 1,
 										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
 										.pImmutableSamplers = {},
+										},
+		vk::DescriptorSetLayoutBinding {
+										.binding = 2,
+										.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+										.descriptorCount = 512,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.pImmutableSamplers = {},
 										}
 	};
 
+	std::array<vk::DescriptorBindingFlags, 3> bindingFlags = {
+		vk::DescriptorBindingFlags {},
+		vk::DescriptorBindingFlags {},
+		vk::DescriptorBindingFlagBits::ePartiallyBound |
+			vk::DescriptorBindingFlagBits::eUpdateAfterBind
+	};
+
+	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
+		.bindingCount = bindingFlags.size(),
+		.pBindingFlags = bindingFlags.data()
+	};
+
 	vk::DescriptorSetLayoutCreateInfo layoutInfo {
-		.flags = {},
+		.pNext = &flagsInfo,
+		.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
 		.bindingCount = bindings.size(),
 		.pBindings = bindings.data(),
 	};
 
 	vk::DescriptorSetLayout layout =
-		m_device.createDescriptorSetLayout(layoutInfo);
+		device.createDescriptorSetLayout(layoutInfo);
 
 	vk::DescriptorSetAllocateInfo allocateInfo {
 		.descriptorPool = m_pool,
@@ -144,63 +152,53 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pSetLayouts = &layout,
 	};
 
-	auto set = m_device.allocateDescriptorSets(allocateInfo)[0];
+	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& dynamicDataBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["view_projection"].second);
-	Buffer& lightBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].second);
+	Buffer& cameraBuffer = m_resourceManager.getBuffer(
+		m_globalBuffers["view_projection"].deviceBuffer
+	);
 
-	vk::DescriptorBufferInfo dynamicDescriptorInfo {
-		.buffer = dynamicDataBuffer.buffer,
-		.offset = dynamicDataBuffer.bufferAccess[0].offset,
-		.range = sizeof(GlobalResources::Camera)
+	vk::DescriptorBufferInfo cameraDescriptorInfo {
+		.buffer = cameraBuffer.buffer,
+		.offset = cameraBuffer.bufferAccess[0].offset,
+		.range = cameraBuffer.size,
 	};
 
-	vk::DescriptorBufferInfo lightDescriptorInfo {
-		.buffer = lightBuffer.buffer,
-		.offset = lightBuffer.bufferAccess[0].offset,
-		.range = sizeof(MaterialDefinitions::Lights)
-	};
-
-	vk::WriteDescriptorSet gBufferInfo {
+	vk::WriteDescriptorSet cameraWriteDescriptor {
 		.dstSet = set,
 		.dstBinding = 0,
 		.descriptorCount = 1,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.pImageInfo = {},
-		.pBufferInfo = &dynamicDescriptorInfo,
+		.pBufferInfo = &cameraDescriptorInfo,
 		.pTexelBufferView = {},
-
 	};
 
-	vk::WriteDescriptorSet lightBufferInfo {
+	Buffer& lightBuffer =
+		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].deviceBuffer
+	    );
+
+	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
+		.buffer = lightBuffer.buffer,
+		.offset = lightBuffer.bufferAccess[0].offset,
+		.range = lightBuffer.size,
+	};
+	vk::WriteDescriptorSet lightBufferWriteDescriptor {
 		.dstSet = set,
 		.dstBinding = 1,
 		.descriptorCount = 1,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.pImageInfo = {},
-		.pBufferInfo = &lightDescriptorInfo,
+		.pBufferInfo = &lightBufferDescriptorInfo,
 		.pTexelBufferView = {},
-
 	};
-	m_device.updateDescriptorSets({ gBufferInfo, lightBufferInfo }, {});
+	device.updateDescriptorSets(
+		{ cameraWriteDescriptor, lightBufferWriteDescriptor }, {}
+	);
 	m_globalSet = set;
 	m_globalSetLayout = layout;
 }
 void MaterialManager::update(uint8_t currentFrame) {
-	for (PipelineIndex index : m_shaderEngine->getUpdatedPipelines()) {
-		std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
-		MaterialIndex materialIndex = m_pipelines[index];
-		if (pipeline.has_value()) {
-			if (m_brokenMaterials.contains(materialIndex))
-				m_brokenMaterials.erase(materialIndex);
-			m_materials[materialIndex].pipeline = pipeline.value();
-		} else {
-			m_brokenMaterials.insert(materialIndex);
-		}
-	}
-
 	m_shaderEngine->flushRetiredPipelines();
 }
 
@@ -261,113 +259,70 @@ void writeToDescriptorSet(
 	);
 }
 
-template <typename T>
-void MaterialManager::createMaterial(MaterialDescription& description) {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
-
-	PipelineIndex pipelineIndex =
-		m_shaderEngine->getIndex(description.pipelineName);
-	m_pipelines[pipelineIndex] = index;
-
-	std::optional<Pipeline> pipeline = m_shaderEngine->getPipeline(index);
-
-	if (!pipeline.has_value()) {
-		m_brokenMaterials.insert(index);
-		return;
-	}
-
-	Material material {
-		.pipeline = pipeline.value(),
-		.globalSet = m_globalSet,
-	};
-
-	const PipelineMetadata& metadata =
-		m_shaderEngine->getPipelineMetadata(pipelineIndex);
-	if (metadata.materialResources.size() > 0) {
-		vk::DescriptorSetAllocateInfo descriptorInfo {
-			.descriptorPool = m_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &metadata.layouts.materialSetLayout
-		};
-
-		vk::DescriptorSet materialSet =
-			m_device.allocateDescriptorSets(descriptorInfo)[0];
-
-		writeToDescriptorSet(
-			m_device,
-			m_resourceManager,
-			materialSet,
-			metadata.materialResources,
-			description.buffers,
-			description.textures,
-			m_linearSampler
-		);
-
-		material.materialSet = materialSet;
-
-	} else
-		material.materialSet = m_emptySet;
-
-	m_materials[index] = material;
-}
-
-MaterialInstance MaterialManager::instantiateMaterial(
-	MaterialDescription& description
+vk::DescriptorSet MaterialManager::createSet(
+	std::vector<vk::DescriptorSetLayoutBinding>& bindings,
+	vk::DescriptorSetLayout layout,
+	std::vector<BufferHandle>& materialBuffersHandles
 ) {
-	PipelineIndex pipelineIndex =
-		m_shaderEngine->getIndex(description.pipelineName);
+	vk::Device& device = Instance::Get().device;
 
-	const PipelineMetadata& metadata =
-		m_shaderEngine->getPipelineMetadata(pipelineIndex);
-	MaterialIndex materialIndex = m_pipelines[pipelineIndex];
-	Material& material = m_materials[materialIndex];
+	vk::DescriptorSetAllocateInfo allocateInfo {
+		.descriptorPool = m_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &layout,
+	};
 
-	if (metadata.instanceResources.size() > 0) {
-		vk::DescriptorSetAllocateInfo descriptorInfo {
-			.descriptorPool = m_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &metadata.layouts.instanceSetLayout
-		};
+	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
-		vk::DescriptorSet instanceSet =
-			m_device.allocateDescriptorSets(descriptorInfo)[0];
+	std::vector<vk::DescriptorBufferInfo> buffersDescriptors;
 
-		writeToDescriptorSet(
-			m_device,
-			m_resourceManager,
-			instanceSet,
-			metadata.instanceResources,
-			description.buffers,
-			description.textures,
-			m_linearSampler
-		);
-
-		material.instanceSets.push_back(instanceSet);
+	for (BufferHandle handle : materialBuffersHandles) {
+		Buffer& buffer = m_resourceManager.getBuffer(handle);
+		buffersDescriptors.push_back({
+			.buffer = buffer.buffer,
+			.offset = buffer.bufferAccess[0].offset,
+			.range = buffer.size,
+		});
 	}
 
-	return {
-		.index = materialIndex,
-		.instance = (uint32_t)material.instanceSets.size() - 1,
-	};
+	std::vector<vk::WriteDescriptorSet> writeInfos;
+	for (int i = 0; i < bindings.size(); i++) {
+		vk::DescriptorSetLayoutBinding binding = bindings[i];
+
+		writeInfos.push_back({
+			.dstSet = set,
+			.dstBinding = (uint32_t)i,
+			.dstArrayElement = 0,
+			.descriptorCount = binding.descriptorCount,
+			.descriptorType = binding.descriptorType,
+			.pImageInfo = nullptr,
+			.pBufferInfo = &buffersDescriptors.at(i),
+		});
+	}
+
+	device.updateDescriptorSets(writeInfos, {});
+	return set;
 }
 
-Material& MaterialManager::getMaterial(MaterialIndex index) {
-	if (m_brokenMaterials.contains(index))
-		return m_materials[0];
-	else
-		return m_materials[index];
+Material MaterialManager::getMaterial(MaterialIndex index) {
+	MaterialData& data = m_materialData.at(index);
+	Material material {
+		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
+		.materialSet = data.materialSet,
+	};
+
+	return material;
 }
 
 void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
 	std::vector<ResourceManager::BufferCopy> info;
 
-	for (auto buffer : buffers) {
-		uint32_t size = m_resourceManager.getBuffer(buffer.first).size;
+	for (MirroredBuffer buffer : buffers) {
+		uint32_t size = m_resourceManager.getBuffer(buffer.localBuffer).size;
 
 		info.push_back({
-			.origin = buffer.first,
-			.destination = buffer.second,
+			.origin = buffer.localBuffer,
+			.destination = buffer.deviceBuffer,
 			.copy = {
 					 .srcOffset = 0,
 					 .dstOffset = 0,
@@ -377,4 +332,37 @@ void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
 	}
 
 	m_resourceManager.copyBuffers(info);
+}
+
+uint32_t MaterialManager::registerTextureGroup(
+	const std::vector<ImageHandle>& textures
+) {
+	uint32_t offset = m_staticTextureGroup.size();
+
+	m_staticTextureGroup.insert(
+		m_staticTextureGroup.end(), textures.begin(), textures.end()
+	);
+
+	std::vector<vk::DescriptorImageInfo> info;
+	for (auto& handle : textures) {
+		Image& image = m_resourceManager.getImage(handle);
+
+		info.push_back({
+			.sampler = m_linearSampler,
+			.imageView = image.accesses[0].view,
+			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+		});
+	}
+
+	vk::WriteDescriptorSet writeInfo = {
+		.dstSet = m_globalSet,
+		.dstBinding = 2,
+		.dstArrayElement = offset,
+		.descriptorCount = (uint32_t)textures.size(),
+		.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+		.pImageInfo = info.data(),
+	};
+
+	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
+	return offset;
 }

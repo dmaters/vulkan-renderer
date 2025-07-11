@@ -21,27 +21,23 @@ void PrimitiveManager::addPrimitive(
 	m_indexBuffer.insert(m_indexBuffer.end(), indices.begin(), indices.end());
 }
 bool PrimitiveManager::buildBuffers(ResourceManager& resourceManager) {
-	BufferHandle vertexBuffer = resourceManager.createBuffer(
-		"vertex_buffer",
-		{
-			.size = (uint32_t)m_vertexbuffer.size(),
-			.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-	                 vk::BufferUsageFlagBits::eTransferDst,
-			.location = AllocationLocation::Device,
-		}
-	);
-
+	BufferHandle vertexBuffer = resourceManager.createBuffer({
+		.size = (uint32_t)m_vertexbuffer.size(),
+		.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+	             vk::BufferUsageFlagBits::eTransferDst,
+		.location = AllocationLocation::Device,
+	});
+	resourceManager.setName("vertex_buffer", vertexBuffer);
 	resourceManager.copyToBuffer(m_vertexbuffer, vertexBuffer);
 
-	BufferHandle indexBuffer = resourceManager.createBuffer(
-		"index_buffer",
-		{
-			.size = (uint32_t)m_indexBuffer.size(),
-			.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-	                 vk::BufferUsageFlagBits::eTransferDst,
-			.location = AllocationLocation::Device,
-		}
-	);
+	BufferHandle indexBuffer = resourceManager.createBuffer({
+		.size = (uint32_t)m_indexBuffer.size(),
+		.usage = vk::BufferUsageFlagBits::eIndexBuffer |
+	             vk::BufferUsageFlagBits::eTransferDst,
+		.location = AllocationLocation::Device,
+	});
+	resourceManager.setName("index_buffer", indexBuffer);
+
 	resourceManager.copyToBuffer(m_indexBuffer, indexBuffer);
 	return true;
 }

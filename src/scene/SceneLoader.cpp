@@ -19,6 +19,7 @@
 
 #include "Primitive.hpp"
 #include "material/Material.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -129,7 +130,10 @@ std::vector<Primitive> SceneLoader::loadNode(
 			aiMesh* mesh = importedScene.mMeshes[root.mMeshes[i]];
 			Primitive primitive = loadMesh(*mesh);
 
-			primitive.material = m_materialCache[mesh->mMaterialIndex];
+			primitive.materials.push_back(
+				{ m_materialManager.getMaterialIndex("pbr"),
+			      mesh->mMaterialIndex }
+			);
 			primitive.modelMatrix = transform;
 			nodePrimitives.push_back(primitive);
 		}
@@ -147,24 +151,34 @@ std::vector<Primitive> SceneLoader::loadNode(
 void SceneLoader::loadMaterials(
 	const aiScene& scene, std::filesystem::path& texturePath
 ) {
+	MaterialIndex material = m_materialManager.getMaterialIndex("pbr");
+
+	std::vector<ImageHandle> images;
+
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
 		aiString path;
 
-		std::unordered_map<uint32_t, ImageHandle> pbrImages;
 		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			pbrImages[0] = m_resourceManager.loadImage(
+			images.push_back(m_resourceManager.loadImage(
 				texturePath / std::filesystem::path(path.C_Str())
-			);
+			));
 		}
-		MaterialDescription desc {
-			.pipelineName = "pbr",
-			.textures = pbrImages,
-		};
-		m_materialCache[i] = m_materialManager.instantiateMaterial(desc);
 	}
+
+	uint32_t baseIndex = m_materialManager.registerTextureGroup(images);
+	uint32_t instanceCount = scene.mNumMaterials;
+	m_materialManager.updateMaterialData<MaterialDefinitions::PBRMaterial>(
+		material,
+		[instanceCount,
+	     baseIndex](MaterialDefinitions::PBRMaterial materialData) {
+			for (int i = 0; i < instanceCount; i++) {
+				(*materialData.instances)[i].albedo = baseIndex + instanceCount;
+			}
+		}
+	);
 }
 
 Scene SceneLoader::load(const std::filesystem::path& path) {

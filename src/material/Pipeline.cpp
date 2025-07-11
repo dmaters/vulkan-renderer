@@ -163,20 +163,14 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	auto dynamicState = helper.dynamicState();
 	pipelineInfo.pDynamicState = &dynamicState;
 
-	pipelineInfo.layout = getLayout(
-		device,
-		{
-			info.globalSetLayout,
-			info.pipelineSetLayout,
-			info.instanceSetLayout,
-		}
-	);
+	pipelineInfo.layout = getLayout(device, info.setLayouts);
 
 	pipelineInfo.renderPass = nullptr;
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
 		.colorAttachmentCount = 1,
 		.pColorAttachmentFormats =
-			std::array<vk::Format, 1> { vk::Format::eB8G8R8A8Unorm }.data(),
+			std::array<vk::Format, 1> { vk::Format::eR16G16B16A16Sfloat }.data(
+			),
 		.depthAttachmentFormat = vk::Format::eD16Unorm,
 
 	};
@@ -201,16 +195,17 @@ vk::PipelineLayout getLayout(
 ) {
 	std::array<vk::PushConstantRange, 1> ranges {
 		vk::PushConstantRange {
-							   .stageFlags = vk::ShaderStageFlagBits::eVertex,
+							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
+		                  vk::ShaderStageFlagBits::eFragment,
 							   .offset = 0,
-							   .size = 64,
-							   }
+							   .size = 68,
+							   },
 	};
-	vk::PipelineLayoutCreateInfo info { .setLayoutCount =
-		                                    (uint32_t)layouts.size(),
-		                                .pSetLayouts = layouts.data(),
-		                                .pushConstantRangeCount = 1,
-		                                .pPushConstantRanges = ranges.data()
+	vk::PipelineLayoutCreateInfo info {
+		.setLayoutCount = (uint32_t)layouts.size(),
+		.pSetLayouts = layouts.data(),
+		.pushConstantRangeCount = ranges.size(),
+		.pPushConstantRanges = ranges.data(),
 
 	};
 	return device.createPipelineLayout(info);

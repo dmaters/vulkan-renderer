@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <glm/glm.hpp>
 
 namespace MaterialDefinitions {
@@ -20,18 +21,24 @@ struct ViewProjection {
 	glm::mat4 projection;
 };
 
-struct Material {};
+struct LightingMaterial {};
 
-struct PBRMaterial : public Material {
+struct PBRMaterialUniforms {
+	uint32_t albedo;
+};
+
+struct PBRMaterial {
 	struct BaseValues {
 		glm::vec3 baseColor;
 	};
 	BaseValues* base_values;
+	std::array<PBRMaterialUniforms, 512>* instances;
 
 	const Lights* light_data;
 	const ViewProjection* view_projection;
 };
 
 struct SimpleMaterial {};
+struct ErrorFallback {};
 
 }  // namespace MaterialDefinitions

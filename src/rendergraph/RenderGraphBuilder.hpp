@@ -1,89 +1,78 @@
 #pragma once
 
-#include <array>
-#include <cstdint>
 #include <optional>
-#include <set>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "resources/ResourceManager.hpp"
+#include "tasks/Task.hpp"
 
-struct ResourceUsage {
-	enum class Type : uint8_t {
-		WRITE = 0,
-		READ_WRITE = 1,
-		READ = 2,
-	};
-	Type type;
-	vk::AccessFlags2 access;
-	vk::PipelineStageFlags2 stage;
-
-	bool operator==(const ResourceUsage& b) const {
-		return (type == Type::READ && b.type == ResourceUsage::Type::READ) ||
-		       (type == Type::WRITE && b.type == ResourceUsage::Type::WRITE);
-	}
-};
-struct ResourceReference {
-	std::string_view task;
+struct ResourceDependency {
 	ResourceUsage usage;
 	std::optional<vk::ImageLayout> requiredLayout;
-};
-
-struct ImageDependencyInfo {
-	std::string_view name;
-	ResourceUsage usage;
-	std::optional<vk::ImageLayout> requiredLayout;
-};
-
-struct BufferDependencyInfo {
-	std::string_view name;
-	ResourceUsage usage;
-};
-
-struct Barriers {
-	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
-	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
-};
-
-struct TaskData {
-	std::string_view name;
-	std::optional<std::array<Barriers, 3>> barrier;
-	std::vector<ImageDependencyInfo> requiredImages;
-	std::vector<BufferDependencyInfo> requiredBuffers;
 };
 
 struct GraphData {
+	struct Barriers {
+		std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>
+			imageBarriers;
+		std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>
+			bufferBarriers;
+	};
+
+	struct TaskData {
+		Task task;
+		std::string_view name;
+		Barriers barriers;
+		std::unordered_map<std::string_view, ResourceDependency> images;
+		std::unordered_map<std::string_view, ResourceDependency> buffers;
+	};
+
+	struct ImageStatus {
+		vk::ImageLayout initialLayout;
+		vk::ImageLayout finalLayout;
+	};
+
 	std::vector<TaskData> tasks;
-	std::unordered_map<std::string_view, ImageDependencyInfo> requiredLayouts;
+	std::unordered_set<std::string_view> transientImagesRequired;
+	std::unordered_set<std::string_view> transientBuffersRequired;
+
+	std::unordered_map<std::string_view, ImageStatus> imageStatuses;
 };
 
-class Task;
 class RenderGraphBuilder {
 private:
 	struct RegisteredTask;
+	struct ResourceTaskReference;
 
-	std::unordered_map<std::string_view, std::vector<ResourceReference>>
+	typedef uint32_t TaskIndex;
+
+	std::unordered_map<std::string_view, std::vector<ResourceTaskReference>>
 		m_imageReferences;
-	std::unordered_map<std::string_view, std::vector<ResourceReference>>
+	std::unordered_map<std::string_view, std::vector<ResourceTaskReference>>
 		m_bufferReferences;
-	std::unordered_map<std::string_view, RegisteredTask> m_tasks;
+
+	std::vector<RegisteredTask> m_tasks;
 
 public:
-	void addTask(std::string_view name, Task& task);
-	GraphData build(
-		const std::set<std::string_view>& internalResources,
-		ResourceManager& resourceManager
-	);
+	void addTask(Task task);
+
+	std::vector<std::string_view> getReferencedResources() const;
+
+	GraphData build();
 };
 
 struct RenderGraphBuilder::RegisteredTask {
-	std::string_view name;
-	std::vector<ImageDependencyInfo> images;
-	std::vector<BufferDependencyInfo> buffers;
+	Task task;
+	std::unordered_map<std::string_view, ResourceDependency> images;
+	std::unordered_map<std::string_view, ResourceDependency> buffers;
+};
+struct RenderGraphBuilder::ResourceTaskReference {
+	TaskIndex task;
+	ResourceUsage usage;
+	std::optional<vk::ImageLayout> requiredLayout;
 };

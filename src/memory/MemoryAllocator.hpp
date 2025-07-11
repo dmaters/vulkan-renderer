@@ -11,7 +11,6 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Allocation.hpp"
-#include "Instance.hpp"
 
 enum class AllocationLocation {
 	Device,
@@ -24,12 +23,7 @@ enum class AllocationType {
 };
 
 class MemoryAllocator {
-public:
 private:
-	Instance& m_instance;
-	vk::Queue m_queue;
-	vk::CommandPool m_commandPool;
-
 	std::unique_ptr<RingAllocation> m_stagingAllocation;
 	std::unique_ptr<BuddyAllocator> m_localPersistent;
 	std::unique_ptr<BuddyAllocator> m_devicePersistent;
@@ -47,7 +41,8 @@ private:
 	std::map<AllocationLocation, uint32_t> m_memoryType;
 
 public:
-	MemoryAllocator(Instance& instance);
+	MemoryAllocator();
+
 	SubAllocation allocate(
 		vk::Buffer buffer, AllocationType type, AllocationLocation location
 	);

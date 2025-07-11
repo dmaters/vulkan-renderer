@@ -5,11 +5,10 @@
 #include "rendergraph/RenderGraph.hpp"
 
 void BufferCopy::setup(
-	std::vector<ImageDependencyInfo>& requiredImages,
-	std::vector<BufferDependencyInfo>& requiredBuffers
+	std::unordered_map<std::string_view, ResourceDependency>& images,
+	std::unordered_map<std::string_view, ResourceDependency>& buffers
 ) {
-	requiredBuffers.push_back({
-		.name = m_info.origin.name,
+	buffers[m_info.origin.name] = {
 		.usage = {
 				  .type = ResourceUsage::Type::READ,
 				  .access = vk::AccessFlagBits2::eTransferRead,
@@ -17,17 +16,16 @@ void BufferCopy::setup(
 				  
 				  }
 				
-    });
+    };
 
-	requiredBuffers.push_back({
-		.name = m_info.destination.name,
+	buffers[m_info.destination.name] = {
 		.usage = {
 				  .type = ResourceUsage::Type::WRITE,
 				  .access = vk::AccessFlagBits2::eTransferWrite,
 				  .stage = vk::PipelineStageFlagBits2::eTransfer,
 				  },
 				 
-				});
+				};
 }
 void BufferCopy::execute(
 	vk::CommandBuffer& buffer, const Resources& resources

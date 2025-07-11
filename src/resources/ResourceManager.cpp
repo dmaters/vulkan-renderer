@@ -1,5 +1,7 @@
 #include "ResourceManager.hpp"
 
+#include <vulkan/vulkan_core.h>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +15,7 @@
 
 #include "Buffer.hpp"
 #include "Image.hpp"
+#include "Instance.hpp"
 #include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 
@@ -21,18 +24,17 @@
 
 #include <filesystem>
 
-ResourceManager::ResourceManager(
-	Instance &instance, MemoryAllocator &memoryAllocator
-) :
-	m_device(instance.device), m_memoryAllocator(memoryAllocator) {
+ResourceManager::ResourceManager() {
+	Instance &instance = Instance::Get();
 	m_queue = instance.device.getQueue(
 		instance.queueFamiliesIndices.transferIndex, 0
 	);
 
-	m_commandPool = m_device.createCommandPool(vk::CommandPoolCreateInfo {
-		.flags = vk::CommandPoolCreateFlagBits::eTransient,
-		.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
-	});
+	m_commandPool =
+		Instance::Get().device.createCommandPool(vk::CommandPoolCreateInfo {
+			.flags = vk::CommandPoolCreateFlagBits::eTransient,
+			.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
+		});
 }
 
 BufferHandle ResourceManager::createBuffer(const BufferDescription &description
@@ -42,7 +44,7 @@ BufferHandle ResourceManager::createBuffer(const BufferDescription &description
 		.usage = description.usage,
 	};
 
-	vk::Buffer buffer = m_device.createBuffer(createInfo);
+	vk::Buffer buffer = Instance::Get().device.createBuffer(createInfo);
 
 	SubAllocation allocation = m_memoryAllocator.allocate(
 		buffer, AllocationType::Persistent, description.location
@@ -76,6 +78,8 @@ BufferHandle ResourceManager::createBuffer(const BufferDescription &description
 	return handle;
 }
 ImageHandle ResourceManager::createImage(const ImageDescription &description) {
+	vk::Device &device = Instance::Get().device;
+
 	vk::ImageCreateInfo imageInfo {
 		.flags = {},
 		.imageType = description.depth > 1 ? vk::ImageType::e3D
@@ -91,7 +95,7 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 		.initialLayout = vk::ImageLayout::eUndefined,
 	};
 
-	vk::Image image = m_device.createImage(imageInfo);
+	vk::Image image = device.createImage(imageInfo);
 
 	SubAllocation allocation = m_memoryAllocator.allocate(
 		image, AllocationType::Persistent, AllocationLocation::Device
@@ -114,13 +118,13 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 							},
 	};
 
-	views.push_back(m_device.createImageView(viewInfo));
+	views.push_back(device.createImageView(viewInfo));
 
 	if (description.transient) {
 		viewInfo.subresourceRange.baseArrayLayer = 1;
-		views.push_back(m_device.createImageView(viewInfo));
+		views.push_back(device.createImageView(viewInfo));
 		viewInfo.subresourceRange.baseArrayLayer = 2;
-		views.push_back(m_device.createImageView(viewInfo));
+		views.push_back(device.createImageView(viewInfo));
 	}
 
 	ImageHandle handle { m_resourceCounter };
@@ -138,8 +142,6 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 		.accesses = std::vector<ImageAccess>(!description.transient ?1 : 3, ImageAccess{
 			.view = views[0],
 			.layout = vk::ImageLayout::eUndefined,
-			.accessType = vk::AccessFlagBits2::eNone,
-			.accessStage = vk::PipelineStageFlagBits2::eNone,
 		}),
 		.transient = description.transient
 	};
@@ -223,13 +225,33 @@ ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
 	free(staging);
 	return image;
 }
-
+void ResourceManager::setName(std::string_view name, ImageHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eImage,
+			.objectHandle = (uint64_t)(VkImage)m_images.at(handle.value).image,
+			.pObjectName = name.data(),
+		}
+	);
+	m_imageNames[name] = handle;
+}
+void ResourceManager::setName(std::string_view name, BufferHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eBuffer,
+			.objectHandle =
+				(uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
+			.pObjectName = name.data(),
+		}
+	);
+	m_bufferNames[name] = handle;
+}
 BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
 	vk::BufferCreateInfo info {
 		.size = size,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc,
 	};
-	vk::Buffer buffer = m_device.createBuffer(info);
+	vk::Buffer buffer = Instance::Get().device.createBuffer(info);
 	SubAllocation allocation = m_memoryAllocator.allocate(
 		buffer, AllocationType::Staging, AllocationLocation::Host
 	);
@@ -246,14 +268,17 @@ BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
 
 	return handle;
 }
-ImageHandle ResourceManager::registerImage(Image image) {
-	ImageHandle handle { m_resourceCounter };
-	m_resourceCounter++;
+ImageHandle ResourceManager::registerImage(Image image, ImageHandle handle) {
+	if (handle.value == 0) {
+		handle = { m_resourceCounter };
+		m_resourceCounter++;
+	}
 
 	m_images[handle.value] = image;
 	return handle;
 }
 void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
+	Instance &instance = Instance::Get();
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
 		.level = vk::CommandBufferLevel::ePrimary,
@@ -261,7 +286,7 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 
 	};
 	vk::CommandBuffer commandBuffer =
-		m_device.allocateCommandBuffers(commandBufferInfo)[0];
+		instance.device.allocateCommandBuffers(commandBufferInfo)[0];
 
 	vk::CommandBufferBeginInfo beginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
@@ -280,14 +305,10 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 		barriers.push_back({
 			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
 			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-			.dstStageMask =
-				destination.bufferAccess[copyInfo.destinationAccessIndex]
-					.accessStage,
-			.dstAccessMask =
-				destination.bufferAccess[copyInfo.destinationAccessIndex]
-					.accessType,
-			.srcQueueFamilyIndex = m_transferIndex,
-			.dstQueueFamilyIndex = m_graphicsIndex,
+			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+			.dstAccessMask = vk::AccessFlagBits2::eNone,
+			.srcQueueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
+			.dstQueueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
 			.buffer = destination.buffer,
 			.offset = destination.bufferAccess[copyInfo.destinationAccessIndex]
 		                  .offset,
@@ -321,7 +342,7 @@ void ResourceManager::copyToImage(
 	};
 
 	vk::CommandBuffer commandBuffer =
-		m_device.allocateCommandBuffers(commandBufferInfo)[0];
+		Instance::Get().device.allocateCommandBuffers(commandBufferInfo)[0];
 
 	vk::CommandBufferBeginInfo beginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
@@ -333,7 +354,7 @@ void ResourceManager::copyToImage(
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eUndefined,
         .newLayout = vk::ImageLayout::eTransferDstOptimal,
-        .image = m_images[destination.value].image,
+        .image = m_images.at(destination.value).image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
@@ -348,7 +369,7 @@ void ResourceManager::copyToImage(
 	});
 	commandBuffer.copyBufferToImage(
 		m_buffers[origin.value].buffer,
-		m_images[destination.value].image,
+		m_images.at(destination.value).image,
 		vk::ImageLayout::eTransferDstOptimal,
 		{ offset }
 	);
@@ -357,7 +378,7 @@ void ResourceManager::copyToImage(
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .oldLayout = vk::ImageLayout::eTransferDstOptimal,
         .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-        .image = m_images[destination.value].image,
+        .image = m_images.at(destination.value).image,
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
