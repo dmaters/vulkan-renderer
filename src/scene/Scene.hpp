@@ -23,4 +23,7 @@ public:
 	Camera& getCamera() { return camera; }
 
 	void addLight(Light light) { m_lights.push_back(light); }
+	void addPrimitive(Primitive primitive) {
+		m_primitives.push_back(primitive);
+	}
 };

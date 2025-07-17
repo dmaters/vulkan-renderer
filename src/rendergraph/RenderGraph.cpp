@@ -21,6 +21,7 @@
 #include "resources/Image.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/ImageCopy.hpp"
+#include "tasks/RenderPass.hpp"
 
 RenderGraph::RenderGraph(
 	Swapchain& swapchain,
@@ -301,8 +302,9 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 
 	const Frame& frame = m_swapchain.getFrame(m_currentFrame);
 
-	auto _ = device.waitForFences({ frame.fence }, vk::True, 1000);
+	auto _ = device.waitForFences({ frame.fence }, vk::True, 1e12);
 	device.resetFences(frame.fence);
+	device.resetCommandPool(frame.commandPool);
 
 	vk::AcquireNextImageInfoKHR acquireInfo;
 	acquireInfo.swapchain = m_swapchain.getSwapchain();
@@ -341,7 +343,6 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 
 	for (auto& node : m_data.tasks) {
 		writeMemoryBarrier(commandBuffer, node);
-
 		std::visit(
 			[&commandBuffer, &resources](auto&& t) {
 				t.execute(commandBuffer, resources);

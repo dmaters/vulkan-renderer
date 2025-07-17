@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cstdint>
 #include <glm/glm.hpp>
 
 namespace MaterialDefinitions {
@@ -23,22 +24,29 @@ struct ViewProjection {
 
 struct LightingMaterial {};
 
-struct PBRMaterialUniforms {
+struct PBRUniform {
 	uint32_t albedo;
+	uint32_t normal;
+	uint32_t roughness_metallic;
 };
+typedef std::array<PBRUniform, 512> PBRUniforms;
 
 struct PBRMaterial {
-	struct BaseValues {
-		glm::vec3 baseColor;
-	};
-	BaseValues* base_values;
-	std::array<PBRMaterialUniforms, 512>* instances;
-
+	PBRUniforms* instances;
 	const Lights* light_data;
 	const ViewProjection* view_projection;
 };
 
 struct SimpleMaterial {};
 struct ErrorFallback {};
+
+struct GBufferBase {
+	PBRUniforms* instances;
+	const ViewProjection* view_projection;
+};
+
+struct DeferredLighting {
+	const Lights* light_data;
+};
 
 }  // namespace MaterialDefinitions

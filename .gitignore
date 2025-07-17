@@ -3,3 +3,7 @@ samples
 
 .cache
 .vscode
+
+
+.vs
+CMakeSettings.json

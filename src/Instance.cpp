@@ -58,7 +58,12 @@ const std::vector<const char*> instanceExtensionLayers {
 	"VK_EXT_debug_utils"
 };
 vk::Instance createInstance() {
+	vk::ApplicationInfo appInfo {
+		.apiVersion = vk::ApiVersion13,
+	};
+
 	vk::Instance instance = vk::createInstance(vk::InstanceCreateInfo {
+		.pApplicationInfo = &appInfo,
 		.enabledLayerCount = (uint32_t)instanceValidationLayers.size(),
 		.ppEnabledLayerNames = instanceValidationLayers.data(),
 		.enabledExtensionCount = (uint32_t)instanceExtensionLayers.size(),
@@ -170,7 +175,8 @@ const std::vector<const char*> deviceExtensions {
 	"VK_KHR_multiview",
 	"VK_KHR_maintenance2",
 	"VK_KHR_synchronization2",
-	"VK_EXT_descriptor_indexing"
+	"VK_EXT_descriptor_indexing",
+	"VK_KHR_push_descriptor"
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);

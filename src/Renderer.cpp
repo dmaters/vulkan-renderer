@@ -1,10 +1,13 @@
+
 #include "Renderer.hpp"
 
 #include <SDL3/SDL_vulkan.h>
+#include <stdlib.h>
 #include <vulkan/vulkan_core.h>
 
 #include <cstddef>
 #include <glm/ext/matrix_clip_space.hpp>
+#include <iostream>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -67,6 +70,8 @@ void Renderer::createRenderGraph() {
 
 void Renderer::render() {
 	m_materialManager.update(m_currentFrame);
+
+	glm::mat4 view = m_currentScene->getCamera().getViewVector();
 	vk::Extent2D resolution = m_swapchain.getResolution();
 
 	if (resolution == vk::Extent2D(0)) {
@@ -74,16 +79,13 @@ void Renderer::render() {
 		return;
 	}
 	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(60.f),
+		glm::radians(90.f),
 		(float)resolution.width / resolution.height,
 		0.1f,
 		1000.0f
 	);
 
 	proj[1][1] *= -1;
-
-	glm::mat4 view = m_currentScene->getCamera().getViewVector();
-
 	m_materialManager.updateGlobalBuffer<MaterialDefinitions::ViewProjection>(
 		"view_projection",
 		[proj, view](MaterialDefinitions::ViewProjection& viewProj) {
@@ -107,7 +109,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene->addLight({
 		.position = glm::vec3(0, 150, 0),
 		.orientation = orientation,
-		.intensity = 0.2,
+		.intensity = 20,
 	});
 
 	auto lights = m_currentScene->getLights();
@@ -123,5 +125,15 @@ void Renderer::load(const std::filesystem::path& path) {
 		}
 	);
 
+	MaterialIndex lighting =
+		m_materialManager.getMaterialIndex("lighting_deferred");
+	m_currentScene->addPrimitive({
+		.baseVertex = 0,
+		.baseIndex = 0,
+		.indexCount = 3,
+		.materials = { {
+			lighting,
+		} },
+	});
 	createRenderGraph();
 }

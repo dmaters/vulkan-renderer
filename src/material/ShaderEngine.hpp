@@ -25,7 +25,6 @@ private:
 	slang::IGlobalSession* m_session;
 
 	std::unordered_map<PipelineIndex, Pipeline> m_pipelines;
-	std::unordered_map<PipelineIndex, Pipeline> m_modifiedPipelines;
 	std::unordered_map<PipelineIndex, PipelineMetadata> m_pipelineMetadatas;
 
 	std::vector<std::pair<Pipeline, uint8_t>> m_retiredPipelines;
@@ -39,6 +38,9 @@ private:
 	std::condition_variable m_cv;
 	bool m_monitorEnabled = false;
 	std::thread m_monitorThread;
+
+	std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
+		m_lastEdited;
 
 	void _monitor();
 

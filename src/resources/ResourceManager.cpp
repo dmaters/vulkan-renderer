@@ -190,7 +190,7 @@ ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
 	ImageDescription description {
 		.width = data.x,
 		.height = data.y,
-		.format = vk::Format::eR8G8B8A8Srgb,
+		.format = vk::Format::eR8G8B8A8Unorm,
 		.usage = vk::ImageUsageFlagBits::eTransferDst |
 		         vk::ImageUsageFlagBits::eSampled,
 

@@ -6,6 +6,7 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
 #include "scene/Primitive.hpp"
@@ -50,12 +51,16 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 
 	for (auto& dependency : dependencies) {
 		if (dependency.kind ==
+		    MaterialManager::ResourceDependency::Kind::RenderTarget)
+			continue;
+
+		if (dependency.kind ==
 		    MaterialManager::ResourceDependency::Kind::Sampler) {
 			Image& image =
 				resources.resourceManager.getNamedImage(dependency.name);
 
 			imageInfo.push_back({
-				.sampler = nullptr,
+				.sampler = resources.materialManager.getLinearSampler(),
 				.imageView = image.accesses[resources.currentFrame].view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			});
@@ -87,6 +92,7 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 				.pBufferInfo = &bufferInfo.back(),
 			});
 		}
+		bindingCount++;
 	}
 	return descriptors;
 }
@@ -127,7 +133,7 @@ void setupAttachments(
 			colorAttachments.push_back({
 			.imageView = attachment.accesses[resources.currentFrame].view,
 			.imageLayout = attachment.accesses[resources.currentFrame].layout,
-	
+			
 			.loadOp = vk::AttachmentLoadOp::eClear,
 			.storeOp = vk::AttachmentStoreOp::eStore,
 			.clearValue = { .color =
@@ -212,13 +218,14 @@ void RenderPass::execute(
 			commandBuffer, m_dependencies, resources, imageInfo, bufferInfo
 		);
 
-	if (transientResources.size() > 0)
+	if (transientResources.size() > 0) {
 		commandBuffer.pushDescriptorSetKHR(
 			vk::PipelineBindPoint::eGraphics,
 			material.pipeline.pipelineLayout,
 			2,
 			transientResources
 		);
+	}
 
 	for (const Primitive& primitive : resources.primitives) {
 		if (primitive.materials[0].index != m_material) continue;

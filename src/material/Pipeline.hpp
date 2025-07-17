@@ -14,6 +14,9 @@ struct PipelineMetadata {
 	};
 	Modules modules;
 	std::vector<vk::DescriptorSetLayout> layouts;
+	uint8_t attachmentCount = 1;
+
+	bool depthEnabled = false;
 };
 
 struct Pipeline {
@@ -26,6 +29,8 @@ public:
 	struct PipelineBuildInfo {
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		std::vector<vk::DescriptorSetLayout> setLayouts;
+		bool depthEnabled = false;
+		uint8_t attachmentCount = 1;
 	};
 
 	static std::optional<Pipeline> BuildPipeline(

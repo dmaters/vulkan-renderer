@@ -4,7 +4,6 @@
 #include <vulkan/vulkan_enums.hpp>
 
 #include "memory/MemoryAllocator.hpp"
-#include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
 const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
@@ -35,9 +34,10 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.height = 600,
 				.depth = 1,
 				.miplevels = 1,
-				.format = vk::Format::eR8G8B8A8Srgb,
+				.format = vk::Format::eR16G16B16A16Sfloat,
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                     vk::ImageUsageFlagBits::eInputAttachment,
+	                     vk::ImageUsageFlagBits::eInputAttachment |
+	                     vk::ImageUsageFlagBits::eSampled,
 				.transient = true,
 			}, },
 		{
@@ -48,7 +48,8 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.miplevels = 1,
 				.format = vk::Format::eR16G16B16A16Sfloat,
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                     vk::ImageUsageFlagBits::eInputAttachment,
+	                     vk::ImageUsageFlagBits::eInputAttachment |
+	                     vk::ImageUsageFlagBits::eSampled,
 				.transient = true,
 			}, },
 		{
@@ -59,12 +60,25 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.miplevels = 1,
 				.format = vk::Format::eR16G16B16A16Sfloat,
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                     vk::ImageUsageFlagBits::eInputAttachment,
+	                     vk::ImageUsageFlagBits::eInputAttachment |
+	                     vk::ImageUsageFlagBits::eSampled,
+				.transient = true,
+			}, },
+		{
+         "gbuffer_roughnessMetallic",				 {
+				.width = 800,
+				.height = 600,
+				.depth = 1,
+				.miplevels = 1,
+				.format = vk::Format::eR16G16B16A16Sfloat,
+				.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                     vk::ImageUsageFlagBits::eInputAttachment |
+	                     vk::ImageUsageFlagBits::eSampled,
 				.transient = true,
 			}, },
 
 		{
-         "main_color",				 {
+         "main_color", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -75,7 +89,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "depth", {
+         "depth",				 {
 				.width = 800,
 				.height = 600,
 				.depth = 1,

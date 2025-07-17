@@ -5,3 +5,8 @@ struct Light {
 	float intensity;
 };
 
+
+[[vk::binding(1, 0)]] cbuffer LightData {
+	uint LIGHT_COUNT;
+	Light[256] LIGHT_DATA;
+};

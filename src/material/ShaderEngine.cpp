@@ -3,6 +3,7 @@
 #include <slang/slang.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -64,12 +65,13 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	slang::IModule* slangModule =
 		session->loadModule(path.string().c_str(), &diagnostics);
 
-	if (diagnostics &&
-	    std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
-	        nullptr) {
+	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
-		return std::nullopt;
+		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
+		    nullptr)
+			return std::nullopt;
 	}
+
 	slang::IEntryPoint* entryPoint;
 	slangModule->findEntryPointByName("main", &entryPoint);
 	slang::IComponentType* components[] = { slangModule, entryPoint };
@@ -80,11 +82,11 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 
 	program->link(&linkedProgram, &diagnostics);
 
-	if (diagnostics &&
-	    std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
-	        nullptr) {
+	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
-		return std::nullopt;
+		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
+		    nullptr)
+			return std::nullopt;
 	}
 
 	int entryPointIndex = 0;
@@ -94,11 +96,12 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	linkedProgram->getEntryPointCode(
 		entryPointIndex, targetIndex, &kernelBlob, &diagnostics
 	);
-	if (diagnostics &&
-	    std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
-	        nullptr) {
+
+	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
-		return std::nullopt;
+		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
+		    nullptr)
+			return std::nullopt;
 	}
 
 	vk::ShaderModule module = Instance::Get().device.createShaderModule({
@@ -140,7 +143,12 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 
 	std::optional<Pipeline> pipeline = PipelineBuilder::BuildPipeline(
 		Instance::Get().device,
-		{ .shaderStages = modules, .setLayouts = metadata.layouts }
+		{
+			.shaderStages = modules,
+			.setLayouts = metadata.layouts,
+			.depthEnabled = metadata.depthEnabled,
+			.attachmentCount = metadata.attachmentCount,
+		}
 	);
 
 	return pipeline;
@@ -157,11 +165,17 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 	m_pipelines[index] = pipeline.value();
 	m_pipelineMetadatas[index] = metadata;
 
-	if (!metadata.modules.vertex.empty())
+	if (!metadata.modules.vertex.empty()) {
 		m_modules[metadata.modules.vertex].insert(index);
+		m_lastEdited[metadata.modules.vertex] =
+			std::filesystem::last_write_time(metadata.modules.vertex);
+	}
 
-	if (!metadata.modules.fragment.empty())
+	if (!metadata.modules.fragment.empty()) {
 		m_modules[metadata.modules.fragment].insert(index);
+		m_lastEdited[metadata.modules.fragment] =
+			std::filesystem::last_write_time(metadata.modules.fragment);
+	}
 
 	return index;
 }
@@ -196,28 +210,23 @@ void ShaderEngine::_monitor() {
 		m_cv.wait(lock, [this] { return m_monitorEnabled; });
 	}
 
-	std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
-		lastEdited;
-
-	for (auto& [module, _] : m_modules) {
-		lastEdited[module] = std::filesystem::last_write_time(module);
-	}
-
 	while (m_monitorEnabled) {
-		for (auto& [module, time] : lastEdited) {
+		for (auto& [module, time] : m_lastEdited) {
 			auto currentTime = std::filesystem::last_write_time(module);
 
 			if (currentTime == time) continue;
 			std::lock_guard<std::mutex> lock(m_mutex);
 
-			for (auto& index : m_modules[module]) {
-				PipelineMetadata metadata = m_pipelineMetadatas[index];
+			for (PipelineIndex index : m_modules.at(module)) {
+				PipelineMetadata& metadata = m_pipelineMetadatas.at(index);
 				auto pipeline = buildPipeline(metadata);
 
-				if (pipeline.has_value())
-					m_modifiedPipelines[index] = pipeline.value();
+				if (pipeline.has_value()) {
+					m_retiredPipelines.push_back({ m_pipelines[index], 4 });
+					m_pipelines[index] = pipeline.value();
+				}
 			}
-			lastEdited[module] = currentTime;
+			m_lastEdited[module] = currentTime;
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));

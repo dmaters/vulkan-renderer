@@ -173,17 +173,19 @@ GraphData RenderGraphBuilder::build() {
 					)) {
 					imageBarriers[name] = barrier;
 				}
-			} else {
-				if (buildImageBarrier(
-						taskResourceAccesses.back().usage,
-						taskResourceAccesses[0].usage,
-						taskResourceAccesses.back().requiredLayout,
-						taskResourceAccesses[0].requiredLayout,
-						barrier
-					)) {
-					imageBarriers[name] = barrier;
-				}
-			}
+			} /*
+			 else {
+			     if (buildImageBarrier(
+			         taskResourceAccesses.back().usage,
+			         taskResourceAccesses[0].usage,
+			         taskResourceAccesses.back().requiredLayout,
+			         taskResourceAccesses[0].requiredLayout,
+			         barrier
+			     )) {
+			         imageBarriers[name] = barrier;
+			     }
+			 }
+			 */
 		}
 		for (auto& [name, reference] : task.buffers) {
 			auto& taskResourceAccesses = m_bufferReferences[name];
@@ -243,7 +245,7 @@ GraphData RenderGraphBuilder::build() {
 
 		imageStatus[name] = {
 			firstLayout->requiredLayout.value(),
-			firstLayout->requiredLayout.value(),
+			lastLayout->requiredLayout.value(),
 		};
 	}
 

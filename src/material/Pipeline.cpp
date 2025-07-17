@@ -30,13 +30,13 @@ struct PipelineStateCreateInfo {
 
 		return info;
 	};
-	std::array<vk::VertexInputAttributeDescription, 3> vertexAttributes;
+	std::array<vk::VertexInputAttributeDescription, 4> vertexAttributes;
 	std::array<vk::VertexInputBindingDescription, 1> vertexBindings;
 	vk::PipelineVertexInputStateCreateInfo vertex() {
 		vertexBindings = {
 			vk::VertexInputBindingDescription {
 											   .binding = 0,
-											   .stride = 32,
+											   .stride = 44,
 											   .inputRate = vk::VertexInputRate::eVertex },
 		};
 
@@ -51,18 +51,24 @@ struct PipelineStateCreateInfo {
 												 .binding = 0,
 												 .format = vk::Format::eR32G32B32Sfloat,
 												 .offset = 12 },
+			vk::VertexInputAttributeDescription {
+												 .location = 2,
+												 .binding = 0,
+												 .format = vk::Format::eR32G32B32Sfloat,
+												 .offset = 24 },
 
-			vk::VertexInputAttributeDescription { .location = 2,
+			vk::VertexInputAttributeDescription { .location = 3,
                                                  .binding = 0,
                                                  .format =
 			                                          vk::Format::eR32G32Sfloat,
-                                                 .offset = 24 }
+                                                 .offset = 36 }
 		};
 
 		vk::PipelineVertexInputStateCreateInfo info {
 			.vertexBindingDescriptionCount = 1,
 			.pVertexBindingDescriptions = vertexBindings.data(),
-			.vertexAttributeDescriptionCount = 3,
+			.vertexAttributeDescriptionCount =
+				(uint32_t)vertexAttributes.size(),
 			.pVertexAttributeDescriptions = vertexAttributes.data()
 		};
 
@@ -92,22 +98,6 @@ struct PipelineStateCreateInfo {
 		return info;
 	};
 
-	std::array<vk::PipelineColorBlendAttachmentState, 1> colorblendStates;
-	vk::PipelineColorBlendStateCreateInfo colorBlend() {
-		colorblendStates = {
-			vk::PipelineColorBlendAttachmentState {
-
-												   .blendEnable = false,
-												   .colorWriteMask = vk::ColorComponentFlagBits(0xf),
-												   },
-		};
-		return {
-
-			.attachmentCount = (uint32_t)colorblendStates.size(),
-			.pAttachments = colorblendStates.data(),
-		};
-	};
-
 	vk::PipelineMultisampleStateCreateInfo multiSample() {
 		return {
 			.rasterizationSamples = vk::SampleCountFlagBits::e1,
@@ -115,15 +105,25 @@ struct PipelineStateCreateInfo {
 		};
 	}
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencil() {
-		return vk::PipelineDepthStencilStateCreateInfo {
-			.depthTestEnable = true,
-			.depthWriteEnable = true,
-			.depthCompareOp = vk::CompareOp::eLess,
-			.depthBoundsTestEnable = false,
-			.stencilTestEnable = false,
+	vk::PipelineDepthStencilStateCreateInfo depthStencil(bool depthEnabled) {
+		if (depthEnabled)
+			return vk::PipelineDepthStencilStateCreateInfo {
+				.depthTestEnable = true,
+				.depthWriteEnable = true,
+				.depthCompareOp = vk::CompareOp::eLess,
+				.depthBoundsTestEnable = false,
+				.stencilTestEnable = false,
 
-		};
+			};
+
+		else
+			return vk::PipelineDepthStencilStateCreateInfo {
+				.depthTestEnable = false,
+				.depthWriteEnable = false,
+				.depthCompareOp = vk::CompareOp::eNever,
+				.depthBoundsTestEnable = false,
+				.stencilTestEnable = false,
+			};
 	}
 };
 
@@ -151,13 +151,28 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	auto viewport = helper.viewport();
 	pipelineInfo.pViewportState = &viewport;
 	auto rasterization = helper.rasterization();
+	if (!info.depthEnabled)
+		rasterization.cullMode = vk::CullModeFlagBits::eNone;
 	pipelineInfo.pRasterizationState = &rasterization;
 
 	auto multisampling = helper.multiSample();
 	pipelineInfo.pMultisampleState = &multisampling;
-	auto depthStencilState = helper.depthStencil();
+	auto depthStencilState = helper.depthStencil(info.depthEnabled);
 	pipelineInfo.pDepthStencilState = &depthStencilState;
-	auto colorBlendState = helper.colorBlend();
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorblendStates(
+		info.attachmentCount,
+		vk::PipelineColorBlendAttachmentState {
+
+			.blendEnable = false,
+			.colorWriteMask = vk::ColorComponentFlagBits(0xf),
+		}
+	);
+	vk::PipelineColorBlendStateCreateInfo colorBlendState {
+		.attachmentCount = (uint32_t)colorblendStates.size(),
+		.pAttachments = colorblendStates.data(),
+	};
+
 	pipelineInfo.pColorBlendState = &colorBlendState;
 
 	auto dynamicState = helper.dynamicState();
@@ -166,11 +181,13 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	pipelineInfo.layout = getLayout(device, info.setLayouts);
 
 	pipelineInfo.renderPass = nullptr;
+
+	std::vector<vk::Format> attachmentFormats(
+		info.attachmentCount, vk::Format::eR16G16B16A16Sfloat
+	);
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
-		.colorAttachmentCount = 1,
-		.pColorAttachmentFormats =
-			std::array<vk::Format, 1> { vk::Format::eR16G16B16A16Sfloat }.data(
-			),
+		.colorAttachmentCount = info.attachmentCount,
+		.pColorAttachmentFormats = attachmentFormats.data(),
 		.depthAttachmentFormat = vk::Format::eD16Unorm,
 
 	};

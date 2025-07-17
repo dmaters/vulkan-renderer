@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <memory>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -66,7 +68,7 @@ private:
 
 	template <typename T>
 	MaterialIndex registerMaterial();
-	template <typename T>
+
 	MaterialData createMaterialData(MaterialIndex index);
 
 	template <typename T>
@@ -90,16 +92,15 @@ public:
 		return m_names.at(name);
 	}
 
+	uint32_t registerTextureGroup(const std::vector<ImageHandle>& textures);
+
 	template <typename T, typename F>
 	void updateMaterialData(MaterialIndex index, F updateFunction);
-
 	template <typename T, typename F>
 	void updateGlobalBuffer(std::string_view name, F updateFunction);
 
-	uint32_t registerTextureGroup(const std::vector<ImageHandle>& textures);
-
+	vk::Sampler getLinearSampler() const { return m_linearSampler; }
 	vk::DescriptorSet getGlobalSet() const { return m_globalSet; };
-
 	std::vector<MaterialIndex> getMaterials() const;
 
 	const std::unordered_map<MaterialIndex, MaterialMetadata>&
@@ -114,13 +115,28 @@ struct MaterialManager::MaterialData {
 	vk::DescriptorSet materialSet;
 };
 
+struct MaterialManager::ResourceDependency {
+	enum class Kind {
+		RenderTarget,
+		Sampler,
+		Buffer,
+	};
+
+	std::string_view name;
+	Kind kind;
+	ResourceUsage usage;
+	std::optional<vk::ImageLayout> requiredLayout;
+};
+
 struct MaterialManager::MaterialMetadata {
+	typedef std::variant<std::string_view, uint32_t> MaterialBuffer;
+
 	std::string_view name;
 	PipelineIndex pipeline;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings;
 	vk::DescriptorSetLayout materialLayout;
-
+	std::vector<MaterialBuffer> materialBuffers;
 	std::vector<MaterialManager::ResourceDependency> namedResourceDependencies;
 
 	bool enabled = true;
@@ -139,8 +155,7 @@ template <typename T, typename F>
 void MaterialManager::updateGlobalBuffer(
 	std::string_view name, F updateFunction
 ) {
-	assert(m_globalBuffers.contains(name));
-	MirroredBuffer mbuffer = m_globalBuffers[name];
+	MirroredBuffer mbuffer = m_globalBuffers.at(name);
 	Buffer& buffer = m_resourceManager.getBuffer(mbuffer.localBuffer);
 
 	assert(buffer.size == sizeof(T));
@@ -149,15 +164,20 @@ void MaterialManager::updateGlobalBuffer(
 	syncData({ mbuffer });
 }
 
-struct MaterialManager::ResourceDependency {
-	enum class Kind {
-		RenderTarget,
-		Sampler,
-		Buffer,
-	};
+template <typename T>
+T MaterialManager::getMaterialData(MaterialIndex index) {
+	if (!m_materialData.contains(index)) {
+		m_materialData[index] = createMaterialData(index);
+	}
+	std::vector<MirroredBuffer>& buffers =
+		m_materialData[index].materialBuffers;
 
-	std::string_view name;
-	Kind kind;
-	ResourceUsage usage;
-	std::optional<vk::ImageLayout> requiredLayout;
+	T data;
+	for (int i = 0; i < buffers.size(); i++) {
+		Buffer& mirror = m_resourceManager.getBuffer(buffers[i].localBuffer);
+		void** field =
+			(void**)(reinterpret_cast<std::byte*>(&data) + i * sizeof(void*));
+		*field = mirror.allocation.address;
+	};
+	return data;
 };

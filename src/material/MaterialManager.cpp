@@ -66,8 +66,14 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 
 	m_shaderEngine = std::make_unique<ShaderEngine>(m_globalSetLayout);
 
-	m_names["pbr"] = registerMaterial<MaterialDefinitions::PBRMaterial>();
+	// m_names["pbr_forward"]
+	// = registerMaterial<MaterialDefinitions::PBRMaterial>();
+	m_names["pbr_deferred"] =
+		registerMaterial<MaterialDefinitions::GBufferBase>();
+	m_names["lighting_deferred"] =
+		registerMaterial<MaterialDefinitions::DeferredLighting>();
 }
+
 void MaterialManager::createGlobalBuffers() {
 	BufferHandle mLightBuffer = m_resourceManager.createBuffer({
 		.size = sizeof(MaterialDefinitions::Lights),
@@ -305,6 +311,9 @@ vk::DescriptorSet MaterialManager::createSet(
 }
 
 Material MaterialManager::getMaterial(MaterialIndex index) {
+	if (!m_materialData.contains(index)) {
+		m_materialData[index] = createMaterialData(index);
+	}
 	MaterialData& data = m_materialData.at(index);
 	Material material {
 		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
@@ -366,3 +375,60 @@ uint32_t MaterialManager::registerTextureGroup(
 	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
 	return offset;
 }
+
+MaterialManager::MaterialData MaterialManager::createMaterialData(
+	MaterialIndex index
+) {
+	MaterialMetadata metadata = m_materialMetadata[index];
+
+	std::vector<MirroredBuffer> materialBuffers;
+	std::vector<BufferHandle> materialBuffersHandles;
+
+	for (int i = 0; i < metadata.materialBuffers.size(); i++) {
+		ResourceManager& resourceManager = m_resourceManager;
+		std::unordered_map<std::string_view, MirroredBuffer> globalBuffers =
+			m_globalBuffers;
+
+		MirroredBuffer buffer = std::visit(
+			[&resourceManager, &globalBuffers](auto&& buffer) {
+				using T = std::decay_t<decltype(buffer)>;
+				if constexpr (std::is_same_v<T, uint32_t>) {
+					BufferHandle mirror = resourceManager.createBuffer(
+						ResourceManager::BufferDescription {
+							.size = buffer,
+							.usage = vk::BufferUsageFlagBits::eTransferSrc,
+							.location = AllocationLocation::Host,
+						}
+					);
+
+					BufferHandle base = resourceManager.createBuffer(
+						ResourceManager::BufferDescription {
+							.size = buffer,
+							.usage = vk::BufferUsageFlagBits::eUniformBuffer |
+				                     vk::BufferUsageFlagBits::eTransferDst,
+							.location = AllocationLocation::Device,
+						}
+					);
+					return MirroredBuffer { mirror, base };
+				} else if constexpr (std::is_same_v<T, std::string_view>) {
+					return globalBuffers.at(buffer);
+				}
+			},
+			metadata.materialBuffers[i]
+		);
+		materialBuffers.push_back(buffer);
+		materialBuffersHandles.push_back(buffer.deviceBuffer);
+	}
+
+	vk::DescriptorSet materialSet = createSet(
+		metadata.materialBindings,
+		metadata.materialLayout,
+		materialBuffersHandles
+	);
+
+	return {
+		.pipeline = metadata.pipeline,
+		.materialBuffers = materialBuffers,
+		.materialSet = materialSet,
+	};
+};

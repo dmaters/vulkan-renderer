@@ -28,7 +28,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_CONSTRUCTORS)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
 
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /DEBUG:FULL)
+    target_compile_options(${PROJECT_NAME} PRIVATE /DEBUG:FULL /EHsc /W4)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()

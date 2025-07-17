@@ -35,10 +35,11 @@ void Swapchain::createSwapchain() {
 	info.imageExtent = m_resolution;
 	info.imageArrayLayers = 1;
 	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst |
-	                  vk::ImageUsageFlagBits::eInputAttachment;
+	                  vk::ImageUsageFlagBits::eInputAttachment |
+	                  vk::ImageUsageFlagBits::eColorAttachment;
 	info.imageColorSpace = instance.surfaceFormat.colorSpace;
 	info.imageSharingMode = vk::SharingMode::eExclusive;
-
+	info.presentMode = vk::PresentModeKHR::eFifo;
 	info.queueFamilyIndexCount = 1;
 	info.pQueueFamilyIndices = &instance.queueFamiliesIndices.graphicsIndex;
 	info.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
