@@ -75,24 +75,15 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 }
 
 void MaterialManager::createGlobalBuffers() {
-	BufferHandle mLightBuffer = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::Lights),
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		.location = AllocationLocation::Host,
-	});
 	BufferHandle lightBuffer = m_resourceManager.createBuffer({
 		.size = sizeof(MaterialDefinitions::Lights),
 		.usage = vk::BufferUsageFlagBits::eTransferDst |
 	             vk::BufferUsageFlagBits::eUniformBuffer,
 		.location = AllocationLocation::Device,
 	});
-	m_globalBuffers["light_buffer"] = { mLightBuffer, lightBuffer };
 
-	BufferHandle mViewProj = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::ViewProjection),
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		.location = AllocationLocation::Host,
-	});
+	m_resourceManager.setName("light_buffer", lightBuffer);
+
 	BufferHandle viewProj = m_resourceManager.createBuffer({
 		.size = sizeof(MaterialDefinitions::ViewProjection),
 		.usage = vk::BufferUsageFlagBits::eTransferDst |
@@ -100,7 +91,7 @@ void MaterialManager::createGlobalBuffers() {
 		.location = AllocationLocation::Device,
 	});
 
-	m_globalBuffers["view_projection"] = { mViewProj, viewProj };
+	m_resourceManager.setName("view_projection", viewProj);
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
@@ -160,9 +151,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& cameraBuffer = m_resourceManager.getBuffer(
-		m_globalBuffers["view_projection"].deviceBuffer
-	);
+	Buffer& cameraBuffer = m_resourceManager.getNamedBuffer("view_projection");
 
 	vk::DescriptorBufferInfo cameraDescriptorInfo {
 		.buffer = cameraBuffer.buffer,
@@ -180,9 +169,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pTexelBufferView = {},
 	};
 
-	Buffer& lightBuffer =
-		m_resourceManager.getBuffer(m_globalBuffers["light_buffer"].deviceBuffer
-	    );
+	Buffer& lightBuffer = m_resourceManager.getNamedBuffer("light_buffer");
 
 	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
 		.buffer = lightBuffer.buffer,
@@ -386,11 +373,9 @@ MaterialManager::MaterialData MaterialManager::createMaterialData(
 
 	for (int i = 0; i < metadata.materialBuffers.size(); i++) {
 		ResourceManager& resourceManager = m_resourceManager;
-		std::unordered_map<std::string_view, MirroredBuffer> globalBuffers =
-			m_globalBuffers;
 
 		MirroredBuffer buffer = std::visit(
-			[&resourceManager, &globalBuffers](auto&& buffer) {
+			[&resourceManager](auto&& buffer) {
 				using T = std::decay_t<decltype(buffer)>;
 				if constexpr (std::is_same_v<T, uint32_t>) {
 					BufferHandle mirror = resourceManager.createBuffer(
@@ -411,7 +396,10 @@ MaterialManager::MaterialData MaterialManager::createMaterialData(
 					);
 					return MirroredBuffer { mirror, base };
 				} else if constexpr (std::is_same_v<T, std::string_view>) {
-					return globalBuffers.at(buffer);
+					return MirroredBuffer {
+						BufferHandle { 0 },
+						resourceManager.getNamedBufferIndex(buffer)
+					};
 				}
 			},
 			metadata.materialBuffers[i]

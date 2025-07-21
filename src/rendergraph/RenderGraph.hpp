@@ -11,6 +11,7 @@
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Scene.hpp"
 
 struct Primitive;
 struct Resources {
@@ -76,6 +77,6 @@ public:
 		std::string_view name, ResourceManager::BufferDescription description
 	);
 
-	void submit(const std::vector<Primitive>& primitives);
+	void submit(Scene& scene);
 	void build(GraphData buildData);
 };

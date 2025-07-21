@@ -44,7 +44,6 @@ private:
 	vk::DescriptorPool m_pool;
 
 	std::unique_ptr<ShaderEngine> m_shaderEngine;
-	std::unordered_map<std::string_view, MirroredBuffer> m_globalBuffers;
 
 	std::unordered_map<MaterialIndex, MaterialData> m_materialData;
 	std::unordered_map<MaterialIndex, MaterialMetadata> m_materialMetadata;
@@ -149,19 +148,6 @@ void MaterialManager::updateMaterialData(
 	T data = getMaterialData<T>(index);
 	updateFunction(data);
 	syncData(m_materialData[index].materialBuffers);
-}
-
-template <typename T, typename F>
-void MaterialManager::updateGlobalBuffer(
-	std::string_view name, F updateFunction
-) {
-	MirroredBuffer mbuffer = m_globalBuffers.at(name);
-	Buffer& buffer = m_resourceManager.getBuffer(mbuffer.localBuffer);
-
-	assert(buffer.size == sizeof(T));
-
-	updateFunction(*reinterpret_cast<T*>(buffer.allocation.address));
-	syncData({ mbuffer });
 }
 
 template <typename T>

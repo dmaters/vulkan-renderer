@@ -25,8 +25,9 @@ MemoryAllocator::MemoryAllocator() {
 		if (type.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal)
 			m_memoryType[AllocationLocation::Device] = i;
 		else if (type.propertyFlags &
-		             vk::MemoryPropertyFlagBits::eHostCoherent &&
-		         (type.propertyFlags & vk::MemoryPropertyFlagBits::eHostCached))
+		             vk::MemoryPropertyFlagBits::eHostVisible &&
+		         (type.propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent
+		         ))
 			m_memoryType[AllocationLocation::Host] = i;
 	}
 

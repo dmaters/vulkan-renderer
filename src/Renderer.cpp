@@ -70,31 +70,18 @@ void Renderer::createRenderGraph() {
 
 void Renderer::render() {
 	m_materialManager.update(m_currentFrame);
-
-	glm::mat4 view = m_currentScene->getCamera().getViewVector();
 	vk::Extent2D resolution = m_swapchain.getResolution();
 
 	if (resolution == vk::Extent2D(0)) {
 		m_swapchain.rebuild();
 		return;
 	}
-	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(90.f),
-		(float)resolution.width / resolution.height,
-		0.1f,
-		1000.0f
-	);
+	m_currentScene->getCamera().setResolution({
+		resolution.width,
+		resolution.height,
+	});
 
-	proj[1][1] *= -1;
-	m_materialManager.updateGlobalBuffer<MaterialDefinitions::ViewProjection>(
-		"view_projection",
-		[proj, view](MaterialDefinitions::ViewProjection& viewProj) {
-			viewProj.view = view;
-			viewProj.projection = proj;
-		}
-	);
-
-	m_renderGraph.submit(m_currentScene->getPrimitives());
+	m_renderGraph.submit(*m_currentScene);
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
 };
@@ -114,9 +101,8 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	auto lights = m_currentScene->getLights();
 
-	m_materialManager.updateGlobalBuffer<MaterialDefinitions::Lights>(
-		"light_buffer",
-
+	m_resourceManager.updateBufferSync<MaterialDefinitions::Lights>(
+		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
 			lightUBO.count = lights.size();
 			for (int i = 0; i < lights.size(); i++) {

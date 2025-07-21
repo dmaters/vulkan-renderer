@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_handles.hpp>
 
 #include "Buffer.hpp"
 #include "Image.hpp"
@@ -53,6 +54,9 @@ public:
 
 private:
 	MemoryAllocator m_memoryAllocator;
+
+	vk::Semaphore m_semaphore;
+	uint64_t m_transferCount = 1;
 
 	vk::CommandPool m_commandPool;
 	vk::Queue m_queue;
@@ -117,6 +121,9 @@ public:
 		m_memoryAllocator.free(m_images[image.value].allocation.value());
 		m_images.erase(image.value);
 	}
+
+	template <typename T, typename F>
+	void updateBufferSync(BufferHandle handle, F updateFunction);
 };
 
 struct ResourceManager::ImageDescription {
@@ -143,3 +150,26 @@ struct ResourceManager::BufferCopy {
 	uint8_t destinationAccessIndex = 0;
 	vk::BufferCopy copy;
 };
+
+template <typename T, typename F>
+void ResourceManager::updateBufferSync(BufferHandle handle, F updateFunction) {
+	Buffer& buffer = getBuffer(handle);
+	assert(buffer.size == sizeof(T));
+	BufferHandle stagingHandle = createStagingBuffer(buffer.size);
+	Buffer& staging = getBuffer(stagingHandle);
+
+	updateFunction(*reinterpret_cast<T*>(staging.allocation.address));
+
+	std::vector<ResourceManager::BufferCopy> info = {
+			{
+				.origin = stagingHandle,
+				.destination = handle,
+				.copy = { 
+					 .size = buffer.size,
+				 },
+			}
+		};
+
+	copyBuffers(info);
+	free(stagingHandle);
+}

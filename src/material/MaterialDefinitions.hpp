@@ -33,8 +33,8 @@ typedef std::array<PBRUniform, 512> PBRUniforms;
 
 struct PBRMaterial {
 	PBRUniforms* instances;
-	const Lights* light_data;
-	const ViewProjection* view_projection;
+	// const Lights* light_data;
+	// const ViewProjection* view_projection;
 };
 
 struct SimpleMaterial {};
@@ -42,11 +42,11 @@ struct ErrorFallback {};
 
 struct GBufferBase {
 	PBRUniforms* instances;
-	const ViewProjection* view_projection;
+	// const ViewProjection* view_projection;
 };
 
 struct DeferredLighting {
-	const Lights* light_data;
+	//	const Lights* light_data;
 };
 
 }  // namespace MaterialDefinitions

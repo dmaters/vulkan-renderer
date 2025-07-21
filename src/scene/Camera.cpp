@@ -17,7 +17,7 @@ void Camera::rotate(glm::vec2 rotate) {
 	m_pitch = glm::clamp(m_pitch, -89.0f, 89.0f);
 }
 
-glm::mat4 Camera::getViewVector() {
+glm::mat4 Camera::getViewMatrix() {
 	glm::quat pitchQuat =
 		glm::angleAxis(glm::radians(m_pitch), glm::vec3(1, 0, 0));
 	glm::quat yawQuat = glm::angleAxis(glm::radians(m_yaw), glm::vec3(0, 1, 0));
@@ -32,3 +32,16 @@ glm::mat4 Camera::getViewVector() {
 
 	return viewMatrix;
 };
+
+glm::mat4 Camera::getProjectionMatrix() {
+	glm::mat4 proj = glm::perspectiveRH_ZO(
+		glm::radians(90.f),
+		(float)m_resolution.x / m_resolution.y,
+		0.1f,
+		1000.0f
+	);
+
+	proj[1][1] *= -1;
+
+	return proj;
+}

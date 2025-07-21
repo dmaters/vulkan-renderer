@@ -35,6 +35,15 @@ ResourceManager::ResourceManager() {
 			.flags = vk::CommandPoolCreateFlagBits::eTransient,
 			.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
 		});
+
+	vk::SemaphoreTypeCreateInfo type {
+		.semaphoreType = vk::SemaphoreType::eTimeline,
+		.initialValue = 0,
+	};
+
+	m_semaphore = instance.device.createSemaphore({
+		.pNext = &type,
+	});
 }
 
 BufferHandle ResourceManager::createBuffer(const BufferDescription &description
@@ -277,8 +286,21 @@ ImageHandle ResourceManager::registerImage(Image image, ImageHandle handle) {
 	m_images[handle.value] = image;
 	return handle;
 }
+
+void resetPool(
+	vk::Semaphore semaphore, uint64_t expectedValue, vk::CommandPool pool
+) {
+	vk::Device &device = Instance::Get().device;
+
+	if (device.getSemaphoreCounterValue(semaphore) == expectedValue)
+		device.resetCommandPool(pool);
+}
+
 void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 	Instance &instance = Instance::Get();
+
+	resetPool(m_semaphore, m_transferCount - 1, m_commandPool);
+
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
 		.level = vk::CommandBufferLevel::ePrimary,
@@ -324,16 +346,26 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 	});
 
 	commandBuffer.end();
+	vk::TimelineSemaphoreSubmitInfo semaphore {
+		.signalSemaphoreValueCount = 1,
+		.pSignalSemaphoreValues = &m_transferCount,
+	};
 	vk::SubmitInfo submitInfo {
+		.pNext = &semaphore,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_semaphore,
 	};
 
 	m_queue.submit({ submitInfo });
+	m_transferCount++;
 };
 void ResourceManager::copyToImage(
 	BufferHandle origin, ImageHandle destination, vk::BufferImageCopy offset
 ) {
+	resetPool(m_semaphore, m_transferCount - 1, m_commandPool);
+
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_commandPool,
 		.level = vk::CommandBufferLevel::ePrimary,
@@ -393,12 +425,21 @@ void ResourceManager::copyToImage(
 
 	});
 	commandBuffer.end();
+
+	vk::TimelineSemaphoreSubmitInfo semaphore {
+		.signalSemaphoreValueCount = 1,
+		.pSignalSemaphoreValues = &m_transferCount,
+	};
 	vk::SubmitInfo submitInfo {
+		.pNext = &semaphore,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_semaphore,
 	};
 
 	m_queue.submit({ submitInfo });
+	m_transferCount++;
 }
 
 void ResourceManager::copyToBuffer(

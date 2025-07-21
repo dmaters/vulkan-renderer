@@ -13,9 +13,15 @@ private:
 	glm::vec3 m_position = glm::vec3(0, 0, -150);
 	float m_pitch = 0;
 	float m_yaw = 0;
+	float m_fov = 70;
+
+	glm::ivec2 m_resolution = glm::ivec2(800, 600);
 
 public:
 	void rotate(glm::vec2 rotation);
 
-	glm::mat4 getViewVector();
+	void setResolution(glm::ivec2 resolution) { m_resolution = resolution; }
+
+	glm::mat4 getViewMatrix();
+	glm::mat4 getProjectionMatrix();
 };

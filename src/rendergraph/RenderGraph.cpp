@@ -17,7 +17,9 @@
 #include "RenderGraph.hpp"
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
+#include "resources/Buffer.hpp"
 #include "resources/Image.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/ImageCopy.hpp"
@@ -295,7 +297,7 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 	});
 }
 
-void RenderGraph::submit(const std::vector<Primitive>& primitives) {
+void RenderGraph::submit(Scene& scene) {
 	clearUnusedResources();
 
 	vk::Device& device = Instance::Get().device;
@@ -332,12 +334,23 @@ void RenderGraph::submit(const std::vector<Primitive>& primitives) {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 	});
 
+	MaterialDefinitions::ViewProjection projView {
+		.view = scene.getCamera().getViewMatrix(),
+		.projection = scene.getCamera().getProjectionMatrix(),
+	};
+	Buffer& projViewBuffer =
+		m_resourceManager.getNamedBuffer("view_projection");
+
+	commandBuffer.updateBuffer(
+		projViewBuffer.buffer, 0, sizeof(projView), &projView
+	);
+
 	writeInitialSyncronizationBarrier(commandBuffer);
 
 	const Resources resources {
 		.resourceManager = m_resourceManager,
 		.materialManager = m_materialManager,
-		.primitives = primitives,
+		.primitives = scene.getPrimitives(),
 		.currentFrame = m_currentFrame,
 	};
 
