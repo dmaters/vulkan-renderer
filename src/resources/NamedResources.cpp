@@ -94,7 +94,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.height = 600,
 				.depth = 1,
 				.miplevels = 1,
-				.format = vk::Format::eD16Unorm,
+				.format = vk::Format::eD24UnormS8Uint,
 				.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
 				.transient = true,
 			}, }

@@ -146,8 +146,7 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 		{
 			.shaderStages = modules,
 			.setLayouts = metadata.layouts,
-			.depthEnabled = metadata.depthEnabled,
-			.attachmentCount = metadata.attachmentCount,
+			.configuration = metadata.configuration,
 		}
 	);
 

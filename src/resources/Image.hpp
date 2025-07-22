@@ -3,6 +3,7 @@
 #include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_enums.hpp>
 
 #include "memory/MemoryAllocator.hpp"
 
@@ -24,6 +25,9 @@ struct Image {
 		vk::ImageAspectFlags flags;
 		if (format == vk::Format::eD16Unorm)
 			flags = vk::ImageAspectFlagBits::eDepth;
+		else if (format == vk::Format::eD24UnormS8Uint)
+			flags = vk::ImageAspectFlagBits::eDepth |
+			        vk::ImageAspectFlagBits::eStencil;
 		else
 			flags = vk::ImageAspectFlagBits::eColor;
 		return flags;

@@ -105,25 +105,19 @@ struct PipelineStateCreateInfo {
 		};
 	}
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencil(bool depthEnabled) {
-		if (depthEnabled)
-			return vk::PipelineDepthStencilStateCreateInfo {
-				.depthTestEnable = true,
-				.depthWriteEnable = true,
-				.depthCompareOp = vk::CompareOp::eLess,
-				.depthBoundsTestEnable = false,
-				.stencilTestEnable = false,
+	vk::PipelineDepthStencilStateCreateInfo depthStencil(
+		const PipelineConfiguration& configuration
+	) {
+		return vk::PipelineDepthStencilStateCreateInfo {
+			.depthTestEnable = configuration.depthOp != vk::CompareOp::eNever,
+			.depthWriteEnable = configuration.depthWrite,
+			.depthCompareOp = configuration.depthOp,
+			.depthBoundsTestEnable = false,
+			.stencilTestEnable = configuration.stencilEnabled,
+			.front = configuration.stencilOp,
+			.back = configuration.stencilOp,
 
-			};
-
-		else
-			return vk::PipelineDepthStencilStateCreateInfo {
-				.depthTestEnable = false,
-				.depthWriteEnable = false,
-				.depthCompareOp = vk::CompareOp::eNever,
-				.depthBoundsTestEnable = false,
-				.stencilTestEnable = false,
-			};
+		};
 	}
 };
 
@@ -151,19 +145,18 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	auto viewport = helper.viewport();
 	pipelineInfo.pViewportState = &viewport;
 	auto rasterization = helper.rasterization();
-	if (!info.depthEnabled)
+	if (!info.configuration.depthWrite)
 		rasterization.cullMode = vk::CullModeFlagBits::eNone;
 	pipelineInfo.pRasterizationState = &rasterization;
 
 	auto multisampling = helper.multiSample();
 	pipelineInfo.pMultisampleState = &multisampling;
-	auto depthStencilState = helper.depthStencil(info.depthEnabled);
+	auto depthStencilState = helper.depthStencil(info.configuration);
 	pipelineInfo.pDepthStencilState = &depthStencilState;
 
 	std::vector<vk::PipelineColorBlendAttachmentState> colorblendStates(
-		info.attachmentCount,
+		info.configuration.attachmentFormats.size(),
 		vk::PipelineColorBlendAttachmentState {
-
 			.blendEnable = false,
 			.colorWriteMask = vk::ColorComponentFlagBits(0xf),
 		}
@@ -182,13 +175,16 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 
 	pipelineInfo.renderPass = nullptr;
 
-	std::vector<vk::Format> attachmentFormats(
-		info.attachmentCount, vk::Format::eR16G16B16A16Sfloat
-	);
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
-		.colorAttachmentCount = info.attachmentCount,
-		.pColorAttachmentFormats = attachmentFormats.data(),
-		.depthAttachmentFormat = vk::Format::eD16Unorm,
+		.colorAttachmentCount =
+			(uint8_t)info.configuration.attachmentFormats.size(),
+		.pColorAttachmentFormats = info.configuration.attachmentFormats.data(),
+		.depthAttachmentFormat = info.configuration.stencilEnabled
+		                             ? vk::Format::eD24UnormS8Uint
+		                             : vk::Format::eD16Unorm,
+		.stencilAttachmentFormat = info.configuration.stencilEnabled
+		                               ? vk::Format::eD24UnormS8Uint
+		                               : vk::Format::eUndefined
 
 	};
 	pipelineInfo.pNext = &renderingInfo;

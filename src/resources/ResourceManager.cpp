@@ -117,9 +117,7 @@ ImageHandle ResourceManager::createImage(const ImageDescription &description) {
 		.viewType = description.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
 		.format = description.format,
 		.subresourceRange = { .aspectMask =
-		                          description.format == vk::Format::eD16Unorm
-		                              ? vk::ImageAspectFlagBits::eDepth
-		                              : vk::ImageAspectFlagBits::eColor,
+		                          Image{.format = description.format}.getAspectFlags(),
                              .baseMipLevel = 0,
                              .levelCount = 1,
                              .baseArrayLayer = 0,

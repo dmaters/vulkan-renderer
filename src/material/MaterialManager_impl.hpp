@@ -123,8 +123,27 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 			m_globalSetLayout,
 			materialLayout,
 		},
-		.attachmentCount = 4,
-		.depthEnabled = true
+		.configuration = {
+			.attachmentFormats = {
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+
+			},
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+			.stencilEnabled = true,
+			.stencilOp = {
+				.failOp = vk::StencilOp::eKeep,
+				.passOp = vk::StencilOp::eReplace,
+				.compareOp = vk::CompareOp::eAlways,
+				.compareMask = 0xFF,
+				.writeMask = 0xFF,
+				.reference = 1,
+			}
+		}
+		
     });
 
 	MaterialMetadata
@@ -266,6 +285,17 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 			materialLayout,
 			transientSetLayout,
 		},
+		.configuration = {
+			.stencilEnabled = true,
+			.stencilOp = {
+				.failOp = vk::StencilOp::eKeep,
+				.passOp = vk::StencilOp::eKeep,
+				.compareOp = vk::CompareOp::eEqual,
+				.compareMask = 0xFF,
+				.writeMask = 0,
+				.reference = 1
+			}
+		}
     });
 
 	MaterialMetadata
@@ -286,6 +316,18 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 					eColorAttachmentOutput,
 			},
 			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		},
+		{
+			.name = "depth",
+			.kind = ResourceDependency::Kind::RenderTarget,
+			.usage = {
+				.type = ResourceUsage::Type::READ,
+				.access =
+					vk::AccessFlagBits2::eDepthStencilAttachmentRead,
+				.stage = vk::PipelineStageFlagBits2::
+					eEarlyFragmentTests,
+			},
+			.requiredLayout = vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal,
 		},
 		{
 			.name = "gbuffer_albedo",

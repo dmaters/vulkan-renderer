@@ -7,6 +7,17 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+struct PipelineConfiguration {
+	std::vector<vk::Format> attachmentFormats = {
+		vk::Format::eR16G16B16A16Sfloat
+	};
+
+	bool depthWrite = false;
+	vk::CompareOp depthOp = vk::CompareOp::eNever;
+
+	bool stencilEnabled = false;
+	vk::StencilOpState stencilOp = vk::StencilOpState {};
+};
 struct PipelineMetadata {
 	struct Modules {
 		std::string_view vertex;
@@ -14,9 +25,7 @@ struct PipelineMetadata {
 	};
 	Modules modules;
 	std::vector<vk::DescriptorSetLayout> layouts;
-	uint8_t attachmentCount = 1;
-
-	bool depthEnabled = false;
+	PipelineConfiguration configuration;
 };
 
 struct Pipeline {
@@ -29,8 +38,7 @@ public:
 	struct PipelineBuildInfo {
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		std::vector<vk::DescriptorSetLayout> setLayouts;
-		bool depthEnabled = false;
-		uint8_t attachmentCount = 1;
+		PipelineConfiguration configuration;
 	};
 
 	static std::optional<Pipeline> BuildPipeline(

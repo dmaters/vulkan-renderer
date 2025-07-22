@@ -9,6 +9,7 @@
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
+#include "resources/ResourceManager.hpp"
 #include "scene/Primitive.hpp"
 
 void RenderPass::setup(
@@ -106,6 +107,7 @@ void setupAttachments(
 
 	std::vector<vk::RenderingAttachmentInfo> colorAttachments;
 	std::optional<vk::RenderingAttachmentInfo> depthAttachment;
+	bool hasStencil = false;
 
 	uint32_t width = 0, height = 0;
 
@@ -117,15 +119,36 @@ void setupAttachments(
 		Image& attachment =
 			resources.resourceManager.getNamedImage(dependency.name);
 
-		if (attachment.format == vk::Format::eD16Unorm) {
-			depthAttachment = {
+		vk::AttachmentLoadOp loadOp;
+		vk::AttachmentStoreOp storeOp;
+		switch (dependency.usage.type) {
+			case (ResourceUsage::Type::READ):
+				loadOp = vk::AttachmentLoadOp::eLoad;
+				storeOp = vk::AttachmentStoreOp::eNone;
+				break;
+			case (ResourceUsage::Type::WRITE):
+				loadOp = vk::AttachmentLoadOp::eClear;
+				storeOp = vk::AttachmentStoreOp::eStore;
+				break;
+			default:
+				loadOp = vk::AttachmentLoadOp::eDontCare;
+				storeOp = vk::AttachmentStoreOp::eDontCare;
+		}
+
+		bool isStencil = attachment.format == vk::Format::eD24UnormS8Uint;
+		if (isStencil) hasStencil = true;
+
+		bool isDepth = attachment.format == vk::Format::eD16Unorm || isStencil;
+		if (isDepth) {
+			depthAttachment = vk::RenderingAttachmentInfo{
 				.imageView = attachment.accesses[resources.currentFrame].view,
 				.imageLayout =
 					attachment.accesses[resources.currentFrame].layout,
-				.loadOp = vk::AttachmentLoadOp::eClear,
-				.storeOp = vk::AttachmentStoreOp::eStore,
-				.clearValue = { .depthStencil = { 1, 1 } },
+				.loadOp = loadOp,
+				.storeOp = storeOp,
+				.clearValue = { .depthStencil = { .depth = 1, .stencil = 0 }, },
 			};
+
 			width = attachment.size.width;
 			height = attachment.size.height;
 
@@ -133,15 +156,14 @@ void setupAttachments(
 			colorAttachments.push_back({
 			.imageView = attachment.accesses[resources.currentFrame].view,
 			.imageLayout = attachment.accesses[resources.currentFrame].layout,
-			
-			.loadOp = vk::AttachmentLoadOp::eClear,
-			.storeOp = vk::AttachmentStoreOp::eStore,
+			.loadOp = loadOp,
+			.storeOp = storeOp,
 			.clearValue = { .color =
 								vk::ClearColorValue {
 									.float32 =
 										std::array<float, 4> {
 											0.f, 0.f, 0.f, 0.f }, }, },
-		});
+			});
 		}
 
 		width = attachment.size.width;
@@ -150,13 +172,15 @@ void setupAttachments(
 
 	assert(colorAttachments.size() > 0 || !depthAttachment.has_value());
 
-	vk::RenderingInfoKHR renderingInfo {
+	vk::RenderingInfo renderingInfo {
 		.layerCount = 1,
 		.viewMask = 0,
 		.colorAttachmentCount = (uint32_t)colorAttachments.size(),
 		.pColorAttachments = colorAttachments.data(),
 		.pDepthAttachment =
 			depthAttachment.has_value() ? &depthAttachment.value() : nullptr,
+		.pStencilAttachment = hasStencil ? &depthAttachment.value() : nullptr,
+
 	};
 	renderingInfo.renderArea = vk::Rect2D({ 0, 0 }, { width, height }),
 	commandBuffer.beginRendering(renderingInfo);
