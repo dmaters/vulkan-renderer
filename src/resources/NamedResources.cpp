@@ -29,7 +29,7 @@ const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
 const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 	ResourceManager::_defaultNamedImageData = {
 		{
-         "gbuffer_albedo",   {
+         "gbuffer_albedo", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -41,7 +41,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "gbuffer_normal",				 {
+         "gbuffer_normal", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -53,7 +53,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "gbuffer_worldpos",   {
+         "gbuffer_worldpos", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -65,7 +65,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "gbuffer_roughnessMetallic",				 {
+         "gbuffer_roughnessMetallic", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -89,7 +89,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.transient = true,
 			}, },
 		{
-         "depth",				 {
+         "depth", {
 				.width = 800,
 				.height = 600,
 				.depth = 1,
@@ -97,7 +97,18 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.format = vk::Format::eD24UnormS8Uint,
 				.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
 				.transient = true,
-			}, }
+			}, },
+		{ "shadow_atlas",
+         {
+			  .width = 1024,
+			  .height = 1024,
+			  .depth = 1,
+			  .miplevels = 1,
+			  .format = vk::Format::eD16Unorm,
+			  .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
+	                   vk::ImageUsageFlagBits::eSampled,
+			  .transient = true,
+		  } }
 };
 
 const std::unordered_map<std::string_view, int8_t>

@@ -105,6 +105,7 @@ void Renderer::load(const std::filesystem::path& path) {
 		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
 			lightUBO.count = lights.size();
+			lightUBO.directLightIndex = 0;
 			for (int i = 0; i < lights.size(); i++) {
 				lightUBO.lights[i] = lights[i].getShaderObject();
 			}

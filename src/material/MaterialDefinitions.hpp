@@ -13,7 +13,9 @@ struct Light {
 
 struct Lights {
 	uint32_t count;
-	uint32_t _padding[3];
+	uint32_t directLightIndex;
+	uint32_t _padding[2];
+	glm::mat4 directLightProjection;
 	Light lights[256];
 };
 
@@ -46,6 +48,10 @@ struct GBufferBase {
 };
 
 struct DeferredLighting {
+	//	const Lights* light_data;
+};
+
+struct ShadowMap {
 	//	const Lights* light_data;
 };
 

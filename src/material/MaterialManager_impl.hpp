@@ -380,3 +380,68 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 
 	return index;
 }
+
+#pragma region Shadow Map
+
+template <>
+MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
+) {
+	MaterialIndex index = m_materialCount;
+	m_materialCount++;
+	/*
+	    std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
+	        // {
+	        //  .binding = 0,
+	        //  .descriptorType = vk::DescriptorType::eUniformBuffer,
+	        //  .descriptorCount = 1,
+	        //  },
+	    };
+	    vk::DescriptorSetLayout materialLayout =
+	        Instance::Get().device.createDescriptorSetLayout(
+	            vk::DescriptorSetLayoutCreateInfo {
+	                .bindingCount = (uint32_t)materialBindings.size(),
+	                .pBindings = materialBindings.data(),
+	            }
+	        );
+	*/
+	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
+		.modules = {
+					.vertex = "../resources/shaders/base_transform_vert.slang",
+					.fragment = "../resources/shaders/dummy_frag.slang",
+					},
+		.layouts = {
+			m_globalSetLayout,
+			m_emptySetLayout,
+		},
+    });
+
+	MaterialMetadata
+		metadata = { .pipeline = pipeline,
+		             .materialBindings = {},
+		             .materialLayout = m_emptySetLayout,
+					 .materialBuffers = {
+						
+						//(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
+					 },
+		             .namedResourceDependencies = 
+	{
+		{
+			.name = "shadow_atlas",
+			.kind = ResourceDependency::Kind::RenderTarget,
+			.usage = {
+				.type = ResourceUsage::Type::WRITE,
+				.access =
+					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+				.stage = vk::PipelineStageFlagBits2::
+					eEarlyFragmentTests,
+				},
+				.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+		 },
+	},
+		
+	};
+
+	m_materialMetadata[index] = metadata;
+
+	return index;
+}
