@@ -310,7 +310,7 @@ void RenderGraph::submit(Scene& scene) {
 
 	vk::AcquireNextImageInfoKHR acquireInfo;
 	acquireInfo.swapchain = m_swapchain.getSwapchain();
-	acquireInfo.timeout = 1500;
+	acquireInfo.timeout = 1e12;
 	acquireInfo.semaphore = frame.imageAvailable;
 	acquireInfo.fence = nullptr;
 	acquireInfo.deviceMask = 1;

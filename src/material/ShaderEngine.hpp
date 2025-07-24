@@ -55,7 +55,7 @@ private:
 	_get_defined_pipelines();
 
 public:
-	ShaderEngine(vk::DescriptorSetLayout globalLayout);
+	ShaderEngine();
 	~ShaderEngine();
 
 	PipelineIndex registerPipeline(const PipelineMetadata metadata);

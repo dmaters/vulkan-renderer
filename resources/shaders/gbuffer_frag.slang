@@ -1,5 +1,5 @@
 #include "base_transform.slang"
-#include "bindings/primitive.slang"
+#include "bindings/geometry.slang"
 
 struct FragmentOutput {
     float4 color;

@@ -30,14 +30,14 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 								},
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eCombinedImageSampler,
-								.descriptorCount = 150,
+								.descriptorCount = 600,
 								}
 	};
 
 	vk::DescriptorPoolCreateInfo info {
 		.flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
 		.maxSets = 128,
-		.poolSizeCount = 1,
+		.poolSizeCount = sizes.size(),
 		.pPoolSizes = sizes.data()
 	};
 
@@ -64,7 +64,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	createGlobalBuffers();
 	createGlobalDescriptorSet();
 
-	m_shaderEngine = std::make_unique<ShaderEngine>(m_globalSetLayout);
+	m_shaderEngine = std::make_unique<ShaderEngine>();
 
 	// m_names["pbr_forward"]
 	// = registerMaterial<MaterialDefinitions::PBRMaterial>();

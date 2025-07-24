@@ -15,7 +15,6 @@ struct Lights {
 	uint32_t count;
 	uint32_t directLightIndex;
 	uint32_t _padding[2];
-	glm::mat4 directLightProjection;
 	Light lights[256];
 };
 
@@ -31,6 +30,7 @@ struct PBRUniform {
 	uint32_t normal;
 	uint32_t roughness_metallic;
 };
+
 typedef std::array<PBRUniform, 512> PBRUniforms;
 
 struct PBRMaterial {

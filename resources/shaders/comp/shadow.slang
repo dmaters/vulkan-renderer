@@ -1,18 +1,16 @@
 #include "bindings/lighting.slang"
+#include "constants.slang"
 
-float linearize();
 
 float shadowPercentage(Sampler2D shadowmap, float3 worldPos) {
 
 
-    float4 csp = mul(LIGHT_DIRECT_PROJ , mul(LIGHT_DATA[LIGHT_DIRECT_INDEX].trasformation , float4(worldPos,1)));
-    float2 uv = (normalize(csp) * 0.5 + 0.5).xy;
+    float4 lightSpacePos = mul(_LIGHT_DIRECT_PROJECTION , mul(LIGHT_DATA[LIGHT_DIRECT_INDEX].trasformation , float4(worldPos,1)));
+    float2 uv = (normalize(lightSpacePos) * 0.5 + 0.5).xy;
 
     float shadowMapDepth = shadowmap.Sample(uv.xy).r;
-    float currentDepth = 
 
-    return  currentDepth < shadowDepth ? 1.0 : 0.0;
-float shadowDepth = shadowMap.Sample(someSampler, uv).r;
-float currentDepth = linearize(lightSpacePos.z / lightSpacePos.w); // Must match map
+
+    return  (lightSpacePos.z - 0.005) < shadowMapDepth ? 1.0 : 0.0;
 
 }       

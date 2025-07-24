@@ -263,6 +263,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eFragment,
 		 },
+		{
+         .binding = 4,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eFragment,
+		 },
 	};
 	vk::DescriptorSetLayout transientSetLayout =
 		Instance::Get().device.createDescriptorSetLayout(
@@ -373,7 +379,19 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 					eFragmentShader,
 			},
 			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},  
+		}, 
+		{
+			.name = "shadow_atlas",
+			.kind = ResourceDependency::Kind::Sampler,
+			.usage = {
+				.type = ResourceUsage::Type::READ,
+				.access =
+					vk::AccessFlagBits2::eShaderSampledRead,
+				.stage = vk::PipelineStageFlagBits2::
+					eFragmentShader,
+			},
+			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+		}, 
 	},
 	};
 	m_materialMetadata[index] = metadata;

@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <iostream>
 #include <string_view>
+#include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
@@ -117,7 +119,10 @@ void setupDebug(vk::Instance instance) {
 	vk::DebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {
 		.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
 		.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
-		.pfnUserCallback = debug_callback,
+		.pfnUserCallback =
+			reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(
+				debug_callback
+			),
 
 	};
 
@@ -129,7 +134,8 @@ void setupDebug(vk::Instance instance) {
 bool isDeviceSuitable(vk::PhysicalDevice device) {
 	vk::PhysicalDeviceProperties properties = device.getProperties();
 	vk::PhysicalDeviceFeatures features = device.getFeatures();
-	return properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu &&
+	return (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ||
+	        properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) &&
 	       features.geometryShader;
 }
 
@@ -199,6 +205,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.descriptorBindingPartiallyBound = true,
 		.descriptorBindingVariableDescriptorCount = true,
 		.runtimeDescriptorArray = true,
+		.timelineSemaphore = true,
 	};
 	vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature {
 		.pNext = &vulkan12Features,

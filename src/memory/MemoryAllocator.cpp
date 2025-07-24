@@ -22,10 +22,11 @@ MemoryAllocator::MemoryAllocator() {
 		if (properties.memoryHeaps[type.heapIndex].size < 256ull << 20)
 			continue;
 
-		if (type.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal)
+		if ((type.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) &&
+		    !(type.propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible))
 			m_memoryType[AllocationLocation::Device] = i;
-		else if (type.propertyFlags &
-		             vk::MemoryPropertyFlagBits::eHostVisible &&
+		else if ((type.propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible
+		         ) &&
 		         (type.propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent
 		         ))
 			m_memoryType[AllocationLocation::Host] = i;

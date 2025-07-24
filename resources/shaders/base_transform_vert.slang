@@ -1,12 +1,7 @@
 #include "base_transform.slang"
 #include "bindings/view_proj.slang"
-#include "bindings/primitive.slang"
-struct VertexInput {
-	float3 position : POSITION;
-	float3 normal : NORMAL;
-    float3 tangent : TANGENT;
-	float2 texCoord : TEXCOORD;
-};
+#include "bindings/geometry.slang"
+
 
 
 [shader("vertex")]

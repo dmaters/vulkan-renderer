@@ -9,15 +9,18 @@
 #include <assimp/vector3.h>
 
 #include <assimp/Importer.hpp>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <iostream>
 #include <optional>
 #include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
 #include "Primitive.hpp"
+#include "assimp/DefaultLogger.hpp"
 #include "material/Material.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
@@ -229,9 +232,14 @@ void SceneLoader::loadMaterials(
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
 	Assimp::Importer importer;
+
 	auto import = importer.ReadFile(
 		path.string().c_str(), aiProcessPreset_TargetRealtime_Quality
 	);
+
+	if (import == nullptr) std::cerr << importer.GetErrorString() << std::endl;
+	assert(import != nullptr);
+
 	auto folderPath = path.parent_path();
 	loadMaterials(*import, folderPath);
 	Scene scene;

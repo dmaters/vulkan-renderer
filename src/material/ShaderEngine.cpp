@@ -20,8 +20,7 @@
 #include "Instance.hpp"
 #include "Pipeline.hpp"
 
-ShaderEngine::ShaderEngine(vk::DescriptorSetLayout globalLayout) :
-	m_monitorThread(&ShaderEngine::_monitor, this) {
+ShaderEngine::ShaderEngine() : m_monitorThread(&ShaderEngine::_monitor, this) {
 	slang::createGlobalSession(&m_session);
 
 	{
@@ -44,7 +43,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	};
 	slang::ISession* session;
 
-	const char* searchPaths[] = { "resources/shaders/" };
+	const char* searchPaths[] = { "../resources/shaders/" };
 
 	m_session->createSession(
 		{
