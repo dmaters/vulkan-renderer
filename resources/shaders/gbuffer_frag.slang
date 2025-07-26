@@ -1,5 +1,5 @@
 #include "base_transform.slang"
-#include "bindings/primitive.slang"
+#include "bindings/geometry.slang"
 
 struct FragmentOutput {
     float4 color;
@@ -8,7 +8,7 @@ struct FragmentOutput {
     float2 metallic_roughness;
 };
 
-[[vk::binding(2 ,0)]] Sampler2D _textures[];
+[[vk::binding(3 ,0)]] Sampler2D _textures[];
 
 
 
@@ -27,7 +27,7 @@ FragmentOutput main(VertexOutput input){
 
     FragmentOutput output;
 
-    PrimitiveInstance instance = _instances[PRIMITIVE_INDEX];
+    PrimitiveInstance instance = _instances[uPrimitive.index];
 
     output.color = _textures[instance.albedo].Sample(input.texcoord);
     output.world_space = input.frag_position;

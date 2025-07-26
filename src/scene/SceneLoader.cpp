@@ -9,15 +9,18 @@
 #include <assimp/vector3.h>
 
 #include <assimp/Importer.hpp>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/glm.hpp>
+#include <iostream>
 #include <optional>
 #include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
 #include "Primitive.hpp"
+#include "assimp/DefaultLogger.hpp"
 #include "material/Material.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
@@ -75,6 +78,7 @@ glm::mat4 getBaseTransform(aiNode& node, const aiScene& scene) {
 Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
+	float size = 0;
 
 	for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
 		auto face = mesh.mFaces[i];
@@ -89,7 +93,7 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		auto normal = mesh.mNormals[i];
 		auto tangent = mesh.mTangents[i];
 		auto texcoord = mesh.mTextureCoords[0][i];
-
+		size = fmax(size, vertex.Length());
 		vertices.push_back(Vertex {
 			{ vertex.x, vertex.y, vertex.z },
 			{ normal.x, normal.y, normal.z },
@@ -119,6 +123,7 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		.baseVertex = vertexOffset / (uint32_t)sizeof(Vertex),
 		.baseIndex = indexOffset / (uint32_t)sizeof(uint32_t),
 		.indexCount = (uint32_t)indices.size(),
+		.size = size,
 	};
 }
 
@@ -134,10 +139,14 @@ std::vector<Primitive> SceneLoader::loadNode(
 			aiMesh* mesh = importedScene.mMeshes[root.mMeshes[i]];
 			Primitive primitive = loadMesh(*mesh);
 
-			primitive.materials.push_back(
-				{ m_materialManager.getMaterialIndex("pbr_deferred"),
-			      mesh->mMaterialIndex }
-			);
+			primitive.materials.push_back({
+				m_materialManager.getMaterialIndex("pbr_deferred"),
+				mesh->mMaterialIndex,
+			});
+			primitive.materials.push_back({
+				m_materialManager.getMaterialIndex("shadow_map"),
+				mesh->mMaterialIndex,
+			});
 			primitive.modelMatrix = transform;
 			nodePrimitives.push_back(primitive);
 		}
@@ -229,15 +238,27 @@ void SceneLoader::loadMaterials(
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
 	Assimp::Importer importer;
+
 	auto import = importer.ReadFile(
 		path.string().c_str(), aiProcessPreset_TargetRealtime_Quality
 	);
+
+	if (import == nullptr) std::cerr << importer.GetErrorString() << std::endl;
+	assert(import != nullptr);
+
 	auto folderPath = path.parent_path();
 	loadMaterials(*import, folderPath);
-	Scene scene;
 	std::vector<Primitive> primitives = loadNode(*import->mRootNode, *import);
 
-	scene.m_primitives = primitives;
+	float sceneSize = 0;
+	for (auto& primitive : primitives) {
+		sceneSize = fmax(
+			sceneSize,
+			glm::vec3(primitive.modelMatrix[3]).length() + primitive.size
+		);
+	};
+	Scene scene { .primitives = primitives, .size = sceneSize };
+
 	m_primitiveManager.buildBuffers(m_resourceManager);
 
 	return scene;

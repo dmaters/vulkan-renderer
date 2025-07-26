@@ -2,6 +2,7 @@
 
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#include <glm/matrix.hpp>
 
 MaterialDefinitions::Light Light::getShaderObject() const {
 	glm::mat4 transformation = glm::mat4(1);
@@ -9,7 +10,8 @@ MaterialDefinitions::Light Light::getShaderObject() const {
 	glm::mat4 translationMat = glm::translate(transformation, position);
 
 	return MaterialDefinitions::Light {
-		.tranformation = translationMat * orientationMat,
+		.tranformation =
+			glm::transpose(glm::inverse(translationMat * orientationMat)),
 		.color = glm::vec3(color),
 		.intensity = intensity,
 	};

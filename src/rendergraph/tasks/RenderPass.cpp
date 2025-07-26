@@ -170,7 +170,7 @@ void setupAttachments(
 		height = attachment.size.height;
 	}
 
-	assert(colorAttachments.size() > 0 || !depthAttachment.has_value());
+	assert(colorAttachments.size() > 0 || depthAttachment.has_value());
 
 	vk::RenderingInfo renderingInfo {
 		.layerCount = 1,
@@ -252,13 +252,19 @@ void RenderPass::execute(
 	}
 
 	for (const Primitive& primitive : resources.primitives) {
-		if (primitive.materials[0].index != m_material) continue;
+		if (!std::any_of(
+				primitive.materials.begin(),
+				primitive.materials.end(),
+				[&passMaterial = m_material](MaterialInstance primitiveMaterial
+		        ) { return primitiveMaterial.index == passMaterial; }
+			))
+			continue;
 
 		struct PushConstants {
 			glm::mat4 transform;
 			uint32_t instanceIndex;
 		};
-		PushConstants data = { primitive.modelMatrix,
+		PushConstants data = { glm::transpose(primitive.modelMatrix),
 			                   primitive.materials[0].instance };
 		commandBuffer.pushConstants(
 			material.pipeline.pipelineLayout,

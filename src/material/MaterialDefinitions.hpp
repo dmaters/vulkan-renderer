@@ -5,6 +5,16 @@
 
 namespace MaterialDefinitions {
 
+struct EnvironmentData {
+	glm::vec3 environmentColor;
+	float sceneSize;
+};
+
+struct ViewProjection {
+	glm::mat4 view;
+	glm::mat4 projection;
+};
+
 struct Light {
 	glm::mat4 tranformation;
 	glm::vec3 color;
@@ -13,13 +23,9 @@ struct Light {
 
 struct Lights {
 	uint32_t count;
-	uint32_t _padding[3];
+	uint32_t directLightIndex;
+	uint32_t _padding[2];
 	Light lights[256];
-};
-
-struct ViewProjection {
-	glm::mat4 view;
-	glm::mat4 projection;
 };
 
 struct LightingMaterial {};
@@ -29,6 +35,7 @@ struct PBRUniform {
 	uint32_t normal;
 	uint32_t roughness_metallic;
 };
+
 typedef std::array<PBRUniform, 512> PBRUniforms;
 
 struct PBRMaterial {
@@ -46,6 +53,10 @@ struct GBufferBase {
 };
 
 struct DeferredLighting {
+	//	const Lights* light_data;
+};
+
+struct ShadowMap {
 	//	const Lights* light_data;
 };
 

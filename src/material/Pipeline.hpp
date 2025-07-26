@@ -8,9 +8,7 @@
 #include <vulkan/vulkan_structs.hpp>
 
 struct PipelineConfiguration {
-	std::vector<vk::Format> attachmentFormats = {
-		vk::Format::eR16G16B16A16Sfloat
-	};
+	std::vector<vk::Format> attachmentFormats = {};
 
 	bool depthWrite = false;
 	vk::CompareOp depthOp = vk::CompareOp::eNever;

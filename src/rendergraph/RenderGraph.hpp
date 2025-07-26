@@ -77,6 +77,6 @@ public:
 		std::string_view name, ResourceManager::BufferDescription description
 	);
 
-	void submit(Scene& scene);
+	void submit(const Scene& scene);
 	void build(GraphData buildData);
 };

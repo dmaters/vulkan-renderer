@@ -76,12 +76,12 @@ void Renderer::render() {
 		m_swapchain.rebuild();
 		return;
 	}
-	m_currentScene->getCamera().setResolution({
+	m_currentScene.camera.setResolution({
 		resolution.width,
 		resolution.height,
 	});
 
-	m_renderGraph.submit(*m_currentScene);
+	m_renderGraph.submit(m_currentScene);
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
 };
@@ -89,31 +89,44 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
+
 	glm::mat3 orientation = glm::mat3(1);
 	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, -1, 0);
-
-	m_currentScene->addLight({
+	orientation[2] = glm::vec3(0, 1, 0);
+	orientation[0] = glm::vec3(1, 0, 0);
+	m_currentScene.lights.push_back({
 		.position = glm::vec3(0, 150, 0),
 		.orientation = orientation,
 		.intensity = 20,
 	});
 
-	auto lights = m_currentScene->getLights();
+	const auto& lights = m_currentScene.lights;
 
 	m_resourceManager.updateBufferSync<MaterialDefinitions::Lights>(
 		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
 			lightUBO.count = lights.size();
+			lightUBO.directLightIndex = 0;
 			for (int i = 0; i < lights.size(); i++) {
 				lightUBO.lights[i] = lights[i].getShaderObject();
 			}
 		}
 	);
 
+	m_resourceManager.updateBufferSync<MaterialDefinitions::EnvironmentData>(
+		m_resourceManager.getNamedBufferIndex("environment_data"),
+		[size =
+	         m_currentScene.size](MaterialDefinitions::EnvironmentData& envData
+	    ) {
+			envData.sceneSize = size;
+			envData.environmentColor = glm::vec3(0.04, 0.02, 0.1);
+			// envData.environmentColor = glm::vec3(1);
+		}
+	);
+
 	MaterialIndex lighting =
 		m_materialManager.getMaterialIndex("lighting_deferred");
-	m_currentScene->addPrimitive({
+	m_currentScene.primitives.push_back({
 		.baseVertex = 0,
 		.baseIndex = 0,
 		.indexCount = 3,
