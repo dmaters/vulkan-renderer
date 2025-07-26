@@ -119,10 +119,7 @@ void setupDebug(vk::Instance instance) {
 	vk::DebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {
 		.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
 		.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
-		.pfnUserCallback =
-			reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(
-				debug_callback
-			),
+		.pfnUserCallback = debug_callback,
 
 	};
 
@@ -206,6 +203,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.descriptorBindingVariableDescriptorCount = true,
 		.runtimeDescriptorArray = true,
 		.timelineSemaphore = true,
+
 	};
 	vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature {
 		.pNext = &vulkan12Features,

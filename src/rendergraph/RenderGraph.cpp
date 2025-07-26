@@ -297,7 +297,7 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 	});
 }
 
-void RenderGraph::submit(Scene& scene) {
+void RenderGraph::submit(const Scene& scene) {
 	clearUnusedResources();
 
 	vk::Device& device = Instance::Get().device;
@@ -335,8 +335,8 @@ void RenderGraph::submit(Scene& scene) {
 	});
 
 	MaterialDefinitions::ViewProjection projView {
-		.view = scene.getCamera().getViewMatrix(),
-		.projection = scene.getCamera().getProjectionMatrix(),
+		.view = scene.camera.getViewMatrix(),
+		.projection = scene.camera.getProjectionMatrix(),
 	};
 	Buffer& projViewBuffer =
 		m_resourceManager.getNamedBuffer("view_projection");
@@ -350,7 +350,7 @@ void RenderGraph::submit(Scene& scene) {
 	const Resources resources {
 		.resourceManager = m_resourceManager,
 		.materialManager = m_materialManager,
-		.primitives = scene.getPrimitives(),
+		.primitives = scene.primitives,
 		.currentFrame = m_currentFrame,
 	};
 

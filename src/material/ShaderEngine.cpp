@@ -43,14 +43,13 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	};
 	slang::ISession* session;
 
-	const char* searchPaths[] = { "../resources/shaders/" };
+	const char* searchPaths[] = { "../resources/shaders" };
 
 	m_session->createSession(
 		{
 			.structureSize = sizeof(slang::SessionDesc),
 			.targets = &desc,
 			.targetCount = 1,
-			.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR,
 			.searchPaths = searchPaths,
 			.searchPathCount = 1,
 

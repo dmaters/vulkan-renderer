@@ -72,9 +72,19 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 		registerMaterial<MaterialDefinitions::GBufferBase>();
 	m_names["lighting_deferred"] =
 		registerMaterial<MaterialDefinitions::DeferredLighting>();
+	m_names["shadow_map"] = registerMaterial<MaterialDefinitions::ShadowMap>();
 }
 
 void MaterialManager::createGlobalBuffers() {
+	BufferHandle viewProj = m_resourceManager.createBuffer({
+		.size = sizeof(MaterialDefinitions::ViewProjection),
+		.usage = vk::BufferUsageFlagBits::eTransferDst |
+	             vk::BufferUsageFlagBits::eUniformBuffer,
+		.location = AllocationLocation::Device,
+	});
+
+	m_resourceManager.setName("view_projection", viewProj);
+
 	BufferHandle lightBuffer = m_resourceManager.createBuffer({
 		.size = sizeof(MaterialDefinitions::Lights),
 		.usage = vk::BufferUsageFlagBits::eTransferDst |
@@ -84,20 +94,20 @@ void MaterialManager::createGlobalBuffers() {
 
 	m_resourceManager.setName("light_buffer", lightBuffer);
 
-	BufferHandle viewProj = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::ViewProjection),
+	BufferHandle environmentData = m_resourceManager.createBuffer({
+		.size = sizeof(MaterialDefinitions::EnvironmentData),
 		.usage = vk::BufferUsageFlagBits::eTransferDst |
 	             vk::BufferUsageFlagBits::eUniformBuffer,
 		.location = AllocationLocation::Device,
 	});
 
-	m_resourceManager.setName("view_projection", viewProj);
+	m_resourceManager.setName("environment_data", environmentData);
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
 	vk::Device& device = Instance::Get().device;
 
-	std::array<vk::DescriptorSetLayoutBinding, 3> bindings {
+	std::array<vk::DescriptorSetLayoutBinding, 4> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
@@ -114,6 +124,13 @@ void MaterialManager::createGlobalDescriptorSet() {
 										},
 		vk::DescriptorSetLayoutBinding {
 										.binding = 2,
+										.descriptorType = vk::DescriptorType::eUniformBuffer,
+										.descriptorCount = 1,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.pImmutableSamplers = {},
+										},
+		vk::DescriptorSetLayoutBinding {
+										.binding = 3,
 										.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 										.descriptorCount = 512,
 										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
@@ -121,7 +138,8 @@ void MaterialManager::createGlobalDescriptorSet() {
 										}
 	};
 
-	std::array<vk::DescriptorBindingFlags, 3> bindingFlags = {
+	std::array<vk::DescriptorBindingFlags, 4> bindingFlags = {
+		vk::DescriptorBindingFlags {},
 		vk::DescriptorBindingFlags {},
 		vk::DescriptorBindingFlags {},
 		vk::DescriptorBindingFlagBits::ePartiallyBound |
@@ -169,6 +187,25 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pTexelBufferView = {},
 	};
 
+	Buffer& environmentdataBuffer =
+		m_resourceManager.getNamedBuffer("environment_data");
+
+	vk::DescriptorBufferInfo environmentDataInfo {
+		.buffer = environmentdataBuffer.buffer,
+		.offset = environmentdataBuffer.bufferAccess[0].offset,
+		.range = environmentdataBuffer.size,
+	};
+
+	vk::WriteDescriptorSet environemntWriteDescriptor {
+		.dstSet = set,
+		.dstBinding = 1,
+		.descriptorCount = 1,
+		.descriptorType = vk::DescriptorType::eUniformBuffer,
+		.pImageInfo = {},
+		.pBufferInfo = &environmentDataInfo,
+		.pTexelBufferView = {},
+	};
+
 	Buffer& lightBuffer = m_resourceManager.getNamedBuffer("light_buffer");
 
 	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
@@ -178,7 +215,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 	};
 	vk::WriteDescriptorSet lightBufferWriteDescriptor {
 		.dstSet = set,
-		.dstBinding = 1,
+		.dstBinding = 2,
 		.descriptorCount = 1,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.pImageInfo = {},
@@ -186,7 +223,10 @@ void MaterialManager::createGlobalDescriptorSet() {
 		.pTexelBufferView = {},
 	};
 	device.updateDescriptorSets(
-		{ cameraWriteDescriptor, lightBufferWriteDescriptor }, {}
+		{ cameraWriteDescriptor,
+	      environemntWriteDescriptor,
+	      lightBufferWriteDescriptor },
+		{}
 	);
 	m_globalSet = set;
 	m_globalSetLayout = layout;
@@ -352,7 +392,7 @@ uint32_t MaterialManager::registerTextureGroup(
 
 	vk::WriteDescriptorSet writeInfo = {
 		.dstSet = m_globalSet,
-		.dstBinding = 2,
+		.dstBinding = 3,
 		.dstArrayElement = offset,
 		.descriptorCount = (uint32_t)textures.size(),
 		.descriptorType = vk::DescriptorType::eCombinedImageSampler,

@@ -29,7 +29,7 @@ private:
 	Swapchain m_swapchain;
 	RenderGraph m_renderGraph;
 
-	std::optional<Scene> m_currentScene;
+	Scene m_currentScene;
 
 	uint32_t m_currentFrame = 0;
 
@@ -40,5 +40,5 @@ public:
 	void load(const std::filesystem::path& path);
 	void render();
 
-	Scene& getScene() { return *m_currentScene; }
+	Scene& getScene() { return m_currentScene; }
 };

@@ -308,8 +308,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		metadata = { .pipeline = pipeline,
 		             .materialBindings = materialBindings,
 		             .materialLayout = materialLayout,
-					 .materialBuffers ={
-					 },
+					 .materialBuffers ={},
 		             .namedResourceDependencies = 
 	{{
 			.name = "main_color",
@@ -424,13 +423,17 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 	*/
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
-					.vertex = "../resources/shaders/base_transform_vert.slang",
+					.vertex = "../resources/shaders/shadow_vert.slang",
 					.fragment = "../resources/shaders/dummy_frag.slang",
 					},
 		.layouts = {
 			m_globalSetLayout,
 			m_emptySetLayout,
 		},
+		.configuration ={
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+		}
     });
 
 	MaterialMetadata

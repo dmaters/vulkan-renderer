@@ -5,6 +5,16 @@
 
 namespace MaterialDefinitions {
 
+struct EnvironmentData {
+	glm::vec3 environmentColor;
+	float sceneSize;
+};
+
+struct ViewProjection {
+	glm::mat4 view;
+	glm::mat4 projection;
+};
+
 struct Light {
 	glm::mat4 tranformation;
 	glm::vec3 color;
@@ -16,11 +26,6 @@ struct Lights {
 	uint32_t directLightIndex;
 	uint32_t _padding[2];
 	Light lights[256];
-};
-
-struct ViewProjection {
-	glm::mat4 view;
-	glm::mat4 projection;
 };
 
 struct LightingMaterial {};
