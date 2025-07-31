@@ -40,10 +40,7 @@ glm::mat4 Camera::getViewMatrix() const {
 
 glm::mat4 Camera::getProjectionMatrix() const {
 	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(90.f),
-		(float)m_resolution.x / m_resolution.y,
-		0.1f,
-		1000.0f
+		glm::radians(90.f), (float)m_resolution.x / m_resolution.y, 0.1f, 600.0f
 	);
 	return proj;
 }
@@ -58,14 +55,15 @@ std::array<glm::vec4, 6> Camera::getFrustum() const {
 	std::array<glm::vec4, 6> planes;
 	float aspectRatio = ((float)m_resolution.x / m_resolution.y);
 
-	std::cout << glm::to_string(glm::mat3(right, up, direction)) << std::endl;
+	// std::cout << glm::to_string(glm::mat3(right, up, direction)) <<
+	// std::endl;
 
 	float vertical = std::sin(glm::radians(m_fov * 0.5));
 	float horizontal = vertical * aspectRatio;
 
 	// Near and Far planes
 	planes[0] = glm::vec4(-direction, 0.1);
-	planes[1] = glm::vec4(direction, 1000);
+	planes[1] = glm::vec4(direction, 600);
 
 	// Left and Right planes
 	glm::vec3 leftNormal =
@@ -73,24 +71,24 @@ std::array<glm::vec4, 6> Camera::getFrustum() const {
 	planes[2] = glm::vec4(leftNormal, 0);
 
 	glm::vec3 rightNormal =
-		glm::normalize(glm::cross(up, direction - right * horizontal));
+		glm::normalize(-glm::cross(up, direction - right * horizontal));
 	planes[3] = glm::vec4(rightNormal, 0);
 
 	// Top and Bottom planes
+
+	// ORDer inverted
 	glm::vec3 topNormal =
-		glm::normalize(-glm::cross(right, direction - up * vertical));
+		glm::normalize(glm::cross(right, direction - up * vertical));
 	planes[4] = glm::vec4(topNormal, 0);
 
 	glm::vec3 bottomNormal =
-		glm::normalize(glm::cross(right, direction + up * vertical));
+		glm::normalize(-glm::cross(right, direction + up * vertical));
 	planes[5] = glm::vec4(bottomNormal, 0);
 
 	return planes;
 }
 std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 	std::array<glm::vec4, 6> planes = getFrustum();
-	glm::mat4 view = getViewMatrix();
-	glm::mat4 inverse = glm::inverse(view);
 
 	std::array<glm::vec4, 8> bounds;
 
@@ -120,8 +118,7 @@ std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 		z[2] = coefficents;
 		position.z = glm::determinant(z) / baseDet;
 
-		bounds[i] = inverse * glm::vec4(position, 1);
+		bounds[i] = glm::vec4(position, 1);
 	}
-
 	return bounds;
 }

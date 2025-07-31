@@ -128,20 +128,24 @@ void setupDebug(vk::Instance instance) {
 
 //// PhysicalDevice
 
-bool isDeviceSuitable(vk::PhysicalDevice device) {
-	vk::PhysicalDeviceProperties properties = device.getProperties();
-	vk::PhysicalDeviceFeatures features = device.getFeatures();
-	return (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ||
-	        properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) &&
-	       features.geometryShader;
-}
-
 vk::PhysicalDevice getPhysicalDevice(vk::Instance instance) {
 	std::vector<vk::PhysicalDevice> devices =
 		instance.enumeratePhysicalDevices();
 
-	for (auto device : devices)
-		if (isDeviceSuitable(device)) return device;
+	std::optional<vk::PhysicalDevice> integrated;
+
+	for (auto device : devices) {
+		vk::PhysicalDeviceProperties properties = device.getProperties();
+		vk::PhysicalDeviceFeatures features = device.getFeatures();
+
+		if (!features.geometryShader) continue;
+		if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+			return device;
+		if (properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu)
+			integrated = device;
+	}
+
+	if (integrated.has_value()) return *integrated;
 
 	throw "No suitable physical device found.";
 }
@@ -161,7 +165,8 @@ Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 			families.graphicsIndex = i;
 			families.presentIndex = i;
 		}
-		if (property.queueFlags & vk::QueueFlagBits::eTransfer)
+		if (property.queueFlags & vk::QueueFlagBits::eTransfer &&
+		    !(property.queueFlags & vk::QueueFlagBits::eGraphics))
 			families.transferIndex = i;
 	}
 
@@ -186,7 +191,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	vk::DeviceQueueCreateInfo queueInfo[] {
 		vk::DeviceQueueCreateInfo {
 								   .queueFamilyIndex = queueFamilies.graphicsIndex,
-								   .queueCount = 3,
+								   .queueCount = 1,
 								   .pQueuePriorities = std::array<float,            3> { 1.f, 1.f, 1.f }.data(),
 								   },
 		vk::DeviceQueueCreateInfo {
@@ -195,7 +200,13 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 								   .pQueuePriorities = std::array<float, 1> { 1.f }.data(),
 								   }
 	};
+
+	vk::PhysicalDeviceVulkan11Features vulkan11Features {
+		.shaderDrawParameters = true,
+	};
+
 	vk::PhysicalDeviceVulkan12Features vulkan12Features {
+		.pNext = &vulkan11Features,
 		.descriptorIndexing = true,
 		.descriptorBindingSampledImageUpdateAfterBind = true,
 		.descriptorBindingUpdateUnusedWhilePending = true,

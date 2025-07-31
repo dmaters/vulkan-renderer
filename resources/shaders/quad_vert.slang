@@ -16,6 +16,6 @@ VertexOutput main(uint vertexID : SV_VertexID){
 	float2 pos = vertices[vertexID];
     return {
         float4(pos, 0.0, 1),
-        (pos * 0.5 + 0.5) * float2(1,-1), 
+        (pos * 0.5 + 0.5 ) * float2(1,-1), 
     };
 }

@@ -6,9 +6,6 @@
 namespace Shadow{
    
     float4x4 shadowProjectionMatrix() {
-
-      
-        
         float right = -1e9, left = 1e9, top = -1e9, bottom = 1e9, far = -1e9;
 
         for(int i = 0; i< 8; i++){
@@ -33,11 +30,13 @@ namespace Shadow{
 
 float shadowPercentage(Sampler2D shadowmap, float3 worldPos) {
 
-        float4 lightSpacePos = mul(mul(shadowProjectionMatrix() ,uLightData.lights[uLightData.directIndex].view) , float4(worldPos,1));
+        float4 lightSpacePos = mul(mul(mul(shadowProjectionMatrix() ,uLightData.lights[uLightData.directIndex].view),uCamera.view), float4(worldPos,1));
+       // lightSpacePos.y = -lightSpacePos.y;
         float2 uv = lightSpacePos.xy * 0.5 + 0.5;
-        
+        uv.y = -uv.y;
         float shadowMapDepth = shadowmap.Sample(uv.xy).r;
         
+        //return shadowMapDepth;
         return  (lightSpacePos.z - 0.005) < shadowMapDepth ? 0 : 1;
     }       
 }

@@ -13,7 +13,6 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
-#include <vector>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
