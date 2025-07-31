@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <glm/glm.hpp>
 
 class Camera {
@@ -10,7 +11,7 @@ public:
 	};
 
 private:
-	glm::vec3 m_position = glm::vec3(0, 0, -150);
+	glm::vec3 m_position = glm::vec3(0, 0, 150);
 	float m_pitch = 0;
 	float m_yaw = 0;
 	float m_fov = 70;
@@ -23,5 +24,9 @@ public:
 	void setResolution(glm::ivec2 resolution) { m_resolution = resolution; }
 
 	glm::mat4 getViewMatrix() const;
+
 	glm::mat4 getProjectionMatrix() const;
+
+	std::array<glm::vec4, 6> getFrustum() const;
+	std::array<glm::vec4, 8> getFrustumBounds() const;
 };

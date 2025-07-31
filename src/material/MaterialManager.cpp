@@ -77,13 +77,13 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 
 void MaterialManager::createGlobalBuffers() {
 	BufferHandle viewProj = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::ViewProjection),
+		.size = sizeof(MaterialDefinitions::Camera),
 		.usage = vk::BufferUsageFlagBits::eTransferDst |
 	             vk::BufferUsageFlagBits::eUniformBuffer,
 		.location = AllocationLocation::Device,
 	});
 
-	m_resourceManager.setName("view_projection", viewProj);
+	m_resourceManager.setName("camera_data", viewProj);
 
 	BufferHandle lightBuffer = m_resourceManager.createBuffer({
 		.size = sizeof(MaterialDefinitions::Lights),
@@ -169,7 +169,7 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& cameraBuffer = m_resourceManager.getNamedBuffer("view_projection");
+	Buffer& cameraBuffer = m_resourceManager.getNamedBuffer("camera_data");
 
 	vk::DescriptorBufferInfo cameraDescriptorInfo {
 		.buffer = cameraBuffer.buffer,

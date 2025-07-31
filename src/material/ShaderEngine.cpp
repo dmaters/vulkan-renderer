@@ -13,6 +13,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
@@ -38,21 +39,30 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 ) {
 	slang::TargetDesc desc {
 		.format = SLANG_SPIRV,
-		.profile = m_session->findProfile("glsl_450"),
+		.profile = m_session->findProfile("glsl_460"),
 
 	};
 	slang::ISession* session;
 
 	const char* searchPaths[] = { "../resources/shaders" };
 
+	std::vector<slang::CompilerOptionEntry> compilerOptions = {
+		{
+         .name = slang::CompilerOptionName::VulkanInvertY,
+         .value = slang::CompilerOptionValue { .intValue0 = true },
+		 }
+	};
+
 	m_session->createSession(
 		{
 			.structureSize = sizeof(slang::SessionDesc),
 			.targets = &desc,
 			.targetCount = 1,
+			.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR,
 			.searchPaths = searchPaths,
 			.searchPathCount = 1,
-
+			.compilerOptionEntries = compilerOptions.data(),
+			.compilerOptionEntryCount = (uint32_t)compilerOptions.size(),
 		},
 		&session
 

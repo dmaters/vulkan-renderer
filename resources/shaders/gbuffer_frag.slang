@@ -32,7 +32,7 @@ FragmentOutput main(VertexOutput input){
     output.color = _textures[instance.albedo].Sample(input.texcoord);
     output.world_space = input.frag_position;
    	 
-	float3x3 TBN = float3x3(input.tangent, input.bitangent, input.normal);
+	float3x3 TBN = float3x3(input.tangent, input.bitangent,-input.normal);
 	float3 localNormal = normalize(
 		_textures[instance.normal].Sample(input.texcoord).rgb *
 			2.0 -

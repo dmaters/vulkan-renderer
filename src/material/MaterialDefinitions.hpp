@@ -10,13 +10,15 @@ struct EnvironmentData {
 	float sceneSize;
 };
 
-struct ViewProjection {
+struct Camera {
 	glm::mat4 view;
 	glm::mat4 projection;
+	std::array<glm::vec4, 8> frustumBounds;
+	std::array<glm::vec4, 6> frustumPlanes;
 };
 
 struct Light {
-	glm::mat4 tranformation;
+	glm::mat4 view;
 	glm::vec3 color;
 	float intensity;
 };
