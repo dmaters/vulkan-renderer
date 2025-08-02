@@ -58,9 +58,6 @@ std::array<glm::vec4, 6> Camera::getFrustum() const {
 	std::array<glm::vec4, 6> planes;
 	float aspectRatio = ((float)m_resolution.x / m_resolution.y);
 
-	// std::cout << glm::to_string(glm::mat3(right, up, direction)) <<
-	// std::endl;
-
 	float vertical = std::sin(glm::radians(m_fov * 0.5));
 	float horizontal = vertical * aspectRatio;
 
@@ -90,29 +87,7 @@ std::array<glm::vec4, 6> Camera::getFrustum() const {
 
 	return planes;
 }
-void shadowProjectionMatrix(
-	const glm::mat4& lightView, const std::array<glm::vec4, 8>& frustumCorners
-) {
-	// initialize to huge inverted bounds
-	float left = 1e9f, right = -1e9f;
-	float bottom = 1e9f, top = -1e9f;
-	float zNear = 1e9f, zFar = -1e9f;
 
-	// transform each world‐space frustum corner into light‐space
-	for (int i = 0; i < 8; ++i) {
-		glm::vec4 p = lightView * frustumCorners[i];
-
-		left = std::min(left, p.x);
-		right = std::max(right, p.x);
-		bottom = std::min(bottom, p.y);
-		top = std::max(top, p.y);
-		zNear = std::min(zNear, p.z);
-		zFar = std::max(zFar, p.z);
-	}
-
-	// now build an ortho that’s guaranteed to have near <= far
-	glm::mat4 ortho = glm::ortho(left, right, bottom, top, zNear, zFar);
-}
 std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 	std::array<glm::vec4, 6> planes = getFrustum();
 
@@ -146,6 +121,6 @@ std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 
 		bounds[i] = glm::vec4(getOrientation() * (position + m_position), 1);
 	}
-	shadowProjectionMatrix(getViewMatrix(), bounds);
+
 	return bounds;
 }
