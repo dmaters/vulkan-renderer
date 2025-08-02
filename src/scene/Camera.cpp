@@ -25,15 +25,18 @@ void Camera::rotate(glm::vec2 rotate) {
 	m_pitch += rotate.y * 10;
 	m_pitch = glm::clamp(m_pitch, -89.0f, 89.0f);
 }
-
-glm::mat4 Camera::getViewMatrix() const {
+glm::mat3 Camera::getOrientation() const {
 	glm::quat pitchQuat =
 		glm::angleAxis(glm::radians(m_pitch), glm::vec3(1, 0, 0));
 	glm::quat yawQuat = glm::angleAxis(glm::radians(m_yaw), glm::vec3(0, 1, 0));
-	glm::mat3 rotation = glm::mat3_cast(yawQuat * pitchQuat);
+	glm::mat3 orientation = glm::mat3_cast(yawQuat * pitchQuat);
+	return orientation;
+}
 
-	glm::mat4 view =
-		glm::lookAtRH(rotation * m_position, glm::vec3(0), glm::vec3(0, 1, 0));
+glm::mat4 Camera::getViewMatrix() const {
+	glm::mat4 view = glm::lookAtRH(
+		getOrientation() * m_position, glm::vec3(0), glm::vec3(0, 1, 0)
+	);
 
 	return view;
 };
@@ -87,6 +90,29 @@ std::array<glm::vec4, 6> Camera::getFrustum() const {
 
 	return planes;
 }
+void shadowProjectionMatrix(
+	const glm::mat4& lightView, const std::array<glm::vec4, 8>& frustumCorners
+) {
+	// initialize to huge inverted bounds
+	float left = 1e9f, right = -1e9f;
+	float bottom = 1e9f, top = -1e9f;
+	float zNear = 1e9f, zFar = -1e9f;
+
+	// transform each world‐space frustum corner into light‐space
+	for (int i = 0; i < 8; ++i) {
+		glm::vec4 p = lightView * frustumCorners[i];
+
+		left = std::min(left, p.x);
+		right = std::max(right, p.x);
+		bottom = std::min(bottom, p.y);
+		top = std::max(top, p.y);
+		zNear = std::min(zNear, p.z);
+		zFar = std::max(zFar, p.z);
+	}
+
+	// now build an ortho that’s guaranteed to have near <= far
+	glm::mat4 ortho = glm::ortho(left, right, bottom, top, zNear, zFar);
+}
 std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 	std::array<glm::vec4, 6> planes = getFrustum();
 
@@ -118,7 +144,8 @@ std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
 		z[2] = coefficents;
 		position.z = glm::determinant(z) / baseDet;
 
-		bounds[i] = glm::vec4(position, 1);
+		bounds[i] = glm::vec4(getOrientation() * (position + m_position), 1);
 	}
+	shadowProjectionMatrix(getViewMatrix(), bounds);
 	return bounds;
 }

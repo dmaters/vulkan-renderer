@@ -93,9 +93,9 @@ void Renderer::load(const std::filesystem::path& path) {
 	glm::mat3 orientation = glm::mat3(1);
 	orientation[0] = glm::vec3(1, 0, 0);
 	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, -1, 0);
+	orientation[2] = glm::vec3(0, 1, 0);
 	m_currentScene.lights.push_back({
-		.position = glm::vec3(0, 0, -150),
+		.position = glm::vec3(0, 0, 150),
 		.orientation = orientation,
 		.intensity = 20,
 	});

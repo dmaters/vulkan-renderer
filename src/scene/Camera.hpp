@@ -23,6 +23,7 @@ public:
 
 	void setResolution(glm::ivec2 resolution) { m_resolution = resolution; }
 
+	glm::mat3 getOrientation() const;
 	glm::mat4 getViewMatrix() const;
 
 	glm::mat4 getProjectionMatrix() const;

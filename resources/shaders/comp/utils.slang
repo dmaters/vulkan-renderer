@@ -1,12 +1,22 @@
 #pragma once
 
+    constexpr float4x4 viewInv(float4x4 view) {
+        
+        
+        float4x4 inv = view;
+        float3 position = view[3].xyz;
+        view[3] = float4(0);
+        view = transpose(view);
+        view[3] = float4(mul(float3x3(view),position),1);
 
+        return view;
+    };
 
-    constexpr float4x4 orthoProjectionMatrix(float top, float bottom, float left, float right, float depth) {
+    constexpr float4x4 orthoProjectionMatrix(float left, float right, float bottom,float top, float near, float far) {
         return float4x4(
             2/(right - left), 0,0,- (right + left) / (right - left),
-            0,2/(top-bottom),0,- (top + bottom) / (top - bottom),
-            0,0,-1/depth,0,
+            0,2/(top-bottom),0,- (top + bottom) / (top - bottom), 
+            0,0,-1/(far - near), - near/(far - near),
             0,0,0,1
         );
     };
