@@ -334,15 +334,17 @@ void RenderGraph::submit(const Scene& scene) {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 	});
 
-	MaterialDefinitions::ViewProjection projView {
+	MaterialDefinitions::Camera cameraView {
 		.view = scene.camera.getViewMatrix(),
 		.projection = scene.camera.getProjectionMatrix(),
+		.frustumBounds = scene.camera.getFrustumBounds(),
+		.frustumPlanes = scene.camera.getFrustum(),
 	};
-	Buffer& projViewBuffer =
-		m_resourceManager.getNamedBuffer("view_projection");
+
+	Buffer& projViewBuffer = m_resourceManager.getNamedBuffer("camera_data");
 
 	commandBuffer.updateBuffer(
-		projViewBuffer.buffer, 0, sizeof(projView), &projView
+		projViewBuffer.buffer, 0, sizeof(cameraView), &cameraView
 	);
 
 	writeInitialSyncronizationBarrier(commandBuffer);

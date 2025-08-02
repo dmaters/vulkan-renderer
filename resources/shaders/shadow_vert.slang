@@ -1,11 +1,13 @@
 #include "bindings/lighting.slang"
 #include "bindings/geometry.slang"
-
+#include "comp/utils.slang"
 #include "bindings/environment.slang"
-
+#include "comp/shadow.slang"
 
 
 [shader("vertex")]
 float4  main(VertexInput input) : SV_Position {
-	return 	mul(mul(mul(directLightProjectionMatrix(uEnvironment.scene_size),uLightData.lights[uLightData.directIndex].trasformation ),uPrimitive.transformation), float4(input.position, 1.0));
+	
+
+	return 	mul(mul(mul(Shadow::shadowProjectionMatrix(),uLightData.lights[uLightData.directIndex].view ),uPrimitive.transformation), float4(input.position, 1.0));
 }
