@@ -20,7 +20,7 @@ private:
 
 public:
 	void rotate(glm::vec2 rotation);
-
+	void translate(glm::vec3 deltaPos) { m_position += deltaPos; }
 	void setResolution(glm::ivec2 resolution) { m_resolution = resolution; }
 
 	glm::mat3 getOrientation() const;

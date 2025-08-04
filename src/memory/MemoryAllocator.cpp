@@ -19,7 +19,7 @@ MemoryAllocator::MemoryAllocator() {
 
 	for (int i = properties.memoryTypeCount; i >= 0; i--) {
 		vk::MemoryType type = properties.memoryTypes[i];
-		if (properties.memoryHeaps[type.heapIndex].size < 256ull << 20)
+		if (properties.memoryHeaps[type.heapIndex].size < 1024ull << 20)
 			continue;
 
 		if ((type.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) &&
@@ -107,7 +107,7 @@ bool MemoryAllocator::allocate(
 	vk::Device& device = Instance::Get().device;
 
 	vk::MemoryAllocateInfo info {
-		.allocationSize = 256ull << 20,
+		.allocationSize = 1024ull << 20,
 		.memoryTypeIndex = m_memoryType[location],
 	};
 

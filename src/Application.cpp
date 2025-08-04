@@ -73,7 +73,11 @@ int Application::run() {
 				);
 				cameraLocked = false;
 			}
-
+			if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+				m_renderer->getScene().camera.translate(
+					glm::vec3(0, 0, -1) * event.wheel.y
+				);
+			}
 			if (cameraLocked) {
 				glm::vec2 coordinates;
 				SDL_GetMouseState(&coordinates.x, &coordinates.y);

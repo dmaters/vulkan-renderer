@@ -168,7 +168,7 @@ void SceneLoader::loadMaterials(
 
 	std::vector<ImageHandle> images;
 
-	uint32_t imageCount = 2;
+	uint32_t imageCount = 3;
 	std::vector<uint32_t> imageIndices;
 	images.push_back(
 		m_resourceManager.loadImage("resources/textures/default_albedo.png")
@@ -192,7 +192,7 @@ void SceneLoader::loadMaterials(
 			images.push_back(m_resourceManager.loadImage(
 				texturePath / std::filesystem::path(path.C_Str())
 			));
-			imageIndices.push_back(++imageCount);
+			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(0);
 		}
@@ -202,7 +202,7 @@ void SceneLoader::loadMaterials(
 			images.push_back(m_resourceManager.loadImage(
 				texturePath / std::filesystem::path(path.C_Str())
 			));
-			imageIndices.push_back(++imageCount);
+			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(1);
 		}
@@ -213,7 +213,7 @@ void SceneLoader::loadMaterials(
 			images.push_back(m_resourceManager.loadImage(
 				texturePath / std::filesystem::path(path.C_Str())
 			));
-			imageIndices.push_back(++imageCount);
+			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(2);
 		}

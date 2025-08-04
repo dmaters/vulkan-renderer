@@ -36,6 +36,7 @@ struct PBRUniform {
 	uint32_t albedo;
 	uint32_t normal;
 	uint32_t roughness_metallic;
+	int32_t _padding;
 };
 
 typedef std::array<PBRUniform, 512> PBRUniforms;

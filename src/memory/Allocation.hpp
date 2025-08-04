@@ -36,7 +36,7 @@ public:
 
 class BuddyAllocator {
 private:
-	static constexpr uint8_t LEVELS = 18;
+	static constexpr uint8_t LEVELS = 20;
 
 	Allocation m_allocation;
 	std::array<std::forward_list<uint32_t>, LEVELS> m_tree;
