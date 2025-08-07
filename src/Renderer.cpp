@@ -14,8 +14,8 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
-#include "Rendergraph/RenderGraph.hpp"
-#include "Rendergraph/RenderGraphBuilder.hpp"
+#include "rendergraph/RenderGraph.hpp"
+#include "rendergraph/RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"

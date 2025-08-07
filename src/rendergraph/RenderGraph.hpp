@@ -40,8 +40,6 @@ private:
 	std::array<std::vector<BufferHandle>, 3> m_unusedBuffers;
 	uint8_t m_swapchainFlushCounter = 0;
 
-	vk::Queue m_graphicQueue;
-
 	GraphData m_data;
 	ImageHandle m_resultHandle = { 0 };
 

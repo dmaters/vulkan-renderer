@@ -26,9 +26,6 @@
 
 ResourceManager::ResourceManager() {
 	Instance &instance = Instance::Get();
-	m_queue = instance.device.getQueue(
-		instance.queueFamiliesIndices.transferIndex, 0
-	);
 
 	m_commandPool =
 		Instance::Get().device.createCommandPool(vk::CommandPoolCreateInfo {
@@ -225,8 +222,8 @@ ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
 			.height = data.y,
 			.depth = 1
 		},
-		
-		
+
+
 	});
 
 	free(staging);
@@ -356,7 +353,7 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 		.pSignalSemaphores = &m_semaphore,
 	};
 
-	m_queue.submit({ submitInfo });
+	Instance::Get().transferQueue.submit({ submitInfo });
 	m_transferCount++;
 };
 void ResourceManager::copyToImage(
@@ -436,7 +433,7 @@ void ResourceManager::copyToImage(
 		.pSignalSemaphores = &m_semaphore,
 	};
 
-	m_queue.submit({ submitInfo });
+	Instance::Get().transferQueue.submit({ submitInfo });
 	m_transferCount++;
 }
 

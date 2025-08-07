@@ -33,10 +33,6 @@ RenderGraph::RenderGraph(
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
 	m_materialManager(materialManager) {
-	Instance& instance = Instance::Get();
-	m_graphicQueue = Instance::Get().device.getQueue(
-		instance.queueFamiliesIndices.graphicsIndex, 0
-	);
 }
 void RenderGraph::addImage(
 	std::string_view name,
@@ -143,7 +139,7 @@ void RenderGraph::outputToSwapchain(
 		vk::ImageLayout::eTransferSrcOptimal,
 		swapchainImage.image,
 		vk::ImageLayout::eTransferDstOptimal,
-		{ vk::ImageBlit { 
+		{ vk::ImageBlit {
 			.srcSubresource = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
 				.mipLevel = 0,
@@ -162,7 +158,7 @@ void RenderGraph::outputToSwapchain(
 			.dstSubresource = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
 				.mipLevel = 0,
-				.baseArrayLayer = 0, 
+				.baseArrayLayer = 0,
 				.layerCount = 1,
 			},
 			.dstOffsets = {{
@@ -174,7 +170,7 @@ void RenderGraph::outputToSwapchain(
 				(int32_t)swapchainImage.size.height,
 				1
 			}}},
-		
+
 		 	}
 		},
 		vk::Filter::eLinear
@@ -274,7 +270,7 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 		if (image.accesses[accessIndex].layout == initialLayout) continue;
 
 		imageBarriers.push_back({
-		
+
 			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
 			.oldLayout = image.accesses[accessIndex].layout,
 			.newLayout = initialLayout,
@@ -380,7 +376,9 @@ void RenderGraph::submit(const Scene& scene) {
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = { &frame.renderFinished };
 
-	m_graphicQueue.submit({ submitInfo }, { frame.fence });
+
+
+	Instance::Get().graphicQueue.submit({ submitInfo }, { frame.fence });
 
 	vk::PresentInfoKHR presentInfo {};
 	presentInfo.waitSemaphoreCount = 1;
@@ -391,7 +389,7 @@ void RenderGraph::submit(const Scene& scene) {
 
 	presentInfo.pImageIndices = &imageIndex;
 	try {
-		auto _ = m_graphicQueue.presentKHR(presentInfo);
+		auto _ = Instance::Get().presentQueue.presentKHR(presentInfo);
 	} catch (const vk::OutOfDateKHRError& _) {
 		rebuildSwapchain();
 		return;

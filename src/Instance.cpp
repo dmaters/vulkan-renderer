@@ -38,12 +38,27 @@ Instance& Instance::Create(SDL_Window* window) {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 	auto formats = physicalDevice.getSurfaceFormatsKHR(surface);
 
+
+	vk::Queue graphicQueue,transferQueue;
+
+
+	Instance::QueueFamilies families = getQueueFamilies(physicalDevice);
+	graphicQueue = device.getQueue(families.graphicsIndex,0);
+
+	if(families.transferAvailable)
+        transferQueue = graphicQueue;
+
+
 	Instance::_instance = {
 		.device = device,
 		.surface = surface,
 		.surfaceFormat = formats[0],
 		.physicalDevice = physicalDevice,
 		.instance = instance,
+
+		.graphicQueue = graphicQueue,
+		.transferQueue = transferQueue,
+		.presentQueue = graphicQueue,
 		.queueFamiliesIndices = getQueueFamilies(physicalDevice),
 	};
 	return _instance.value();
@@ -56,7 +71,7 @@ const std::vector<const char*> instanceValidationLayers = {
 const std::vector<const char*> instanceExtensionLayers {
 	vk::EXTDebugUtilsExtensionName,
 	"VK_KHR_surface",
-	"VK_KHR_win32_surface",
+	"VK_KHR_xlib_surface",
 	"VK_EXT_debug_utils"
 };
 vk::Instance createInstance() {
@@ -119,7 +134,7 @@ void setupDebug(vk::Instance instance) {
 	vk::DebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {
 		.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
 		.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
-		.pfnUserCallback = debug_callback,
+		.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debug_callback),
 
 	};
 
@@ -167,8 +182,14 @@ Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 		}
 		if (property.queueFlags & vk::QueueFlagBits::eTransfer &&
 		    !(property.queueFlags & vk::QueueFlagBits::eGraphics))
+		{
 			families.transferIndex = i;
+			families.transferAvailable = true;
+		}
 	}
+
+	if(!families.transferAvailable)
+        families.transferIndex = families.graphicsIndex;
 
 	return families;
 }
@@ -188,18 +209,20 @@ const std::vector<const char*> deviceExtensions {
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
-	vk::DeviceQueueCreateInfo queueInfo[] {
-		vk::DeviceQueueCreateInfo {
-								   .queueFamilyIndex = queueFamilies.graphicsIndex,
-								   .queueCount = 1,
-								   .pQueuePriorities = std::array<float,            3> { 1.f, 1.f, 1.f }.data(),
-								   },
-		vk::DeviceQueueCreateInfo {
-								   .queueFamilyIndex = queueFamilies.transferIndex,
-								   .queueCount = 1,
-								   .pQueuePriorities = std::array<float, 1> { 1.f }.data(),
-								   }
+	std::vector<vk::DeviceQueueCreateInfo> queueInfo {
+	    {
+    	   .queueFamilyIndex = (uint32_t)queueFamilies.graphicsIndex,
+    	   .queueCount = 1,
+    	   .pQueuePriorities = std::array<float,            3> { 1.f, 1.f, 1.f }.data(),
+	   },
 	};
+
+	if(queueFamilies.graphicsIndex != queueFamilies.transferIndex)
+	    queueInfo.push_back({
+					.queueFamilyIndex = (uint32_t) queueFamilies.transferIndex,
+					.queueCount = 1,
+					.pQueuePriorities = std::array<float,            3> { 1.f, 1.f, 1.f }.data()
+	});
 
 	vk::PhysicalDeviceVulkan11Features vulkan11Features {
 		.shaderDrawParameters = true,
@@ -226,8 +249,8 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 
 	vk::DeviceCreateInfo info {
 		.pNext = &syncronizationFeature,
-		.queueCreateInfoCount = 2,
-		.pQueueCreateInfos = queueInfo,
+		.queueCreateInfoCount = (uint32_t)queueInfo.size(),
+		.pQueueCreateInfos = queueInfo.data(),
 		.enabledLayerCount = (uint32_t)deviceLayers.size(),
 		.ppEnabledLayerNames = deviceLayers.data(),
 		.enabledExtensionCount = (uint32_t)deviceExtensions.size(),

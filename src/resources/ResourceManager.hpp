@@ -59,7 +59,6 @@ private:
 	uint64_t m_transferCount = 1;
 
 	vk::CommandPool m_commandPool;
-	vk::Queue m_queue;
 	std::unordered_map<uint32_t, Image> m_images;
 	std::unordered_map<uint32_t, Buffer> m_buffers;
 
@@ -164,7 +163,7 @@ void ResourceManager::updateBufferSync(BufferHandle handle, F updateFunction) {
 			{
 				.origin = stagingHandle,
 				.destination = handle,
-				.copy = { 
+				.copy = {
 					 .size = buffer.size,
 				 },
 			}
