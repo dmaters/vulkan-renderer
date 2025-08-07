@@ -3,7 +3,7 @@ samples
 
 .cache
 .vscode
-
+.zed
 
 .vs
 CMakeSettings.json
