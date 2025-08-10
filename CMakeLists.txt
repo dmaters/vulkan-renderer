@@ -10,30 +10,37 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Vulkan REQUIRED)
-add_subdirectory(thirdparty)
 
+add_subdirectory(thirdparty)
+link_directories("$ENV{VULKAN_SDK}/Lib")
 file(GLOB_RECURSE LOCAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${LOCAL_SOURCES})
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
-if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE "$ENV{VULKAN_SDK}/lib/slang.lib")
-endif(WIN32)
-
-if(UNIX)
-    target_link_libraries(${PROJECT_NAME} PRIVATE "$ENV{VULKAN_SDK}/lib/libslang.so")
-endif(UNIX)
-
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${PROJECT_NAME} PRIVATE assimp)
-target_link_libraries(${PROJECT_NAME} PRIVATE glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE stb)
+target_link_libraries(${PROJECT_NAME} PRIVATE slang)
 
 target_include_directories(${PROJECT_NAME} PRIVATE src/)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_CONSTRUCTORS)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
+
+if(WIN32)
+    configure_file(
+        "$ENV{VULKAN_SDK}/bin/slang-glslang.dll"
+        "${CMAKE_BINARY_DIR}/slang-glslang.dll"
+        COPYONLY
+    )
+elseif(UNIX AND NOT APPLE)
+    configure_file(
+        "$ENV{VULKAN_SDK}/bin/slang-glslang.so"
+        "${CMAKE_BINARY_DIR}/slang-glslang.so"
+        COPYONLY
+    )
+endif()
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /DEBUG:FULL /EHsc /W4)

@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <forward_list>
-#include <list>
 #include <iostream>
+#include <list>
 #include <vulkan/vulkan_structs.hpp>
 
 RingAllocation::RingAllocation(Allocation allocation) :
@@ -48,26 +48,27 @@ uint32_t getRoundedSize(uint32_t size) {
 
 constexpr uint32_t getSizeFromLevel(uint8_t level) { return 1 << (level + 10); }
 
-uint8_t getLevel(uint32_t size) { return std::max(10u, (uint32_t) std::log2(size)) - 10; }
+uint8_t getLevel(uint32_t size) {
+	return std::max(10u, (uint32_t)std::log2(size)) - 10;
+}
 
 bool BuddyAllocator::subAllocate(
 	SubAllocation& subAllocation, vk::MemoryRequirements requirements
 ) {
-	uint8_t baseLevel = getLevel(getRoundedSize(requirements.size ));
+	uint32_t minBlockSize = std::max(
+		getRoundedSize(requirements.size), (uint32_t)requirements.alignment
+	);
+	uint8_t baseLevel = getLevel(minBlockSize);
 	uint8_t currentLevel = baseLevel;
 
-
-
-	while (m_tree[currentLevel].empty() || ((m_tree[currentLevel].front() % requirements.alignment) + requirements.size) > getSizeFromLevel(currentLevel)) {
-	    currentLevel += 1;
-		if (currentLevel >= LEVELS)
-		    return false;
+	while (m_tree[currentLevel].empty()) {
+		currentLevel += 1;
+		if (currentLevel >= LEVELS) return false;
 	}
 
 	uint32_t offset = m_tree[currentLevel].front();
-	baseLevel = getLevel(offset % requirements.alignment + requirements.size);
-	while (currentLevel > baseLevel) {
 
+	while (currentLevel > baseLevel) {
 		m_tree[currentLevel].pop_front();
 		m_tree[currentLevel - 1].push_front(
 			offset + getSizeFromLevel(currentLevel - 1)
@@ -77,16 +78,15 @@ bool BuddyAllocator::subAllocate(
 		currentLevel -= 1;
 	}
 
-
 	m_tree[currentLevel].pop_front();
 
 	assert(offset % 1024 == 0);
 
 	subAllocation = {
-		.offset =  (uint32_t)(offset % requirements.alignment) + offset,
+		.offset = offset,
 		.size = requirements.size,
 		.address = m_allocation.address != nullptr
-		               ? (char*)m_allocation.address + offset + (uint32_t)(offset % requirements.alignment)
+		               ? (char*)m_allocation.address + offset
 		               : nullptr,
 
 	};

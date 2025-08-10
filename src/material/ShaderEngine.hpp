@@ -3,6 +3,7 @@
 #include <slang/slang.h>
 
 #include <cassert>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -10,7 +11,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
-#include <condition_variable>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -45,7 +45,8 @@ private:
 
 	void _monitor();
 
-	std::optional<vk::ShaderModule> loadModule(const std::filesystem::path& path
+	std::optional<vk::ShaderModule> loadModule(
+		const std::filesystem::path& path, SlangStage stage
 	);
 
 	std::optional<Pipeline> buildPipeline(const PipelineMetadata& metadata);
