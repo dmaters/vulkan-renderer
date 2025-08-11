@@ -17,9 +17,9 @@ MemoryAllocator::MemoryAllocator() {
 	vk::PhysicalDeviceMemoryProperties properties =
 		instance.physicalDevice.getMemoryProperties();
 
-	for (int i = properties.memoryTypeCount; i >= 0; i--) {
-		vk::MemoryType type = properties.memoryTypes[i];
-		if (properties.memoryHeaps[type.heapIndex].size < 1024ull << 20)
+	for (int i = properties.memoryTypeCount-1; i >= 0; i--) {
+		vk::MemoryType type = properties.memoryTypes.at(i);
+		if (properties.memoryHeaps.at(type.heapIndex).size < (1024ull << 20))
 			continue;
 
 		if ((type.propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) &&

@@ -55,7 +55,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 					 .materialBuffers = {
 						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
 					 },
-		             .namedResourceDependencies = 
+		             .namedResourceDependencies =
 	{
 		{
 			.name = "main_color",
@@ -68,7 +68,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 					eColorAttachmentOutput,
 			},
 			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},  
+		},
 		{
 			.name = "depth",
 			.kind = ResourceDependency::Kind::RenderTarget,
@@ -82,7 +82,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 		 },
 	},
-		
+
 	};
 
 	m_materialMetadata[index] = metadata;
@@ -143,7 +143,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 				.reference = 1,
 			}
 		}
-		
+
     });
 
 	MaterialMetadata
@@ -153,7 +153,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 					 .materialBuffers ={
 						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
 					 },
-		             .namedResourceDependencies = 
+		             .namedResourceDependencies =
 	{
 		{
 			.name = "gbuffer_albedo",
@@ -199,7 +199,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 					eColorAttachmentOutput,
 			},
 			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},  
+		},
 		{
 			.name = "depth",
 			.kind = ResourceDependency::Kind::RenderTarget,
@@ -213,7 +213,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 		 },
 	},
-		
+
 	};
 
 	m_materialMetadata[index] = metadata;
@@ -292,6 +292,10 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 			transientSetLayout,
 		},
 		.configuration = {
+			.attachmentFormats = {
+			    vk::Format::eR16G16B16A16Sfloat
+			},
+		    .cullMode = vk::CullModeFlagBits::eNone,
 			.stencilEnabled = true,
 			.stencilOp = {
 				.failOp = vk::StencilOp::eKeep,
@@ -309,7 +313,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		             .materialBindings = materialBindings,
 		             .materialLayout = materialLayout,
 					 .materialBuffers ={},
-		             .namedResourceDependencies = 
+		             .namedResourceDependencies =
 	{{
 			.name = "main_color",
 			.kind = ResourceDependency::Kind::RenderTarget,
@@ -378,7 +382,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 					eFragmentShader,
 			},
 			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		}, 
+		},
 		{
 			.name = "shadow_atlas",
 			.kind = ResourceDependency::Kind::Sampler,
@@ -390,7 +394,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 					eFragmentShader,
 			},
 			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		}, 
+		},
 	},
 	};
 	m_materialMetadata[index] = metadata;
@@ -430,6 +434,7 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 			m_globalSetLayout,
 			m_emptySetLayout,
 		},
+
 		.configuration ={
 			.depthWrite = true,
 			.depthOp = vk::CompareOp::eLessOrEqual,
@@ -441,10 +446,10 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 		             .materialBindings = {},
 		             .materialLayout = m_emptySetLayout,
 					 .materialBuffers = {
-						
+
 						//(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
 					 },
-		             .namedResourceDependencies = 
+		             .namedResourceDependencies =
 	{
 		{
 			.name = "shadow_atlas",
@@ -459,7 +464,7 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 				.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
 		 },
 	},
-		
+
 	};
 
 	m_materialMetadata[index] = metadata;

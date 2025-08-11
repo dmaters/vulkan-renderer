@@ -7,7 +7,7 @@ A Vulkan-based renderer designed for experimenting and testing various graphics 
 
 ### Requirements
 - C++20 or later
-- Vulkan 1.3 SDK 
+- Vulkan 1.4 SDK 
 - CMake (version 3.7+)
 
 ### Building

@@ -8,7 +8,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
-#include "Rendergraph/RenderGraph.hpp"
+#include "rendergraph/RenderGraph.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "memory/MemoryAllocator.hpp"

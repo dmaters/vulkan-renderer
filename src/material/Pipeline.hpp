@@ -11,7 +11,9 @@ struct PipelineConfiguration {
 	std::vector<vk::Format> attachmentFormats = {};
 
 	bool depthWrite = false;
-	vk::CompareOp depthOp = vk::CompareOp::eNever;
+	vk::CompareOp depthOp = vk::CompareOp::eAlways;
+
+	vk::CullModeFlags cullMode = vk::CullModeFlagBits::eBack;
 
 	bool stencilEnabled = false;
 	vk::StencilOpState stencilOp = vk::StencilOpState {};

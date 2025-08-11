@@ -3,6 +3,7 @@
 #include <slang/slang.h>
 
 #include <cassert>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -44,7 +45,8 @@ private:
 
 	void _monitor();
 
-	std::optional<vk::ShaderModule> loadModule(const std::filesystem::path& path
+	std::optional<vk::ShaderModule> loadModule(
+		const std::filesystem::path& path, SlangStage stage
 	);
 
 	std::optional<Pipeline> buildPipeline(const PipelineMetadata& metadata);

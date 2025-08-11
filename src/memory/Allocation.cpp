@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <forward_list>
+#include <iostream>
 #include <list>
 #include <vulkan/vulkan_structs.hpp>
 
@@ -47,35 +48,40 @@ uint32_t getRoundedSize(uint32_t size) {
 
 constexpr uint32_t getSizeFromLevel(uint8_t level) { return 1 << (level + 10); }
 
-uint8_t getLevel(uint32_t size) { return std::log2(size) - std::log2(1024); }
+uint8_t getLevel(uint32_t size) {
+	return std::max(10u, (uint32_t)std::log2(size)) - 10;
+}
 
 bool BuddyAllocator::subAllocate(
 	SubAllocation& subAllocation, vk::MemoryRequirements requirements
 ) {
-	uint8_t baseLevel = getLevel(getRoundedSize(requirements.size));
+	uint32_t minBlockSize = std::max(
+		getRoundedSize(requirements.size), (uint32_t)requirements.alignment
+	);
+	uint8_t baseLevel = getLevel(minBlockSize);
 	uint8_t currentLevel = baseLevel;
 
 	while (m_tree[currentLevel].empty()) {
 		currentLevel += 1;
 		if (currentLevel >= LEVELS) return false;
-	}
 
-	while (currentLevel > baseLevel) {
-		uint32_t address = m_tree[currentLevel].front();
-		m_tree[currentLevel].pop_front();
-
-		m_tree[currentLevel - 1].push_front(
-			address + getSizeFromLevel(currentLevel - 1)
-		);
-		m_tree[currentLevel - 1].push_front(address);
-
-		currentLevel -= 1;
 	}
 
 	uint32_t offset = m_tree[currentLevel].front();
 
-	assert(offset % 1024 == 0);
+	while (currentLevel > baseLevel) {
+		m_tree[currentLevel].pop_front();
+		m_tree[currentLevel - 1].push_front(
+			offset + getSizeFromLevel(currentLevel - 1)
+		);
+		m_tree[currentLevel - 1].push_front(offset);
+
+		currentLevel -= 1;
+	}
+
 	m_tree[currentLevel].pop_front();
+
+	assert(offset % 1024 == 0 && offset% requirements.alignment == 0);
 
 	subAllocation = {
 		.offset = offset,

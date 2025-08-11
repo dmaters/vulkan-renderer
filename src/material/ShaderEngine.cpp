@@ -1,9 +1,9 @@
 #include "ShaderEngine.hpp"
 
+#include <slang/slang-com-ptr.h>
 #include <slang/slang.h>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -34,7 +34,7 @@ ShaderEngine::~ShaderEngine() {
 	m_monitorThread.join();
 }
 std::optional<vk::ShaderModule> ShaderEngine::loadModule(
-	const std::filesystem::path& path
+	const std::filesystem::path& path, SlangStage stage
 ) {
 	slang::TargetDesc desc {
 		.format = SLANG_SPIRV,
@@ -48,6 +48,10 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	std::vector<slang::CompilerOptionEntry> compilerOptions = {
 		{
          .name = slang::CompilerOptionName::VulkanInvertY,
+         .value = slang::CompilerOptionValue { .intValue0 = true },
+		 },
+		{
+         .name = slang::CompilerOptionName::VulkanUseEntryPointName,
          .value = slang::CompilerOptionValue { .intValue0 = true },
 		 }
 	};
@@ -69,8 +73,9 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 
 	slang::IBlob* diagnostics = nullptr;
 
-	slang::IModule* slangModule =
-		session->loadModule(path.string().c_str(), &diagnostics);
+	slang::IModule* slangModule;
+
+	slangModule = session->loadModule(path.string().c_str(), &diagnostics);
 
 	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
@@ -79,12 +84,31 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			return std::nullopt;
 	}
 
-	slang::IEntryPoint* entryPoint;
-	slangModule->findEntryPointByName("main", &entryPoint);
-	slang::IComponentType* components[] = { slangModule, entryPoint };
-	slang::IComponentType* program;
-	session->createCompositeComponentType(components, 2, &program);
+	Slang::ComPtr<slang::IEntryPoint> entryPoint;
 
+	slangModule->findAndCheckEntryPoint(
+		"main", stage, entryPoint.writeRef(), &diagnostics
+	);
+
+	if (diagnostics) {
+		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
+		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
+		    nullptr)
+			return std::nullopt;
+	}
+
+	slang ::IComponentType* components[] = { slangModule, entryPoint };
+	slang::IComponentType* program;
+	session->createCompositeComponentType(
+		components, 2, &program, &diagnostics
+	);
+
+	if (diagnostics) {
+		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
+		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") !=
+		    nullptr)
+			return std::nullopt;
+	}
 	slang::IComponentType* linkedProgram;
 
 	program->link(&linkedProgram, &diagnostics);
@@ -127,7 +151,8 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 	std::vector<vk::PipelineShaderStageCreateInfo> modules;
 
 	if (!metadata.modules.vertex.empty()) {
-		auto res = loadModule(metadata.modules.vertex);
+		auto res =
+			loadModule(metadata.modules.vertex, SlangStage::SLANG_STAGE_VERTEX);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
@@ -138,7 +163,9 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 	}
 
 	if (!metadata.modules.fragment.empty()) {
-		auto res = loadModule(metadata.modules.fragment);
+		auto res = loadModule(
+			metadata.modules.fragment, SlangStage::SLANG_STAGE_FRAGMENT
+		);
 		if (!res.has_value()) return std::nullopt;
 
 		modules.push_back({
