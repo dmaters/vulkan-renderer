@@ -8,7 +8,7 @@ struct FragmentOutput {
     float2 metallic_roughness;
 };
 
-[[vk::binding(3 ,0)]] Sampler2D _textures[];
+[[vk::binding(3 ,0)]] Sampler2D _textures[512];
 
 
 
@@ -31,7 +31,7 @@ FragmentOutput main(VertexOutput input){
 
     output.color = _textures[instance.albedo].Sample(input.texcoord);
     output.world_space = input.frag_position;
-   	 
+
 	float3x3 TBN = float3x3(input.tangent, input.bitangent,-input.normal);
 	float3 localNormal = normalize(
 		_textures[instance.normal].Sample(input.texcoord).rgb *
@@ -39,8 +39,8 @@ FragmentOutput main(VertexOutput input){
 		1.0
 	);
 	float3 transformedNormal = mul( localNormal,TBN);
-    output.normal = float4(transformedNormal,1); 
+    output.normal = float4(transformedNormal,1);
     output.metallic_roughness = _textures[instance.metallic_roughness].Sample(input.texcoord).gb;
-    
+
     return output;
 };

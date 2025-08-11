@@ -64,6 +64,7 @@ bool BuddyAllocator::subAllocate(
 	while (m_tree[currentLevel].empty()) {
 		currentLevel += 1;
 		if (currentLevel >= LEVELS) return false;
+
 	}
 
 	uint32_t offset = m_tree[currentLevel].front();
@@ -80,7 +81,7 @@ bool BuddyAllocator::subAllocate(
 
 	m_tree[currentLevel].pop_front();
 
-	assert(offset % 1024 == 0);
+	assert(offset % 1024 == 0 && offset% requirements.alignment == 0);
 
 	subAllocation = {
 		.offset = offset,

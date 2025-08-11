@@ -12,7 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Vulkan REQUIRED)
 
 add_subdirectory(thirdparty)
-link_directories("$ENV{VULKAN_SDK}/Lib")
+link_directories("$ENV{VULKAN_SDK}/lib")
 file(GLOB_RECURSE LOCAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${LOCAL_SOURCES})
@@ -23,6 +23,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
 target_link_libraries(${PROJECT_NAME} PRIVATE assimp)
 target_link_libraries(${PROJECT_NAME} PRIVATE stb)
 target_link_libraries(${PROJECT_NAME} PRIVATE slang)
+target_link_libraries(${PROJECT_NAME} PRIVATE glm)
+
 
 target_include_directories(${PROJECT_NAME} PRIVATE src/)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_CONSTRUCTORS)
@@ -32,12 +34,6 @@ if(WIN32)
     configure_file(
         "$ENV{VULKAN_SDK}/bin/slang-glslang.dll"
         "${CMAKE_BINARY_DIR}/slang-glslang.dll"
-        COPYONLY
-    )
-elseif(UNIX AND NOT APPLE)
-    configure_file(
-        "$ENV{VULKAN_SDK}/bin/slang-glslang.so"
-        "${CMAKE_BINARY_DIR}/slang-glslang.so"
         COPYONLY
     )
 endif()
