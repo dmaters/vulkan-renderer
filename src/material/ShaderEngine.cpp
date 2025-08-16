@@ -43,7 +43,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	};
 	slang::ISession* session;
 
-	const char* searchPaths[] = { "../resources/shaders" };
+	const char* searchPaths[] = { "resources/shaders" };
 
 	std::vector<slang::CompilerOptionEntry> compilerOptions = {
 		{

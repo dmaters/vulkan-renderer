@@ -39,8 +39,8 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
-					.vertex = "../resources/shaders/standard_forward_vert.slang",
-					.fragment = "../resources/shaders/standard_forward_frag.slang",
+					.vertex = "resources/shaders/standard_forward_vert.slang",
+					.fragment = "resources/shaders/standard_forward_frag.slang",
 					},
 		.layouts = {
 			m_globalSetLayout,
@@ -116,8 +116,8 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
-					.vertex = "../resources/shaders/base_transform_vert.slang",
-					.fragment = "../resources/shaders/gbuffer_frag.slang",
+					.vertex = "resources/shaders/base_transform_vert.slang",
+					.fragment = "resources/shaders/gbuffer_frag.slang",
 					},
 		.layouts = {
 			m_globalSetLayout,
@@ -283,8 +283,8 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
-					.vertex = "../resources/shaders/quad_vert.slang",
-					.fragment = "../resources/shaders/lighting_deferred.slang",
+					.vertex = "resources/shaders/quad_vert.slang",
+					.fragment = "resources/shaders/lighting_deferred.slang",
 					},
 		.layouts = {
 			m_globalSetLayout,
@@ -427,8 +427,8 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 	*/
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
-					.vertex = "../resources/shaders/shadow_vert.slang",
-					.fragment = "../resources/shaders/dummy_frag.slang",
+					.vertex = "resources/shaders/shadow_vert.slang",
+					.fragment = "resources/shaders/dummy_frag.slang",
 					},
 		.layouts = {
 			m_globalSetLayout,
