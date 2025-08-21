@@ -8,108 +8,33 @@
 #include <forward_list>
 #include <iostream>
 #include <list>
+#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-RingAllocation::RingAllocation(Allocation allocation) :
-	m_allocation(allocation) {}
+#include "Instance.hpp"
 
-bool RingAllocation::subAllocate(
-	SubAllocation& subAllocation, vk::MemoryRequirements requirements
+Allocation::Allocation(
+	vk::MemoryPropertyFlags requiredType, uint32_t requiredSize
 ) {
-	uint32_t startingOffset = 0;
-	if (m_occupiedOffset > 0) {
-		startingOffset =
-			m_occupiedOffset + (requirements.alignment -
-		                        m_occupiedOffset % requirements.alignment);
+	auto& physicalDevice = Instance::Get().physicalDevice;
+	auto& device = Instance::Get().device;
+
+	auto properties = physicalDevice.getMemoryProperties();
+
+	for (int i = 0; i < properties.memoryTypeCount; i++) {
+		if ((properties.memoryTypes[i].propertyFlags & requiredType) !=
+		    requiredType)
+			continue;
+		memory = device.allocateMemory(vk::MemoryAllocateInfo {
+			.allocationSize = requiredSize,
+			.memoryTypeIndex = (uint32_t)i,
+		});
+
+		if (requiredType & vk::MemoryPropertyFlagBits::eHostCoherent)
+			address = device.mapMemory(memory, 0, requiredSize);
+
+		size = requiredSize;
+
+		return;
 	}
-
-	if ((256ull << 20) - startingOffset < requirements.size) startingOffset = 0;
-
-	subAllocation = {
-		.offset = startingOffset,
-		.size = requirements.size,
-		.address = m_allocation.address == nullptr
-		               ? nullptr
-		               : (char*)m_allocation.address + startingOffset,
-	};
-
-	m_occupiedOffset = startingOffset + requirements.size;
-	return true;
-}
-BuddyAllocator::BuddyAllocator(Allocation allocation) :
-	m_allocation(allocation) {
-	m_tree[LEVELS - 1] = { 0 };
-}
-
-uint32_t getRoundedSize(uint32_t size) {
-	if (size < 1024) return 1024;
-	return std::pow(2, std::ceil(std::log2(size)));
-}
-
-constexpr uint32_t getSizeFromLevel(uint8_t level) { return 1 << (level + 10); }
-
-uint8_t getLevel(uint32_t size) {
-	return std::max(10u, (uint32_t)std::log2(size)) - 10;
-}
-
-bool BuddyAllocator::subAllocate(
-	SubAllocation& subAllocation, vk::MemoryRequirements requirements
-) {
-	uint32_t minBlockSize = std::max(
-		getRoundedSize(requirements.size), (uint32_t)requirements.alignment
-	);
-	uint8_t baseLevel = getLevel(minBlockSize);
-	uint8_t currentLevel = baseLevel;
-
-	while (m_tree[currentLevel].empty()) {
-		currentLevel += 1;
-		if (currentLevel >= LEVELS) return false;
-
-	}
-
-	uint32_t offset = m_tree[currentLevel].front();
-
-	while (currentLevel > baseLevel) {
-		m_tree[currentLevel].pop_front();
-		m_tree[currentLevel - 1].push_front(
-			offset + getSizeFromLevel(currentLevel - 1)
-		);
-		m_tree[currentLevel - 1].push_front(offset);
-
-		currentLevel -= 1;
-	}
-
-	m_tree[currentLevel].pop_front();
-
-	assert(offset % 1024 == 0 && offset% requirements.alignment == 0);
-
-	subAllocation = {
-		.offset = offset,
-		.size = requirements.size,
-		.address = m_allocation.address != nullptr
-		               ? (char*)m_allocation.address + offset
-		               : nullptr,
-
-	};
-
-	return true;
-}
-
-bool BuddyAllocator::free(SubAllocation& subAllocation) {
-	uint32_t size = getRoundedSize(subAllocation.size);
-	uint8_t level = getLevel(size);
-	uint32_t buddy = subAllocation.offset ^ size;
-
-	std::forward_list<uint32_t>& freeList = m_tree[level];
-
-	auto buddyPosition = std::find(freeList.begin(), freeList.end(), buddy);
-	if (buddyPosition != freeList.end()) {
-		freeList.remove(buddy);
-		if (level != LEVELS - 1)
-			m_tree[level + 1].push_front(std::min(subAllocation.offset, buddy));
-	} else {
-		m_tree[level].push_front(subAllocation.offset);
-	}
-
-	return true;
 }

@@ -3,7 +3,6 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 
-#include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
@@ -13,16 +12,12 @@ const std::unordered_map<std::string_view, ResourceManager::BufferDescription>
 			  .size = 12 << 1,
 			  .usage = vk::BufferUsageFlagBits::eTransferDst |
 	                   vk::BufferUsageFlagBits::eVertexBuffer,
-			  .location = AllocationLocation::Device,
-			  .transient = false,
 		  } },
 		{ "buffer_index",
          ResourceManager::BufferDescription {
 			  .size = 12 << 1,
 			  .usage = vk::BufferUsageFlagBits::eTransferDst |
 	                   vk::BufferUsageFlagBits::eIndexBuffer,
-			  .location = AllocationLocation::Device,
-			  .transient = false,
 		  } }
 };
 
@@ -38,7 +33,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                     vk::ImageUsageFlagBits::eInputAttachment |
 	                     vk::ImageUsageFlagBits::eSampled,
-				.transient = true,
+
 			}, },
 		{
          "gbuffer_normal", {
@@ -50,7 +45,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                     vk::ImageUsageFlagBits::eInputAttachment |
 	                     vk::ImageUsageFlagBits::eSampled,
-				.transient = true,
+
 			}, },
 		{
          "gbuffer_worldpos", {
@@ -62,7 +57,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                     vk::ImageUsageFlagBits::eInputAttachment |
 	                     vk::ImageUsageFlagBits::eSampled,
-				.transient = true,
+
 			}, },
 		{
          "gbuffer_roughnessMetallic", {
@@ -74,7 +69,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                     vk::ImageUsageFlagBits::eInputAttachment |
 	                     vk::ImageUsageFlagBits::eSampled,
-				.transient = true,
+
 			}, },
 
 		{
@@ -86,7 +81,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.format = vk::Format::eR16G16B16A16Sfloat,
 				.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                     vk::ImageUsageFlagBits::eTransferSrc,
-				.transient = true,
+
 			}, },
 		{
          "depth", {
@@ -96,7 +91,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 				.miplevels = 1,
 				.format = vk::Format::eD24UnormS8Uint,
 				.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
-				.transient = true,
+
 			}, },
 		{ "shadow_atlas",
          {
@@ -107,7 +102,7 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 			  .format = vk::Format::eD16Unorm,
 			  .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
 	                   vk::ImageUsageFlagBits::eSampled,
-			  .transient = true,
+
 		  } }
 };
 

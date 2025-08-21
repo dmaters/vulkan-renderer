@@ -20,5 +20,7 @@ public:
 		uint32_t& vertexByteOffset,
 		uint32_t& indexByteOffset
 	);
-	bool buildBuffers(ResourceManager& resourceManager);
+	ResourceManager::AllocationIndex buildBuffers(
+		ResourceManager& resourceManager
+	);
 };

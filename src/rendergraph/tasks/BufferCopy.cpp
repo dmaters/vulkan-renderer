@@ -36,20 +36,11 @@ void BufferCopy::execute(
 	Buffer& destination =
 		resources.resourceManager.getNamedBuffer(m_info.destination.name);
 
-	uint32_t originBaseOffset =
-		origin.transient ? origin.bufferAccess[resources.currentFrame].offset
-						 : 0;
-	uint32_t destinationBaseOffset =
-		destination.transient
-			? destination.bufferAccess[resources.currentFrame].offset
-			: 0;
 	buffer.copyBuffer(
 		origin.buffer,
 		destination.buffer,
 		{
 			{
-             .srcOffset = originBaseOffset + m_info.origin.offset,
-             .dstOffset = destinationBaseOffset + m_info.destination.offset,
              .size = m_info.origin.length,
 			 },
     }

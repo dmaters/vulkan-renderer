@@ -52,8 +52,6 @@ void Swapchain::createSwapchain() {
 void Swapchain::createFrames() {
 	Instance& instance = Instance::Get();
 
-	m_frames.reserve(3);
-
 	vk::FenceCreateInfo fenceInfo { .flags =
 		                                vk::FenceCreateFlagBits::eSignaled };
 
@@ -61,12 +59,11 @@ void Swapchain::createFrames() {
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
 	poolInfo.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex;
 	for (int i = 0; i < 3; i++) {
-		m_frames.push_back(Frame {
+		m_frames[i] = {
 			.commandPool = instance.device.createCommandPool(poolInfo),
 			.fence = instance.device.createFence(fenceInfo),
 			.imageAvailable = instance.device.createSemaphore({}),
-			.renderFinished = instance.device.createSemaphore({}),
-		});
+		};
 	}
 }
 
@@ -76,7 +73,6 @@ void Swapchain::createImages() {
 	std::vector<vk::Image> images =
 		instance.device.getSwapchainImagesKHR(m_swapchain);
 
-	m_images.reserve(3);
 	for (int i = 0; i < 3; i++) {
 		vk::ImageViewCreateInfo viewInfo {
 			.image = images[i],
@@ -88,26 +84,18 @@ void Swapchain::createImages() {
 		};
 		vk::ImageView view = instance.device.createImageView(viewInfo);
 
-		m_images.push_back(
-			Image {
-				.image = images[i],
-				.view = view,
-				.format = instance.surfaceFormat.format,
-				.size = {
-					.width = m_resolution.width,
-					.height = m_resolution.height,
-					.depth = 1,
-				},
-				.allocation = std::nullopt,
-				.accesses = {
-					{
-						.view = view,
-						.layout = vk::ImageLayout::eUndefined,
-					}
-				},
-				.transient= false,
-			}
-		);
+		m_images[i] = {
+			.image = images[i],
+			.view = view,
+			.format = instance.surfaceFormat.format,
+			.size = {
+				.width = m_resolution.width,
+				.height = m_resolution.height,
+				.depth = 1,
+			},
+			.allocation = std::nullopt,
+			.layout = vk::ImageLayout::eUndefined
+		};
 	}
 }
 void Swapchain::rebuild() {
@@ -120,7 +108,6 @@ void Swapchain::rebuild() {
 
 	if (m_resolution == vk::Extent2D(0)) return;
 
-	m_images.clear();
 	createSwapchain();
 	createImages();
 }

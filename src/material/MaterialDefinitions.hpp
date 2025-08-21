@@ -27,7 +27,7 @@ struct Lights {
 	uint32_t count;
 	uint32_t directLightIndex;
 	uint32_t _padding[2];
-	Light lights[256];
+	Light lights[255];
 };
 
 struct LightingMaterial {};

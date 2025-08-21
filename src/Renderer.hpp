@@ -8,10 +8,9 @@
 #include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
-#include "rendergraph/RenderGraph.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
-#include "memory/MemoryAllocator.hpp"
+#include "rendergraph/RenderGraph.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 

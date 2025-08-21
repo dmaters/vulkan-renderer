@@ -62,7 +62,7 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 
 			imageInfo.push_back({
 				.sampler = resources.materialManager.getLinearSampler(),
-				.imageView = image.accesses[resources.currentFrame].view,
+				.imageView = image.view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			});
 
@@ -81,8 +81,7 @@ std::vector<vk::WriteDescriptorSet> getTransientResources(
 
 			bufferInfo.push_back({
 				.buffer = buffer.buffer,
-				.offset = buffer.bufferAccess[resources.currentFrame].offset,
-				.range = buffer.bufferAccess[resources.currentFrame].length,
+				.range = buffer.size,
 			});
 
 			descriptors.push_back(vk::WriteDescriptorSet {
@@ -141,9 +140,9 @@ void setupAttachments(
 		bool isDepth = attachment.format == vk::Format::eD16Unorm || isStencil;
 		if (isDepth) {
 			depthAttachment = vk::RenderingAttachmentInfo{
-				.imageView = attachment.accesses[resources.currentFrame].view,
+				.imageView = attachment.view,
 				.imageLayout =
-					attachment.accesses[resources.currentFrame].layout,
+					attachment.layout,
 				.loadOp = loadOp,
 				.storeOp = storeOp,
 				.clearValue = { .depthStencil = { .depth = 1, .stencil = 0 }, },
@@ -154,8 +153,8 @@ void setupAttachments(
 
 		} else {
 			colorAttachments.push_back({
-			.imageView = attachment.accesses[resources.currentFrame].view,
-			.imageLayout = attachment.accesses[resources.currentFrame].layout,
+			.imageView = attachment.view,
+			.imageLayout = attachment.layout,
 			.loadOp = loadOp,
 			.storeOp = storeOp,
 			.clearValue = { .color =

@@ -1,12 +1,16 @@
 #include "ResourceManager.hpp"
 
+#include <compressonator.h>
 #include <vulkan/vulkan_core.h>
 
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -16,15 +20,18 @@
 #include "Buffer.hpp"
 #include "Image.hpp"
 #include "Instance.hpp"
-#include "memory/MemoryAllocator.hpp"
-#include "resources/Buffer.hpp"
+#include "memory/Allocation.hpp"
+#include "memory/LinearAllocator.hpp"
+#include "memory/RingAllocator.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include <filesystem>
 
-ResourceManager::ResourceManager() {
+ResourceManager::ResourceManager() :
+	// 256MB
+	m_stagingAllocation(vk::MemoryPropertyFlagBits::eHostCoherent, 1 << 28) {
 	Instance &instance = Instance::Get();
 
 	m_commandPool =
@@ -43,120 +50,201 @@ ResourceManager::ResourceManager() {
 	});
 }
 
-BufferHandle ResourceManager::createBuffer(const BufferDescription &description
-) {
-	vk::BufferCreateInfo createInfo {
-		.size = description.transient ? description.size * 3 : description.size,
-		.usage = description.usage,
-	};
-
-	vk::Buffer buffer = Instance::Get().device.createBuffer(createInfo);
-
-	SubAllocation allocation = m_memoryAllocator.allocate(
-		buffer, AllocationType::Persistent, description.location
+void ResourceManager::setName(std::string_view name, ImageHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eImage,
+			.objectHandle = (uint64_t)(VkImage)m_images.at(handle.value).image,
+			.pObjectName = name.data(),
+		}
 	);
+	m_imageNames[name] = handle;
+}
+void ResourceManager::setName(std::string_view name, BufferHandle handle) {
+	Instance::Get().device.setDebugUtilsObjectNameEXT(
+		vk::DebugUtilsObjectNameInfoEXT {
+			.objectType = vk::ObjectType::eBuffer,
+			.objectHandle =
+				(uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
+			.pObjectName = name.data(),
+		}
+	);
+	m_bufferNames[name] = handle;
+}
 
-	BufferHandle handle { m_resourceCounter };
-	m_resourceCounter++;
-
-	m_buffers[handle.value] = {
-		.buffer = buffer,
-		.allocation = allocation,
-		.size = description.size,
-		.bufferAccess = std::vector<BufferAccess> { BufferAccess {
-			.length = description.size,
-			.offset = 0,
-		} },
-		.transient = description.transient,
-	};
-
-	if (description.transient) {
-		m_buffers[handle.value].bufferAccess.push_back({
-			.length = description.size,
-			.offset = description.size,
-		});
-		m_buffers[handle.value].bufferAccess.push_back({
-			.length = description.size,
-			.offset = description.size * 2,
-		});
+ImageHandle ResourceManager::registerImage(Image image, ImageHandle handle) {
+	if (handle.value == 0) {
+		handle = { ++m_resourceCounter };
 	}
 
+	m_images[handle.value] = image;
 	return handle;
 }
-ImageHandle ResourceManager::createImage(const ImageDescription &description) {
+
+void resetPool(
+	vk::Semaphore semaphore, uint64_t expectedValue, vk::CommandPool pool
+) {
 	vk::Device &device = Instance::Get().device;
 
-	vk::ImageCreateInfo imageInfo {
-		.flags = {},
-		.imageType = description.depth > 1 ? vk::ImageType::e3D
-		                                   : vk::ImageType::e2D,
-		.format = description.format,
-		.extent = vk::Extent3D(
-			description.width, description.height, description.depth
-		),
-		.mipLevels = 1,
-		.arrayLayers = description.transient ? 3u : 1u,
-		.samples = vk::SampleCountFlagBits::e1,
-		.usage = description.usage,
-		.initialLayout = vk::ImageLayout::eUndefined,
+	if (device.getSemaphoreCounterValue(semaphore) == expectedValue)
+		device.resetCommandPool(pool);
+}
+
+void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
+	Instance &instance = Instance::Get();
+
+	resetPool(m_semaphore, m_transferCount, m_commandPool);
+
+	vk::CommandBufferAllocateInfo commandBufferInfo {
+		.commandPool = m_commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+
+	};
+	vk::CommandBuffer commandBuffer =
+		instance.device.allocateCommandBuffers(commandBufferInfo)[0];
+
+	vk::CommandBufferBeginInfo beginInfo {
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	};
+	commandBuffer.begin(beginInfo);
+	std::vector<vk::BufferMemoryBarrier2> barriers;
+
+	for (auto &copyInfo : info) {
+		commandBuffer.copyBuffer(
+			copyInfo.origin, copyInfo.destination, copyInfo.copy
+		);
+
+		barriers.push_back({
+			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+			.dstAccessMask = vk::AccessFlagBits2::eNone,
+			.srcQueueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
+			.dstQueueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
+			.buffer = copyInfo.destination,
+			.offset = 0,
+			.size = copyInfo.copy.size,
+		});
+	}
+
+	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
+		.bufferMemoryBarrierCount = (uint32_t)barriers.size(),
+		.pBufferMemoryBarriers = barriers.data(),
+	});
+
+	commandBuffer.end();
+	vk::TimelineSemaphoreSubmitInfo semaphore {
+		.signalSemaphoreValueCount = 1,
+		.pSignalSemaphoreValues = &(++m_transferCount),
+	};
+	vk::SubmitInfo submitInfo {
+		.pNext = &semaphore,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_semaphore,
 	};
 
-	vk::Image image = device.createImage(imageInfo);
+	Instance::Get().transferQueue.submit({ submitInfo });
 
-	SubAllocation allocation = m_memoryAllocator.allocate(
-		image, AllocationType::Persistent, AllocationLocation::Device
+	Instance::Get().device.waitSemaphores(
+		{
+			.semaphoreCount = 1,
+			.pSemaphores = &m_semaphore,
+			.pValues = &m_transferCount,
+		},
+		UINT32_MAX
 	);
+};
+void ResourceManager::copyToImage(
+	vk::Buffer origin, vk::Image destination, vk::BufferImageCopy offset
+) {
+	resetPool(m_semaphore, m_transferCount, m_commandPool);
 
-	std::vector<vk::ImageView> views;
+	vk::CommandBufferAllocateInfo commandBufferInfo {
+		.commandPool = m_commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
 
-	vk::ImageViewCreateInfo viewInfo {
-		.image = image,
-		.viewType = description.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
-		.format = description.format,
-		.subresourceRange = { .aspectMask =
-		                          Image{.format = description.format}.getAspectFlags(),
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1,
-							},
 	};
 
-	views.push_back(device.createImageView(viewInfo));
+	vk::CommandBuffer commandBuffer =
+		Instance::Get().device.allocateCommandBuffers(commandBufferInfo)[0];
 
-	if (description.transient) {
-		viewInfo.subresourceRange.baseArrayLayer = 1;
-		views.push_back(device.createImageView(viewInfo));
-		viewInfo.subresourceRange.baseArrayLayer = 2;
-		views.push_back(device.createImageView(viewInfo));
-	}
+	vk::CommandBufferBeginInfo beginInfo {
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	};
+	commandBuffer.begin(beginInfo);
 
-	ImageHandle handle { m_resourceCounter };
-	m_resourceCounter++;
+	vk::ImageMemoryBarrier2 barrier {
+        .dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eTransferDstOptimal,
+        .image = destination,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }
+    };
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
+	});
+	commandBuffer.copyBufferToImage(
+		origin,
+		destination,
+		vk::ImageLayout::eTransferDstOptimal,
+		{ { offset } }
+	);
+	barrier = {
+        .srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+        .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        .image = destination,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }
+    };
+	commandBuffer.pipelineBarrier2({
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier,
 
-	Image finalImage {
-		.image = image,
-		.view = views[0],
-		.format = description.format,
-		.size = { .width = description.width,
-                 .height = description.height,
-                 .depth = description.depth,
-				},
-		.allocation = allocation,
-		.accesses = std::vector<ImageAccess>(!description.transient ?1 : 3, ImageAccess{
-			.view = views[0],
-			.layout = vk::ImageLayout::eUndefined,
-		}),
-		.transient = description.transient
+	});
+	commandBuffer.end();
+
+	vk::TimelineSemaphoreSubmitInfo semaphore {
+		.signalSemaphoreValueCount = 1,
+		.pSignalSemaphoreValues = &(++m_transferCount),
+	};
+	vk::SubmitInfo submitInfo {
+		.pNext = &semaphore,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_semaphore,
 	};
 
-	if (description.transient) {
-		finalImage.accesses[1] = { .view = views[1] };
-		finalImage.accesses[2] = { .view = views[2] };
-	}
+	Instance::Get().transferQueue.submit({ submitInfo });
 
-	m_images[handle.value] = finalImage;
-	return handle;
+	uint64_t waitValue = m_transferCount;
+	Instance::Get().device.waitSemaphores(
+		{
+			.semaphoreCount = 1,
+			.pSemaphores = &m_semaphore,
+			.pValues = &waitValue,
+		},
+		UINT64_MAX
+	);
 }
 
 struct ImageData {
@@ -189,272 +277,244 @@ ImageData load(const std::filesystem::path &image) {
 		.data = vectorData,
 	};
 }
-ImageHandle ResourceManager::loadImage(const std::filesystem::path &path) {
-	ImageData data = load(path);
-	ImageDescription description {
-		.width = data.x,
-		.height = data.y,
-		.format = vk::Format::eR8G8B8A8Unorm,
-		.usage = vk::ImageUsageFlagBits::eTransferDst |
-		         vk::ImageUsageFlagBits::eSampled,
 
+vk::Image createImage(const ResourceManager::ImageDescription &description) {
+	vk::Device &device = Instance::Get().device;
+
+	vk::ImageCreateInfo imageInfo {
+		.flags = {},
+		.imageType = description.depth > 1 ? vk::ImageType::e3D
+		                                   : vk::ImageType::e2D,
+		.format = description.format,
+		.extent = vk::Extent3D(
+			description.width, description.height, description.depth
+		),
+		.mipLevels = description.miplevels,
+		.arrayLayers = 1,
+		.samples = vk::SampleCountFlagBits::e1,
+		.usage = description.usage,
+		.initialLayout = vk::ImageLayout::eUndefined,
 	};
 
-	ImageHandle image = createImage(description);
+	vk::Image image = device.createImage(imageInfo);
 
-	BufferHandle staging = createStagingBuffer(data.data.size());
-
-	copyToBuffer(data.data, staging);
-
-	copyToImage(staging, image, {
-		.bufferOffset = 0,
-		.bufferRowLength = data.x,
-		.bufferImageHeight = data.y,
-		.imageSubresource = {
-			.aspectMask = vk::ImageAspectFlagBits::eColor,
-			.mipLevel = 0,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		},
-		.imageOffset = {0,0,0},
-		.imageExtent = {
-			.width = data.x,
-			.height = data.y,
-			.depth = 1
-		},
-
-
-	});
-
-	free(staging);
 	return image;
 }
-void ResourceManager::setName(std::string_view name, ImageHandle handle) {
-	Instance::Get().device.setDebugUtilsObjectNameEXT(
-		vk::DebugUtilsObjectNameInfoEXT {
-			.objectType = vk::ObjectType::eImage,
-			.objectHandle = (uint64_t)(VkImage)m_images.at(handle.value).image,
-			.pObjectName = name.data(),
-		}
-	);
-	m_imageNames[name] = handle;
-}
-void ResourceManager::setName(std::string_view name, BufferHandle handle) {
-	Instance::Get().device.setDebugUtilsObjectNameEXT(
-		vk::DebugUtilsObjectNameInfoEXT {
-			.objectType = vk::ObjectType::eBuffer,
-			.objectHandle =
-				(uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
-			.pObjectName = name.data(),
-		}
-	);
-	m_bufferNames[name] = handle;
-}
-BufferHandle ResourceManager::createStagingBuffer(uint32_t size) {
-	vk::BufferCreateInfo info {
-		.size = size,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-	};
-	vk::Buffer buffer = Instance::Get().device.createBuffer(info);
-	SubAllocation allocation = m_memoryAllocator.allocate(
-		buffer, AllocationType::Staging, AllocationLocation::Host
-	);
-	BufferHandle handle { m_resourceCounter };
-	m_resourceCounter++;
 
-	m_buffers[handle.value] = Buffer { .buffer = buffer,
-		                               .allocation = allocation,
-		                               .size = size,
-		                               .bufferAccess = { BufferAccess {
-										   .length = size,
-										   .offset = 0,
-									   }, }, };
-
-	return handle;
-}
-ImageHandle ResourceManager::registerImage(Image image, ImageHandle handle) {
-	if (handle.value == 0) {
-		handle = { m_resourceCounter };
-		m_resourceCounter++;
-	}
-
-	m_images[handle.value] = image;
-	return handle;
-}
-
-void resetPool(
-	vk::Semaphore semaphore, uint64_t expectedValue, vk::CommandPool pool
+ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
+	std::vector<TextureInfo> textures
 ) {
 	vk::Device &device = Instance::Get().device;
 
-	if (device.getSemaphoreCounterValue(semaphore) == expectedValue)
-		device.resetCommandPool(pool);
-}
+	for (const auto &info : textures) {
+		assert(std::filesystem::exists(info.path));
+	}
+	std::vector<ImageDescription> textureDesc;
+	for (const auto &info : textures) {
+		int32_t x, y, channels;
+		stbi_info(info.path.string().c_str(), &x, &y, &channels);
 
-void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
-	Instance &instance = Instance::Get();
-
-	resetPool(m_semaphore, m_transferCount - 1, m_commandPool);
-
-	vk::CommandBufferAllocateInfo commandBufferInfo {
-		.commandPool = m_commandPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1,
-
-	};
-	vk::CommandBuffer commandBuffer =
-		instance.device.allocateCommandBuffers(commandBufferInfo)[0];
-
-	vk::CommandBufferBeginInfo beginInfo {
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-	};
-	commandBuffer.begin(beginInfo);
-	std::vector<vk::BufferMemoryBarrier2> barriers;
-
-	for (auto &copyInfo : info) {
-		Buffer &destination = m_buffers[copyInfo.destination.value];
-		commandBuffer.copyBuffer(
-			m_buffers[copyInfo.origin.value].buffer,
-			m_buffers[copyInfo.destination.value].buffer,
-			copyInfo.copy
-		);
-
-		barriers.push_back({
-			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
-			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-			.dstAccessMask = vk::AccessFlagBits2::eNone,
-			.srcQueueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
-			.dstQueueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
-			.buffer = destination.buffer,
-			.offset = destination.bufferAccess[copyInfo.destinationAccessIndex]
-		                  .offset,
-			.size = destination.bufferAccess[copyInfo.destinationAccessIndex]
-		                .length,
-
+		textureDesc.push_back({
+			.width = (uint32_t)x,
+			.height = (uint32_t)y,
+			.depth = 1,
+			.miplevels =
+				(uint32_t)std::max(1, ((int32_t)std::log2(std::min(x, y))) - 2),
+			.format = info.expectedFormat,
+			.usage = vk::ImageUsageFlagBits::eSampled |
+		             vk::ImageUsageFlagBits::eTransferDst,
 		});
 	}
 
-	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
-		.bufferMemoryBarrierCount = (uint32_t)barriers.size(),
-		.pBufferMemoryBarriers = barriers.data(),
-	});
+	AllocationIndex allocationIndex = createResources(textureDesc, {});
 
-	commandBuffer.end();
-	vk::TimelineSemaphoreSubmitInfo semaphore {
-		.signalSemaphoreValueCount = 1,
-		.pSignalSemaphoreValues = &m_transferCount,
-	};
-	vk::SubmitInfo submitInfo {
-		.pNext = &semaphore,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer,
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &m_semaphore,
-	};
+	for (int i = 0; i < textures.size(); i++) {
+		int x, y, c;
+		uint8_t *data =
+			stbi_load(textures.at(i).path.string().c_str(), &x, &y, &c, 0);
 
-	Instance::Get().transferQueue.submit({ submitInfo });
-	m_transferCount++;
-};
-void ResourceManager::copyToImage(
-	BufferHandle origin, ImageHandle destination, vk::BufferImageCopy offset
-) {
-	resetPool(m_semaphore, m_transferCount - 1, m_commandPool);
+		Image &image = m_images.at(
+			m_allocationResources.at(allocationIndex).first.at(i).value
+		);
 
-	vk::CommandBufferAllocateInfo commandBufferInfo {
-		.commandPool = m_commandPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1,
+		uint32_t imageMemorySize =
+			device.getImageMemoryRequirements(image.image).size;
+		SubAllocation stagingAllocation =
+			m_stagingAllocation.subAllocate({ .size = imageMemorySize });
 
-	};
+		vk::Buffer stagingBuffer = device.createBuffer(vk::BufferCreateInfo {
+			.size = imageMemorySize,
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		});
+		device.bindBufferMemory(
+			stagingBuffer,
+			m_stagingAllocation.getAllocation().memory,
+			stagingAllocation.offset
+		);
 
-	vk::CommandBuffer commandBuffer =
-		Instance::Get().device.allocateCommandBuffers(commandBufferInfo)[0];
+		CMP_Texture source {
+			.dwWidth = static_cast<CMP_DWORD>(x),
+			.dwHeight = static_cast<CMP_DWORD>(y),
+			.format = CMP_FORMAT_RGBA_8888,
+		};
+		CMP_Texture destination {
+			.dwWidth = static_cast<CMP_DWORD>(x),
+			.dwHeight = static_cast<CMP_DWORD>(y),
+			.pData = static_cast<CMP_BYTE *>(
+						 m_stagingAllocation.getAllocation().address
+					 ) +
+			         stagingAllocation.offset,
+		};
 
-	vk::CommandBufferBeginInfo beginInfo {
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-	};
-	commandBuffer.begin(beginInfo);
+		if (image.format == vk::Format::eBc5SnormBlock) {
+			CompressBlockBC5(
+				data,
+				2,
+				data + 8,
+				2,
+				((uint8_t *)m_stagingAllocation.getAllocation().address) +
+					stagingAllocation.offset
+			);
+		} else if (image.format == vk::Format::eBc7SrgbBlock)
+			CompressBlockBC7(
+				data,
+				4,
+				((uint8_t *)m_stagingAllocation.getAllocation().address) +
+					stagingAllocation.offset
+			);
 
-	vk::ImageMemoryBarrier2 barrier {
-        .dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
-        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-        .oldLayout = vk::ImageLayout::eUndefined,
-        .newLayout = vk::ImageLayout::eTransferDstOptimal,
-        .image = m_images.at(destination.value).image,
-        .subresourceRange = {
-            .aspectMask = vk::ImageAspectFlagBits::eColor,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        }
-    };
-	commandBuffer.pipelineBarrier2({
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &barrier,
-	});
-	commandBuffer.copyBufferToImage(
-		m_buffers[origin.value].buffer,
-		m_images.at(destination.value).image,
-		vk::ImageLayout::eTransferDstOptimal,
-		{ offset }
-	);
-	barrier = {
-        .srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
-        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-        .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-        .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-        .image = m_images.at(destination.value).image,
-        .subresourceRange = {
-            .aspectMask = vk::ImageAspectFlagBits::eColor,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        }
-    };
-	commandBuffer.pipelineBarrier2({
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &barrier,
+		stbi_image_free(data);
 
-	});
-	commandBuffer.end();
+		copyToImage(
+			stagingBuffer,
+			image.image,
+			{ .imageSubresource = { .aspectMask =
+		                                vk::ImageAspectFlagBits::eColor,
+									.layerCount = 1,
+									},
+		      .imageExtent = image.size }
+		);
 
-	vk::TimelineSemaphoreSubmitInfo semaphore {
-		.signalSemaphoreValueCount = 1,
-		.pSignalSemaphoreValues = &m_transferCount,
-	};
-	vk::SubmitInfo submitInfo {
-		.pNext = &semaphore,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer,
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &m_semaphore,
-	};
-
-	Instance::Get().transferQueue.submit({ submitInfo });
-	m_transferCount++;
+		device.destroyBuffer(stagingBuffer);
+	}
+	return allocationIndex;
 }
 
-void ResourceManager::copyToBuffer(
-	const std::vector<std::byte> &data, BufferHandle handle
+ResourceManager::AllocationIndex ResourceManager::createResources(
+	std::vector<ImageDescription> imagesDescription,
+	std::vector<BufferDescription> buffersDescription
 ) {
-	Buffer &buffer = m_buffers[handle.value];
-	if (buffer.allocation.address != nullptr) {
-		memcpy((char *)buffer.allocation.address, data.data(), data.size());
-		return;
+	if (imagesDescription.size() == 0 && buffersDescription.size() == 0) {
+		std::cerr << "Tried to allocate with no resources" << std::endl;
+		return 0;
 	}
 
-	BufferHandle staging = createStagingBuffer(data.size());
-	std::memcpy(
-		(char *)m_buffers[staging.value].allocation.address,
-		data.data(),
-		data.size()
+	vk::Device &device = Instance::Get().device;
+
+	uint32_t requiredSize = 0;
+	uint32_t resourceCount = 0;
+
+	std::unordered_map<uint32_t, ImageHandle> images;
+	std::unordered_map<uint32_t, BufferHandle> buffers;
+	std::vector<vk::MemoryRequirements> resourcesRequirements;
+	resourcesRequirements.reserve(
+		imagesDescription.size() + buffersDescription.size()
 	);
-	std::vector<BufferCopy> copyInfo = {
-		BufferCopy { staging, 0, handle, 0, { .size = data.size() } }
-	};
-	copyBuffers(copyInfo);
-	free(staging);
+	AllocationIndex allocIndex = ++m_allocationCount;
+
+	for (auto &description : imagesDescription) {
+		vk::Image image = createImage(description);
+
+		vk::MemoryRequirements requirements =
+			device.getImageMemoryRequirements(image);
+
+		ImageHandle handle = { ++m_resourceCounter };
+
+		requiredSize += requirements.size;
+		if (requirements.alignment > 0)
+			requiredSize += requiredSize % requirements.alignment;
+
+		resourcesRequirements.push_back(requirements);
+		images[resourceCount++] = handle;
+
+		m_images[handle.value] = {
+			.image = image,
+			.format = description.format,
+			.size = { description.width,
+                     description.height,
+                     description.depth, },
+			.layout = vk::ImageLayout::eUndefined,
+		};
+
+		m_allocationResources[allocIndex].first.push_back(handle);
+	}
+
+	for (auto &description : buffersDescription) {
+		vk::Buffer buffer = device.createBuffer(vk::BufferCreateInfo {
+			.size = description.size,
+			.usage = description.usage,
+		});
+
+		vk::MemoryRequirements requirements =
+			device.getBufferMemoryRequirements(buffer);
+
+		requiredSize += requirements.size;
+		if (requirements.alignment > 0)
+			requiredSize += requiredSize % requirements.alignment;
+
+		resourcesRequirements.push_back(requirements);
+
+		BufferHandle handle = { ++m_resourceCounter };
+		buffers[resourceCount++] = handle;
+		m_buffers[handle.value] = Buffer {
+			.buffer = buffer,
+			.size = description.size,
+		};
+		m_allocationResources[allocIndex].second.push_back(handle);
+	}
+
+	m_allocations.try_emplace(
+		allocIndex, vk::MemoryPropertyFlagBits::eDeviceLocal, requiredSize
+	);
+
+	for (int i = 0; i < resourcesRequirements.size(); i++) {
+		if (images.contains(i)) {
+			Image &image = m_images.at(images.at(i).value);
+			image.allocation = m_allocations.at(allocIndex)
+			                       .subAllocate(resourcesRequirements.at(i));
+
+			device.bindImageMemory(
+				image.image,
+				m_allocations.at(allocIndex).getAllocation().memory,
+				image.allocation->offset
+			);
+
+			image.view = device.createImageView( {
+				.image = image.image,
+				.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
+				.format = image.format,
+				.subresourceRange = { .aspectMask =
+										Image::GetAspectFlags(image.format),
+									.baseMipLevel = 0,
+									.levelCount = 1,
+									.baseArrayLayer = 0,
+									.layerCount = 1,
+									},
+			});
+
+		}
+
+		else if (buffers.contains(i)) {
+			Buffer &buffer = m_buffers.at(buffers.at(i).value);
+			buffer.allocation = m_allocations.at(allocIndex)
+			                        .subAllocate(resourcesRequirements.at(i));
+
+			device.bindBufferMemory(
+				buffer.buffer,
+				m_allocations.at(allocIndex).getAllocation().memory,
+				buffer.allocation.offset
+			);
+		}
+	}
+	return allocIndex;
 }

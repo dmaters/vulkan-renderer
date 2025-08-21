@@ -74,7 +74,7 @@ bool buildImageBarrier(
 		.dstStageMask = currentUsage.stage,
 		.dstAccessMask = currentUsage.access,
 		.oldLayout = previousLayout.value_or(vk::ImageLayout::eUndefined),
-		.newLayout = currentLayout.value_or(vk::ImageLayout::eUndefined)
+		.newLayout = currentLayout.value_or(vk::ImageLayout::eUndefined),
 	};
 	return true;
 }
@@ -173,19 +173,7 @@ GraphData RenderGraphBuilder::build() {
 					)) {
 					imageBarriers[name] = barrier;
 				}
-			} /*
-			 else {
-			     if (buildImageBarrier(
-			         taskResourceAccesses.back().usage,
-			         taskResourceAccesses[0].usage,
-			         taskResourceAccesses.back().requiredLayout,
-			         taskResourceAccesses[0].requiredLayout,
-			         barrier
-			     )) {
-			         imageBarriers[name] = barrier;
-			     }
-			 }
-			 */
+			}
 		}
 		for (auto& [name, reference] : task.buffers) {
 			auto& taskResourceAccesses = m_bufferReferences[name];

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <glm/glm.hpp>
 #include <memory>
 #include <unordered_map>
@@ -21,11 +22,6 @@
 typedef uint32_t MaterialInstanceIndex;
 typedef uint32_t MaterialIndex;
 
-struct MirroredBuffer {
-	BufferHandle localBuffer;
-	BufferHandle deviceBuffer;
-};
-
 struct MaterialInstance {
 	MaterialIndex index = 0;
 	MaterialInstanceIndex instance = 0;
@@ -39,7 +35,7 @@ public:
 private:
 	struct MaterialData;
 
-	uint32_t m_materialCount = 1;
+	uint32_t m_materialCount = 0;
 
 	vk::DescriptorPool m_pool;
 
@@ -50,13 +46,12 @@ private:
 	std::unordered_map<std::string_view, MaterialIndex> m_names;
 
 	ResourceManager& m_resourceManager;
+	ResourceManager::AllocationIndex m_materialDataAllocation;
 
 	vk::DescriptorSet m_emptySet;
 	vk::DescriptorSetLayout m_emptySetLayout;
 	vk::DescriptorSet m_globalSet;
 	vk::DescriptorSetLayout m_globalSetLayout;
-
-	std::vector<ImageHandle> m_staticTextureGroup;
 
 	vk::Sampler m_linearSampler;
 
@@ -68,17 +63,15 @@ private:
 	template <typename T>
 	MaterialIndex registerMaterial();
 
-	MaterialData createMaterialData(MaterialIndex index);
+	void createMaterialData();
 
 	template <typename T>
 	T getMaterialData(MaterialIndex index);
 
-	void syncData(std::vector<MirroredBuffer> buffers);
-
 	vk::DescriptorSet createSet(
-		std::vector<vk::DescriptorSetLayoutBinding>& bindings,
-		vk::DescriptorSetLayout layout,
-		std::vector<BufferHandle>& materialBuffersHandles
+		const std::vector<vk::DescriptorSetLayoutBinding>& bindings,
+		const vk::DescriptorSetLayout layout,
+		const std::vector<BufferHandle>& materialBuffersHandles
 	);
 
 public:
@@ -91,7 +84,7 @@ public:
 		return m_names.at(name);
 	}
 
-	uint32_t registerTextureGroup(const std::vector<ImageHandle>& textures);
+	uint32_t registerTextureGroup(ResourceManager::AllocationIndex allocation);
 
 	template <typename T, typename F>
 	void updateMaterialData(MaterialIndex index, F updateFunction);
@@ -110,7 +103,7 @@ public:
 
 struct MaterialManager::MaterialData {
 	PipelineIndex pipeline;
-	std::vector<MirroredBuffer> materialBuffers;
+	std::vector<BufferHandle> materialBuffers;
 	vk::DescriptorSet materialSet;
 };
 
@@ -128,14 +121,13 @@ struct MaterialManager::ResourceDependency {
 };
 
 struct MaterialManager::MaterialMetadata {
-	typedef std::variant<std::string_view, uint32_t> MaterialBuffer;
-
 	std::string_view name;
 	PipelineIndex pipeline;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings;
 	vk::DescriptorSetLayout materialLayout;
-	std::vector<MaterialBuffer> materialBuffers;
+	uint32_t materialBufferSize = 0;
+	std::vector<std::string_view> sharedMaterialBuffers;
 	std::vector<MaterialManager::ResourceDependency> namedResourceDependencies;
 
 	bool enabled = true;
@@ -145,25 +137,33 @@ template <typename T, typename F>
 void MaterialManager::updateMaterialData(
 	MaterialIndex index, F updateFunction
 ) {
-	T data = getMaterialData<T>(index);
+	T data;
+
 	updateFunction(data);
-	syncData(m_materialData[index].materialBuffers);
+	uint32_t bufferSize = m_materialMetadata.at(index).materialBufferSize;
+
+	m_resourceManager.updateBufferSync(
+		m_materialData.at(index).materialBuffers.back(),
+		[&data, bufferSize](std::byte* address) {
+			memcpy(address, &data, bufferSize);
+		}
+	);
+	// syncData(m_materialData[index].materialBuffers);
 }
 
 template <typename T>
 T MaterialManager::getMaterialData(MaterialIndex index) {
-	if (!m_materialData.contains(index)) {
-		m_materialData[index] = createMaterialData(index);
-	}
-	std::vector<MirroredBuffer>& buffers =
-		m_materialData[index].materialBuffers;
+	std::vector<BufferHandle>& buffers = m_materialData[index].materialBuffers;
 
 	T data;
+	/*
 	for (int i = 0; i < buffers.size(); i++) {
-		Buffer& mirror = m_resourceManager.getBuffer(buffers[i].localBuffer);
-		void** field =
-			(void**)(reinterpret_cast<std::byte*>(&data) + i * sizeof(void*));
-		*field = mirror.allocation.address;
+	    Buffer& mirror = m_resourceManager.getBuffer(buffers[i].localBuffer);
+	    void** field =
+	    (void**)(reinterpret_cast<std::byte*>(&data) + i * sizeof(void*));
+	    *field = mirror.allocation.address;
 	};
-	return data;
+
+	*/
+	return {};
 };

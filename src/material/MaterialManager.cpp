@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <ranges>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -13,6 +14,7 @@
 #include "Instance.hpp"
 #include "Material.hpp"
 #include "MaterialDefinitions.hpp"
+#include "MaterialManager_impl.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
@@ -73,35 +75,38 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_names["lighting_deferred"] =
 		registerMaterial<MaterialDefinitions::DeferredLighting>();
 	m_names["shadow_map"] = registerMaterial<MaterialDefinitions::ShadowMap>();
+
+	createMaterialData();
 }
 
 void MaterialManager::createGlobalBuffers() {
-	BufferHandle viewProj = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::Camera),
-		.usage = vk::BufferUsageFlagBits::eTransferDst |
-	             vk::BufferUsageFlagBits::eUniformBuffer,
-		.location = AllocationLocation::Device,
-	});
+	ResourceManager::AllocationIndex index = m_resourceManager.createResources(
+		{
+    },
+		{
+			{
+				.size = sizeof(MaterialDefinitions::Camera),
+				.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                     vk::BufferUsageFlagBits::eUniformBuffer,
+			},
+			{
+				.size = sizeof(MaterialDefinitions::Lights),
+				.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                     vk::BufferUsageFlagBits::eUniformBuffer,
 
-	m_resourceManager.setName("camera_data", viewProj);
+			},
+			{
+				.size = sizeof(MaterialDefinitions::EnvironmentData),
+				.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                     vk::BufferUsageFlagBits::eUniformBuffer,
+			},
+		}
+	);
 
-	BufferHandle lightBuffer = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::Lights),
-		.usage = vk::BufferUsageFlagBits::eTransferDst |
-	             vk::BufferUsageFlagBits::eUniformBuffer,
-		.location = AllocationLocation::Device,
-	});
-
-	m_resourceManager.setName("light_buffer", lightBuffer);
-
-	BufferHandle environmentData = m_resourceManager.createBuffer({
-		.size = sizeof(MaterialDefinitions::EnvironmentData),
-		.usage = vk::BufferUsageFlagBits::eTransferDst |
-	             vk::BufferUsageFlagBits::eUniformBuffer,
-		.location = AllocationLocation::Device,
-	});
-
-	m_resourceManager.setName("environment_data", environmentData);
+	auto& buffers = m_resourceManager.getBuffers(index);
+	m_resourceManager.setName("camera_data", buffers.at(0));
+	m_resourceManager.setName("light_buffer", buffers.at(1));
+	m_resourceManager.setName("environment_data", buffers.at(2));
 }
 
 void MaterialManager::createGlobalDescriptorSet() {
@@ -173,7 +178,6 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	vk::DescriptorBufferInfo cameraDescriptorInfo {
 		.buffer = cameraBuffer.buffer,
-		.offset = cameraBuffer.bufferAccess[0].offset,
 		.range = cameraBuffer.size,
 	};
 
@@ -192,7 +196,6 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	vk::DescriptorBufferInfo environmentDataInfo {
 		.buffer = environmentdataBuffer.buffer,
-		.offset = environmentdataBuffer.bufferAccess[0].offset,
 		.range = environmentdataBuffer.size,
 	};
 
@@ -210,7 +213,6 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
 		.buffer = lightBuffer.buffer,
-		.offset = lightBuffer.bufferAccess[0].offset,
 		.range = lightBuffer.size,
 	};
 	vk::WriteDescriptorSet lightBufferWriteDescriptor {
@@ -293,9 +295,9 @@ void writeToDescriptorSet(
 }
 
 vk::DescriptorSet MaterialManager::createSet(
-	std::vector<vk::DescriptorSetLayoutBinding>& bindings,
-	vk::DescriptorSetLayout layout,
-	std::vector<BufferHandle>& materialBuffersHandles
+	const std::vector<vk::DescriptorSetLayoutBinding>& bindings,
+	const vk::DescriptorSetLayout layout,
+	const std::vector<BufferHandle>& materialBuffersHandles
 ) {
 	vk::Device& device = Instance::Get().device;
 
@@ -313,7 +315,6 @@ vk::DescriptorSet MaterialManager::createSet(
 		Buffer& buffer = m_resourceManager.getBuffer(handle);
 		buffersDescriptors.push_back({
 			.buffer = buffer.buffer,
-			.offset = buffer.bufferAccess[0].offset,
 			.range = buffer.size,
 		});
 	}
@@ -338,46 +339,20 @@ vk::DescriptorSet MaterialManager::createSet(
 }
 
 Material MaterialManager::getMaterial(MaterialIndex index) {
-	if (!m_materialData.contains(index)) {
-		m_materialData[index] = createMaterialData(index);
-	}
 	MaterialData& data = m_materialData.at(index);
 	Material material {
 		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
 		.materialSet = data.materialSet,
+
 	};
 
 	return material;
 }
 
-void MaterialManager::syncData(std::vector<MirroredBuffer> buffers) {
-	std::vector<ResourceManager::BufferCopy> info;
-
-	for (MirroredBuffer buffer : buffers) {
-		uint32_t size = m_resourceManager.getBuffer(buffer.localBuffer).size;
-
-		info.push_back({
-			.origin = buffer.localBuffer,
-			.destination = buffer.deviceBuffer,
-			.copy = {
-					 .srcOffset = 0,
-					 .dstOffset = 0,
-					 .size = size,
-					 }
-        });
-	}
-
-	m_resourceManager.copyBuffers(info);
-}
-
 uint32_t MaterialManager::registerTextureGroup(
-	const std::vector<ImageHandle>& textures
+	ResourceManager::AllocationIndex index
 ) {
-	uint32_t offset = m_staticTextureGroup.size();
-
-	m_staticTextureGroup.insert(
-		m_staticTextureGroup.end(), textures.begin(), textures.end()
-	);
+	auto& textures = m_resourceManager.getImages(index);
 
 	std::vector<vk::DescriptorImageInfo> info;
 	for (auto& handle : textures) {
@@ -385,7 +360,7 @@ uint32_t MaterialManager::registerTextureGroup(
 
 		info.push_back({
 			.sampler = m_linearSampler,
-			.imageView = image.accesses[0].view,
+			.imageView = image.view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 		});
 	}
@@ -393,70 +368,82 @@ uint32_t MaterialManager::registerTextureGroup(
 	vk::WriteDescriptorSet writeInfo = {
 		.dstSet = m_globalSet,
 		.dstBinding = 3,
-		.dstArrayElement = offset,
+		.dstArrayElement = 0,
 		.descriptorCount = (uint32_t)textures.size(),
 		.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 		.pImageInfo = info.data(),
 	};
 
 	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
-	return offset;
+	return 0;
 }
 
-MaterialManager::MaterialData MaterialManager::createMaterialData(
-	MaterialIndex index
-) {
-	MaterialMetadata metadata = m_materialMetadata[index];
+void MaterialManager::createMaterialData() {
+	std::vector<ResourceManager::BufferDescription> ownedBufferDescriptions;
+	std::vector<ResourceManager::BufferDescription> sharedBufferDescriptions;
+	std::unordered_map<std::string_view, uint32_t> sharedBuffersIndices;
 
-	std::vector<MirroredBuffer> materialBuffers;
-	std::vector<BufferHandle> materialBuffersHandles;
-
-	for (int i = 0; i < metadata.materialBuffers.size(); i++) {
-		ResourceManager& resourceManager = m_resourceManager;
-
-		MirroredBuffer buffer = std::visit(
-			[&resourceManager](auto&& buffer) {
-				using T = std::decay_t<decltype(buffer)>;
-				if constexpr (std::is_same_v<T, uint32_t>) {
-					BufferHandle mirror = resourceManager.createBuffer(
-						ResourceManager::BufferDescription {
-							.size = buffer,
-							.usage = vk::BufferUsageFlagBits::eTransferSrc,
-							.location = AllocationLocation::Host,
-						}
-					);
-
-					BufferHandle base = resourceManager.createBuffer(
-						ResourceManager::BufferDescription {
-							.size = buffer,
-							.usage = vk::BufferUsageFlagBits::eUniformBuffer |
-				                     vk::BufferUsageFlagBits::eTransferDst,
-							.location = AllocationLocation::Device,
-						}
-					);
-					return MirroredBuffer { mirror, base };
-				} else if constexpr (std::is_same_v<T, std::string_view>) {
-					return MirroredBuffer {
-						BufferHandle { 0 },
-						resourceManager.getNamedBufferIndex(buffer)
-					};
+	for (const auto& [index, metadata] : m_materialMetadata) {
+		if (metadata.materialBufferSize > 0)
+			ownedBufferDescriptions.push_back(
+				ResourceManager::BufferDescription {
+					.size = metadata.materialBufferSize,
+					.usage = vk::BufferUsageFlagBits::eUniformBuffer |
+			                 vk::BufferUsageFlagBits::eTransferDst,
 				}
-			},
-			metadata.materialBuffers[i]
-		);
-		materialBuffers.push_back(buffer);
-		materialBuffersHandles.push_back(buffer.deviceBuffer);
+			);
+
+		for (auto name : metadata.sharedMaterialBuffers) {
+			if (sharedBuffersIndices.contains(name)) continue;
+
+			sharedBuffersIndices[name] = sharedBufferDescriptions.size();
+			sharedBufferDescriptions.push_back(
+				ResourceManager::_defaultNamedBufferData.at(name)
+			);
+		}
 	}
+	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
 
-	vk::DescriptorSet materialSet = createSet(
-		metadata.materialBindings,
-		metadata.materialLayout,
-		materialBuffersHandles
-	);
+	if (sharedBufferDescriptions.size() > 0)
+		bufferDescriptions.insert(
+			bufferDescriptions.end(),
+			sharedBufferDescriptions.begin(),
+			sharedBufferDescriptions.end()
+		);
+	if (ownedBufferDescriptions.size() > 0)
+		bufferDescriptions.insert(
+			bufferDescriptions.end(),
+			ownedBufferDescriptions.begin(),
+			ownedBufferDescriptions.end()
+		);
 
-	return {
-		.pipeline = metadata.pipeline,
-		.materialBuffers = materialBuffers,
-		.materialSet = materialSet,
-	};
+	m_materialDataAllocation =
+		m_resourceManager.createResources({}, bufferDescriptions);
+
+	std::vector<BufferHandle> handles =
+		m_resourceManager.getBuffers(m_materialDataAllocation);
+
+	uint32_t offset = sharedBufferDescriptions.size();
+	for (const auto& [index, metadata] : m_materialMetadata) {
+		std::vector<BufferHandle> materialHandles;
+		for (auto& sharedBuffer : metadata.sharedMaterialBuffers) {
+			uint32_t sharedBufferIndex = sharedBuffersIndices.at(sharedBuffer);
+			materialHandles.push_back(handles.at(sharedBufferIndex));
+		}
+
+		if (metadata.materialBufferSize > 0) {
+			materialHandles.push_back(handles.at(offset));
+			offset++;
+		}
+
+		vk::DescriptorSet materialSet = createSet(
+			metadata.materialBindings, metadata.materialLayout, materialHandles
+		);
+
+		m_materialData[index] = {
+			.pipeline = metadata.pipeline,
+			.materialBuffers = materialHandles,
+			.materialSet = materialSet,
+		};
+	}
 };

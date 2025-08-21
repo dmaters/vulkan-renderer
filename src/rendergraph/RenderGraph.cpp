@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -33,6 +34,12 @@ RenderGraph::RenderGraph(
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
 	m_materialManager(materialManager) {
+	vk::Device& device = Instance::Get().device;
+	m_renderSemaphores = {
+		device.createSemaphore({}),
+		device.createSemaphore({}),
+		device.createSemaphore({}),
+	};
 }
 void RenderGraph::addImage(
 	std::string_view name,
@@ -58,14 +65,10 @@ void RenderGraph::writeMemoryBarrier(
 	for (auto& [name, barrier] : task.barriers.imageBarriers) {
 		Image& image = m_resourceManager.getNamedImage(name);
 
-		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
-
 		barrier.image = image.image;
 		barrier.subresourceRange = {
-			.aspectMask = image.getAspectFlags(),
-			.baseMipLevel = 0,
+			.aspectMask = Image::GetAspectFlags(image.format),
 			.levelCount = 1,
-			.baseArrayLayer = accessIndex,
 			.layerCount = 1,
 		};
 		imageBarriers.push_back(barrier);
@@ -74,9 +77,7 @@ void RenderGraph::writeMemoryBarrier(
 
 	for (auto& [name, barrier] : task.barriers.bufferBarriers) {
 		Buffer& buffer = m_resourceManager.getNamedBuffer(name);
-		uint8_t accessIndex = buffer.transient ? m_currentFrame : 0;
-
-		barrier.offset = buffer.bufferAccess[accessIndex].offset;
+		barrier.buffer = buffer.buffer;
 		bufferBarriers.push_back(barrier);
 	}
 
@@ -98,6 +99,8 @@ void RenderGraph::outputToSwapchain(
 	Image& swapchainImage = m_swapchain.getImage(index);
 
 	vk::ImageMemoryBarrier2 sourceBarrier = {
+		.srcStageMask =  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		.srcAccessMask =vk::AccessFlagBits2::eColorAttachmentWrite,
 		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
 		.dstAccessMask = vk::AccessFlagBits2::eTransferRead,
 		.oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -107,15 +110,16 @@ void RenderGraph::outputToSwapchain(
 			.aspectMask = vk::ImageAspectFlagBits::eColor,
 			.baseMipLevel = 0,
 			.levelCount = 1,
-			.baseArrayLayer = m_currentFrame,
+			.baseArrayLayer = 0,
 			.layerCount = 1,
 		}
 	};
 
 	vk::ImageMemoryBarrier2 swapchainBarrier = {
+		.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
 		.dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-		.oldLayout = swapchainImage.accesses[0].layout,
+		.oldLayout = swapchainImage.layout,
 		.newLayout = vk::ImageLayout::eTransferDstOptimal,
 		.image = swapchainImage.image,
 		.subresourceRange = {
@@ -130,8 +134,9 @@ void RenderGraph::outputToSwapchain(
 	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
 		.imageMemoryBarrierCount = 2,
 		.pImageMemoryBarriers =
-			std::array<vk::ImageMemoryBarrier2, 2> { sourceBarrier,
-                                                    swapchainBarrier }
+			std::array<vk::ImageMemoryBarrier2, 2> {
+													sourceBarrier, swapchainBarrier,
+													}
 				.data()
     });
 	commandBuffer.blitImage(
@@ -143,7 +148,7 @@ void RenderGraph::outputToSwapchain(
 			.srcSubresource = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
 				.mipLevel = 0,
-				.baseArrayLayer = m_currentFrame,
+				.baseArrayLayer = 0,
 				.layerCount = 1,
 			},
 			.srcOffsets = {{
@@ -197,18 +202,17 @@ void RenderGraph::outputToSwapchain(
                                                     swapchainBarrier }
 				.data()
     });
-	resultImage.accesses[m_currentFrame].layout =
-		vk::ImageLayout::eColorAttachmentOptimal;
-	swapchainImage.accesses[0].layout = vk::ImageLayout::ePresentSrcKHR;
+	resultImage.layout = vk::ImageLayout::eColorAttachmentOptimal;
+	swapchainImage.layout = vk::ImageLayout::ePresentSrcKHR;
 }
 
 void RenderGraph::clearUnusedResources() {
 	for (ImageHandle image : m_unusedImages[0]) {
-		m_resourceManager.free(image);
+		//		m_resourceManager.free(image);
 	}
 
 	for (BufferHandle buffer : m_unusedBuffers[0]) {
-		m_resourceManager.free(buffer);
+		//		m_resourceManager.free(buffer);
 	}
 
 	for (int i = 0; i < 2; i++) {
@@ -236,25 +240,26 @@ void RenderGraph::clearUnusedResources() {
 void RenderGraph::rebuildSwapchain() {
 	m_swapchain.rebuild();
 	if (m_swapchain.getResolution() == vk::Extent2D(0)) return;
-
+	/*
 	for (auto& [name, _] : m_data.imageStatuses) {
-		if (!m_swapchainDependentImages.contains(name)) continue;
-		m_unusedImages[2].push_back(m_resourceManager.getNamedImageHandle(name)
-		);
+	    if (!m_swapchainDependentImages.contains(name)) continue;
+	    m_unusedImages[2].push_back(m_resourceManager.getNamedImageHandle(name)
+	);
 
-		vk::Extent2D resolution = m_swapchain.getResolution();
-		ResourceManager::ImageDescription info = m_imageCreationInfos[name];
-		uint8_t multiplier = m_swapchainDependentImages[name];
-		float ratio = multiplier >= 1 ? (1 / multiplier) : (1 * -multiplier);
+	vk::Extent2D resolution = m_swapchain.getResolution();
+	ResourceManager::ImageDescription info = m_imageCreationInfos[name];
+	uint8_t multiplier = m_swapchainDependentImages[name];
+	float ratio = multiplier >= 1 ? (1 / multiplier) : (1 * -multiplier);
 
-		info.width = resolution.width * ratio;
-		info.height = resolution.height * ratio;
+	info.width = resolution.width * ratio;
+	info.height = resolution.height * ratio;
 
-		ImageHandle image = m_resourceManager.createImage(info);
+	ImageHandle image = m_resourceManager.createImage(info);
 
-		m_resourceManager.setName(name, image);
+	m_resourceManager.setName(name, image);
 	}
 
+	*/
 	m_swapchainFlushCounter = 2;
 }
 
@@ -265,31 +270,48 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 		auto& [initialLayout, finalLayout] = statuses;
 
 		Image& image = m_resourceManager.getNamedImage(name);
-		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
 
-		if (image.accesses[accessIndex].layout == initialLayout) continue;
+		// if (image.layout == initialLayout) continue;
 
 		imageBarriers.push_back({
-
-			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-			.oldLayout = image.accesses[accessIndex].layout,
+			.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
+			.dstStageMask = vk::PipelineStageFlagBits2::eAllGraphics,
+			.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite |
+                 vk::AccessFlagBits2::eDepthStencilAttachmentWrite | 
+				 vk::AccessFlagBits2::eShaderRead,
+			.oldLayout = image.layout,
 			.newLayout = initialLayout,
 			.image = image.image,
 			.subresourceRange = {
 								 .aspectMask = image.getAspectFlags(),
 								 .baseMipLevel = 0,
 								 .levelCount = 1,
-								 .baseArrayLayer = accessIndex,
+								 .baseArrayLayer = 0,
 								 .layerCount = 1,
 								 },
         });
 
-		image.accesses[accessIndex].layout = initialLayout;
+		image.layout = initialLayout;
 	}
 
+	Buffer& projViewBuffer = m_resourceManager.getNamedBuffer("camera_data");
+	vk::BufferMemoryBarrier2 projViewUpdate {
+		.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+		.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+		.dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+		.buffer = projViewBuffer.buffer,
+		.offset = 0,
+		.size = projViewBuffer.size,
+
+	};
+
 	buffer.pipelineBarrier2(vk::DependencyInfo {
+		.bufferMemoryBarrierCount = 1,
+		.pBufferMemoryBarriers = &projViewUpdate,
 		.imageMemoryBarrierCount = (uint32_t)imageBarriers.size(),
 		.pImageMemoryBarriers = imageBarriers.data(),
+
 	});
 }
 
@@ -300,7 +322,8 @@ void RenderGraph::submit(const Scene& scene) {
 
 	const Frame& frame = m_swapchain.getFrame(m_currentFrame);
 
-	auto _ = device.waitForFences({ frame.fence }, vk::True, 1e12);
+	auto _ = device.waitForFences({ frame.fence }, vk::True, UINT64_MAX);
+
 	device.resetFences(frame.fence);
 	device.resetCommandPool(frame.commandPool);
 
@@ -313,7 +336,9 @@ void RenderGraph::submit(const Scene& scene) {
 
 	uint32_t imageIndex = 0;
 	try {
-		imageIndex = device.acquireNextImage2KHR(acquireInfo).value;
+		auto result = device.acquireNextImage2KHR(acquireInfo);
+		imageIndex = result.value;
+
 	} catch (vk::OutOfDateKHRError& _) {
 		rebuildSwapchain();
 		return;
@@ -366,6 +391,8 @@ void RenderGraph::submit(const Scene& scene) {
 
 	commandBuffer.end();
 
+	auto semaphore = m_renderSemaphores[imageIndex];
+
 	vk::SubmitInfo submitInfo;
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = { &frame.imageAvailable };
@@ -374,19 +401,15 @@ void RenderGraph::submit(const Scene& scene) {
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = { &commandBuffer };
 	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = { &frame.renderFinished };
-
-
+	submitInfo.pSignalSemaphores = { &semaphore };
 
 	Instance::Get().graphicQueue.submit({ submitInfo }, { frame.fence });
 
 	vk::PresentInfoKHR presentInfo {};
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &frame.renderFinished;
-
+	presentInfo.pWaitSemaphores = &semaphore;
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = { &(m_swapchain.getSwapchain()) };
-
 	presentInfo.pImageIndices = &imageIndex;
 	try {
 		auto _ = Instance::Get().presentQueue.presentKHR(presentInfo);
@@ -397,8 +420,7 @@ void RenderGraph::submit(const Scene& scene) {
 
 	for (auto& [name, statuses] : m_data.imageStatuses) {
 		Image& image = m_resourceManager.getNamedImage(name);
-		uint8_t accessIndex = image.transient ? m_currentFrame : 0;
-		image.accesses[accessIndex].layout = statuses.finalLayout;
+		image.layout = statuses.finalLayout;
 	}
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
@@ -407,18 +429,54 @@ void RenderGraph::submit(const Scene& scene) {
 void RenderGraph::build(GraphData graphData) {
 	m_data = graphData;
 
-	for (auto& image : m_data.transientImagesRequired) {
-		if (image == "result") continue;
+	m_data.transientImagesRequired.erase("result");
 
-		ImageHandle handle =
-			m_resourceManager.createImage(m_imageCreationInfos[image]);
-		m_resourceManager.setName(image, handle);
+	std::vector<ResourceManager::ImageDescription> imagesDescription;
+	std::vector<ResourceManager::ImageDescription>
+		resolutionDependentImagesDescription;
+	std::vector<ResourceManager::BufferDescription> buffersDescription;
+	for (auto& image : graphData.transientImagesRequired) {
+		if (m_swapchainDependentImages.contains(image)) {
+			resolutionDependentImagesDescription.push_back(
+				m_imageCreationInfos.at(image)
+			);
+		} else
+			imagesDescription.push_back(m_imageCreationInfos.at(image));
+	}
+	for (auto& image : graphData.transientBuffersRequired) {
+		buffersDescription.push_back(m_bufferCreationsInfos.at(image));
 	}
 
-	for (auto& buffer : m_data.transientBuffersRequired) {
-		BufferHandle handle =
-			m_resourceManager.createBuffer(m_bufferCreationsInfos[buffer]);
+	m_frameDataAllocation = m_resourceManager.createResources(
+		imagesDescription, buffersDescription
+	);
+	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
-		m_resourceManager.setName(buffer, handle);
+	uint32_t index = 0;
+	for (auto& image : graphData.transientImagesRequired) {
+		if (m_swapchainDependentImages.contains(image)) continue;
+		m_resourceManager.setName(image, images.at(index));
+		index++;
+	}
+	index = 0;
+
+	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
+	for (auto& buffer : graphData.transientBuffersRequired) {
+		m_resourceManager.setName(buffer, buffers.at(index));
+		index++;
+	}
+
+	m_resolutionDependentAllocation = m_resourceManager.createResources(
+		resolutionDependentImagesDescription, {}
+	);
+
+	index = 0;
+
+	auto& resolutionDependentImages =
+		m_resourceManager.getImages(m_resolutionDependentAllocation);
+	for (auto& image : graphData.transientImagesRequired) {
+		if (!m_swapchainDependentImages.contains(image)) continue;
+		m_resourceManager.setName(image, resolutionDependentImages.at(index));
+		index++;
 	}
 }

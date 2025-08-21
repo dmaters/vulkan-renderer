@@ -7,5 +7,4 @@ struct Frame {
 	vk::CommandPool commandPool;
 	vk::Fence fence;
 	vk::Semaphore imageAvailable;
-	vk::Semaphore renderFinished;
 };

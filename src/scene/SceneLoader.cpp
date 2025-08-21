@@ -166,21 +166,24 @@ void SceneLoader::loadMaterials(
 ) {
 	MaterialIndex material = m_materialManager.getMaterialIndex("pbr_deferred");
 
-	std::vector<ImageHandle> images;
-
 	uint32_t imageCount = 3;
 	std::vector<uint32_t> imageIndices;
-	images.push_back(
-		m_resourceManager.loadImage("resources/textures/default_albedo.png")
-	);
 
-	images.push_back(
-		m_resourceManager.loadImage("resources/textures/default_normal.png")
-	);
+	std::vector<ResourceManager::TextureInfo> textures;
+	textures.push_back({
+		"resources/textures/default_albedo.png",
+		vk::Format::eBc7SrgbBlock,
+	});
 
-	images.push_back(m_resourceManager.loadImage(
-		"resources/textures/default_metallicRoughness.png"
-	));
+	textures.push_back({
+		"resources/textures/default_normal.png",
+		vk::Format::eBc5SnormBlock,
+	});
+
+	textures.push_back({
+		"resources/textures/default_metallicRoughness.png",
+		vk::Format::eBc5SnormBlock,
+	});
 
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
@@ -189,9 +192,10 @@ void SceneLoader::loadMaterials(
 		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			images.push_back(m_resourceManager.loadImage(
-				texturePath / std::filesystem::path(path.C_Str())
-			));
+			textures.push_back({
+				texturePath / std::filesystem::path(path.C_Str()),
+				vk::Format::eBc7SrgbBlock,
+			});
 			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(0);
@@ -199,9 +203,10 @@ void SceneLoader::loadMaterials(
 		if (materialInstance->GetTexture(aiTextureType_NORMALS, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			images.push_back(m_resourceManager.loadImage(
-				texturePath / std::filesystem::path(path.C_Str())
-			));
+			textures.push_back({
+				texturePath / std::filesystem::path(path.C_Str()),
+				vk::Format::eBc5SnormBlock,
+			});
 			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(1);
@@ -210,27 +215,31 @@ void SceneLoader::loadMaterials(
 				aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &path
 			) == aiReturn_SUCCESS &&
 		    path.length > 0) {
-			images.push_back(m_resourceManager.loadImage(
-				texturePath / std::filesystem::path(path.C_Str())
-			));
+			textures.push_back({
+				texturePath / std::filesystem::path(path.C_Str()),
+				vk::Format::eBc7SrgbBlock,
+			});
 			imageIndices.push_back(imageCount++);
 		} else {
 			imageIndices.push_back(2);
 		}
 	}
-
-	m_materialManager.registerTextureGroup(images);
+	auto allocation = m_resourceManager.loadSceneTextures(textures);
+	m_materialManager.registerTextureGroup(allocation);
 	uint32_t instanceCount = scene.mNumMaterials;
-	m_materialManager.updateMaterialData<MaterialDefinitions::PBRMaterial>(
+
+	auto materialData = m_materialManager.getMaterial(
+		m_materialManager.getMaterialIndex("pbr_deferred")
+	);
+
+	m_materialManager.updateMaterialData<MaterialDefinitions::PBRUniforms>(
 		material,
 		[instanceCount,
-	     imageIndices](MaterialDefinitions::PBRMaterial materialData) {
+	     imageIndices](MaterialDefinitions::PBRUniforms instances) {
 			for (int i = 0; i < instanceCount; i++) {
-				(*materialData.instances)[i].albedo = imageIndices.at(i * 3);
-				(*materialData.instances)[i].normal =
-					imageIndices.at(i * 3 + 1);
-				(*materialData.instances)[i].roughness_metallic =
-					imageIndices.at(i * 3 + 2);
+				instances[i].albedo = imageIndices.at(i * 3);
+				instances[i].normal = imageIndices.at(i * 3 + 1);
+				instances[i].roughness_metallic = imageIndices.at(i * 3 + 2);
 			}
 		}
 	);

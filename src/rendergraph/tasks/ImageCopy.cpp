@@ -34,34 +34,23 @@ void ImageCopy::execute(
 	vk::CommandBuffer& commandBuffer, const Resources& resources
 ) {
 	Image& origin = resources.resourceManager.getNamedImage(m_origin);
-
-	uint8_t originAccessIndex = origin.transient ? resources.currentFrame : 0;
 	Image& destination = resources.resourceManager.getNamedImage(m_destination);
 
-	uint8_t destinationAccessIndex =
-		destination.transient ? resources.currentFrame : 0;
-
-	vk::ImageSubresourceLayers originLayer = {
+	vk::ImageSubresourceLayers layer = {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.mipLevel = 0,
-		.baseArrayLayer = originAccessIndex,
-		.layerCount = 1,
-	};
-	vk::ImageSubresourceLayers destinationLayer = {
-		.aspectMask = vk::ImageAspectFlagBits::eColor,
-		.mipLevel = 0,
-		.baseArrayLayer = destinationAccessIndex,
+		.baseArrayLayer = 0,
 		.layerCount = 1,
 	};
 	commandBuffer.copyImage(
 		origin.image,
-		origin.accesses[originAccessIndex].layout,
+		origin.layout,
 		destination.image,
-		destination.accesses[destinationAccessIndex].layout,
+		destination.layout,
 		{
 			{
-             .srcSubresource = originLayer,
-             .dstSubresource = destinationLayer,
+             .srcSubresource = layer,
+             .dstSubresource = layer,
              .extent = origin.size,
 			 },
     }

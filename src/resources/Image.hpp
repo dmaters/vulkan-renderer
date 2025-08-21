@@ -5,12 +5,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 
-#include "memory/MemoryAllocator.hpp"
-
-struct ImageAccess {
-	vk::ImageView view;
-	vk::ImageLayout layout;
-};
+#include "memory/Allocation.hpp"
 
 struct Image {
 	vk::Image image = nullptr;
@@ -18,10 +13,13 @@ struct Image {
 	vk::Format format;
 	vk::Extent3D size;
 	std::optional<SubAllocation> allocation;
-	std::vector<ImageAccess> accesses;
-	bool transient = false;
+	vk::ImageLayout layout;
 
 	vk::ImageAspectFlags getAspectFlags() const {
+		return GetAspectFlags(format);
+	}
+
+	static vk::ImageAspectFlags GetAspectFlags(vk::Format format) {
 		vk::ImageAspectFlags flags;
 		if (format == vk::Format::eD16Unorm)
 			flags = vk::ImageAspectFlagBits::eDepth;
