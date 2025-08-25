@@ -36,14 +36,17 @@ private:
 		m_imageCreationInfos;
 	std::unordered_map<std::string_view, uint8_t> m_swapchainDependentImages;
 
-	std::array<std::vector<ImageHandle>, 3> m_unusedImages;
-	std::array<std::vector<BufferHandle>, 3> m_unusedBuffers;
+	ResourceManager::AllocationIndex m_frameDataAllocation;
+	ResourceManager::AllocationIndex m_resolutionDependentAllocation;
+
+	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation;
 	uint8_t m_swapchainFlushCounter = 0;
 
 	GraphData m_data;
 	ImageHandle m_resultHandle = { 0 };
 
 	uint8_t m_currentFrame = 0;
+	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
 
 	void writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer);
 
@@ -55,7 +58,7 @@ private:
 
 	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);
 	void clearUnusedResources();
-
+	void buildSwapchainResources();
 	void rebuildSwapchain();
 
 public:

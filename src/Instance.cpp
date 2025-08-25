@@ -66,6 +66,8 @@ Instance& Instance::Create(SDL_Window* window) {
 //// Instance
 const std::vector<const char*> instanceValidationLayers = {
 	"VK_LAYER_KHRONOS_validation",
+	"VK_LAYER_LUNARG_crash_diagnostic",
+
 };
 const std::vector<const char*> instanceExtensionLayers {
 	vk::EXTDebugUtilsExtensionName,
@@ -210,7 +212,7 @@ const std::vector<const char*> deviceExtensions {
 	"VK_KHR_maintenance2",
 	"VK_KHR_synchronization2",
 	"VK_EXT_descriptor_indexing",
-	"VK_KHR_push_descriptor"
+	"VK_KHR_push_descriptor",
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);

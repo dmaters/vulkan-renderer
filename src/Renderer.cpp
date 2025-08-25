@@ -14,15 +14,11 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
-#include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
-#include "material/MaterialManager_impl.hpp"
-#include "memory/MemoryAllocator.hpp"
 #include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/tasks/ImageCopy.hpp"
+#include "rendergraph/RenderGraphBuilder.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"

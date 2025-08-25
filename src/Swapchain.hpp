@@ -18,8 +18,8 @@ private:
 
 	vk::Extent2D m_resolution;
 
-	std::vector<Frame> m_frames;
-	std::vector<Image> m_images;
+	std::array<Frame, 3> m_frames;
+	std::array<Image, 3> m_images;
 
 	void createFrames();
 	void createImages();

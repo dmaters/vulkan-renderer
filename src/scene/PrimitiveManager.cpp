@@ -1,9 +1,10 @@
 #include "PrimitiveManager.hpp"
 
 #include <cstdint>
+#include <cstring>
+#include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
-#include "memory/MemoryAllocator.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -20,24 +21,42 @@ void PrimitiveManager::addPrimitive(
 	indexByteOffset = m_indexBuffer.size();
 	m_indexBuffer.insert(m_indexBuffer.end(), indices.begin(), indices.end());
 }
-bool PrimitiveManager::buildBuffers(ResourceManager& resourceManager) {
-	BufferHandle vertexBuffer = resourceManager.createBuffer({
-		.size = (uint32_t)m_vertexbuffer.size(),
-		.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-	             vk::BufferUsageFlagBits::eTransferDst,
-		.location = AllocationLocation::Device,
-	});
-	resourceManager.setName("vertex_buffer", vertexBuffer);
-	resourceManager.copyToBuffer(m_vertexbuffer, vertexBuffer);
+ResourceManager::AllocationIndex PrimitiveManager::buildBuffers(
+	ResourceManager& resourceManager
+) {
+	ResourceManager::AllocationIndex index = resourceManager.createResources(
+		{
+    },
+		{
+			{
+				.size = (uint32_t)m_vertexbuffer.size(),
+				.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+	                     vk::BufferUsageFlagBits::eTransferDst,
+			},
+			{
+				.size = (uint32_t)m_indexBuffer.size(),
+				.usage = vk::BufferUsageFlagBits::eIndexBuffer |
+	                     vk::BufferUsageFlagBits::eTransferDst,
+			},
+		}
+	);
 
-	BufferHandle indexBuffer = resourceManager.createBuffer({
-		.size = (uint32_t)m_indexBuffer.size(),
-		.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-	             vk::BufferUsageFlagBits::eTransferDst,
-		.location = AllocationLocation::Device,
-	});
-	resourceManager.setName("index_buffer", indexBuffer);
+	auto buffers = resourceManager.getBuffers(index);
 
-	resourceManager.copyToBuffer(m_indexBuffer, indexBuffer);
-	return true;
+	resourceManager.setName("vertex_buffer", buffers.at(0));
+	resourceManager.setName("index_buffer", buffers.at(1));
+
+	resourceManager.updateBufferSync(
+		buffers.at(0),
+		[&vertices = m_vertexbuffer](std::byte* address) {
+			memcpy(address, vertices.data(), vertices.size());
+		}
+	);
+	resourceManager.updateBufferSync(
+		buffers.at(1),
+		[&indices = m_indexBuffer](std::byte* address) {
+			memcpy(address, indices.data(), indices.size());
+		}
+	);
+	return index;
 }

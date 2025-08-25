@@ -2,21 +2,25 @@ project(thirdparty)
 add_library(${PROJECT_NAME} INTERFACE)
 
 include(FetchContent)
+
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
     GIT_TAG 1.0.1
 )
+
 FetchContent_Declare(
     sdl
     GIT_REPOSITORY https://github.com/libsdl-org/SDL
     GIT_TAG release-3.2.20
 )
+
 FetchContent_Declare(
     assimp
     GIT_REPOSITORY https://github.com/assimp/assimp
     GIT_TAG v6.0.2
 )
+
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb

@@ -29,7 +29,7 @@ float4 main(VertexOutput input) : SV_Target{
 	float3 brdf = float3(0);
 
 	float3 albedo = _albedo.Sample(input.frag_position).rgb;
-    float3 normal = _normal.Sample(input.frag_position).rgb;
+	float3 normal = _normal.Sample(input.frag_position).rgb;
     float2 roughnessMetallic = _roughness_metallic.Sample(input.frag_position).gb;
 
 

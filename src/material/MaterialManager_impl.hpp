@@ -11,7 +11,6 @@
 #include "Pipeline.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "memory/Allocation.hpp"
-#include "memory/MemoryAllocator.hpp"
 #include "resources/ResourceManager.hpp"
 
 #pragma region ForwardPBR
@@ -19,8 +18,7 @@
 template <>
 MaterialIndex
 MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
+	MaterialIndex index = ++m_materialCount;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
 		{
@@ -52,9 +50,9 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 		metadata = { .pipeline = pipeline,
 		             .materialBindings = materialBindings,
 		             .materialLayout = materialLayout,
-					 .materialBuffers = {
+					 .materialBufferSize =
 						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-					 },
+					 
 		             .namedResourceDependencies =
 	{
 		{
@@ -77,7 +75,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 				.access =
 					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 				.stage = vk::PipelineStageFlagBits2::
-					eEarlyFragmentTests,
+					eAllGraphics,
 				},
 				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 		 },
@@ -95,8 +93,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 template <>
 MaterialIndex
 MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
+	MaterialIndex index = ++m_materialCount;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
 		{
@@ -150,9 +147,9 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 		metadata = { .pipeline = pipeline,
 		             .materialBindings = materialBindings,
 		             .materialLayout = materialLayout,
-					 .materialBuffers ={
+					 .materialBufferSize =
 						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-					 },
+					 
 		             .namedResourceDependencies =
 	{
 		{
@@ -208,13 +205,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 				.access =
 					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 				.stage = vk::PipelineStageFlagBits2::
-					eEarlyFragmentTests,
+					eAllGraphics,
 				},
 				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 		 },
 	},
-
-	};
+};
 
 	m_materialMetadata[index] = metadata;
 
@@ -226,8 +222,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 template <>
 MaterialIndex
 MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
+	MaterialIndex index = ++m_materialCount;
 
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings {};
 	vk::DescriptorSetLayout materialLayout =
@@ -312,7 +307,6 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		metadata = { .pipeline = pipeline,
 		             .materialBindings = materialBindings,
 		             .materialLayout = materialLayout,
-					 .materialBuffers ={},
 		             .namedResourceDependencies =
 	{{
 			.name = "main_color",
@@ -334,7 +328,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 				.access =
 					vk::AccessFlagBits2::eDepthStencilAttachmentRead,
 				.stage = vk::PipelineStageFlagBits2::
-					eEarlyFragmentTests,
+					eAllGraphics,
 			},
 			.requiredLayout = vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal,
 		},
@@ -407,8 +401,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 template <>
 MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 ) {
-	MaterialIndex index = m_materialCount;
-	m_materialCount++;
+	MaterialIndex index = ++m_materialCount;
 	/*
 	    std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
 	        // {
@@ -445,10 +438,6 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 		metadata = { .pipeline = pipeline,
 		             .materialBindings = {},
 		             .materialLayout = m_emptySetLayout,
-					 .materialBuffers = {
-
-						//(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-					 },
 		             .namedResourceDependencies =
 	{
 		{
@@ -459,7 +448,7 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 				.access =
 					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 				.stage = vk::PipelineStageFlagBits2::
-					eEarlyFragmentTests,
+					eAllGraphics,
 				},
 				.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
 		 },
