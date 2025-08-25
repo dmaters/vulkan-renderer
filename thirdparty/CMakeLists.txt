@@ -26,21 +26,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/nothings/stb
 )
 
-set(OPTION_ENABLE_ALL_APPS OFF)
-set(OPTION_BUILD_KTX2 OFF)
-set(OPTION_BUILD_EXR OFF)
-set(OPTION_BUILD_GUI OFF)
-set(OPTION_BUILD_BROTLIG OFF)
-set(OPTION_BUILD_BROTLIG_GUI OFF)
-set(OPTION_BUILD_CMP_SDK ON)
-
-FetchContent_Declare(
-    compressonator
-    GIT_REPOSITORY https://github.com/GPUOpen-Tools/compressonator
-    GIT_TAG V4.5.52
-)
-
-FetchContent_MakeAvailable(glm sdl assimp stb compressonator)
+FetchContent_MakeAvailable(glm sdl assimp stb)
 
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
@@ -65,5 +51,4 @@ target_link_libraries(${PROJECT_NAME} INTERFACE
     assimp
     stb
     slang
-    CMP_Compressonator
 )

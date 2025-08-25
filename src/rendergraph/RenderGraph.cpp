@@ -207,59 +207,51 @@ void RenderGraph::outputToSwapchain(
 }
 
 void RenderGraph::clearUnusedResources() {
-	for (ImageHandle image : m_unusedImages[0]) {
-		//		m_resourceManager.free(image);
-	}
-
-	for (BufferHandle buffer : m_unusedBuffers[0]) {
-		//		m_resourceManager.free(buffer);
-	}
-
-	for (int i = 0; i < 2; i++) {
-		m_unusedImages[i].clear();
-		for (auto image : m_unusedImages[i + 1]) {
-			m_unusedImages[i].push_back(image);
-		}
-	}
-	m_unusedImages[2].clear();
-
-	for (int i = 0; i < 2; i++) {
-		m_unusedBuffers[i].clear();
-		for (auto buffer : m_unusedBuffers[i + 1]) {
-			m_unusedBuffers[i].push_back(buffer);
-		}
-	}
-	m_unusedBuffers[2].clear();
-
-	if (m_swapchainFlushCounter > 0)
+	if (m_swapchainFlushCounter > 1)
 		m_swapchainFlushCounter--;
-	else
+	else if (m_swapchainFlushCounter == 1) {
+		m_resourceManager.freeAllocation(m_oldResolutionDependentAllocation);
 		m_swapchain.flush();
+		m_swapchainFlushCounter = 0;
+	}
 }
+void RenderGraph::buildSwapchainResources() {
+	std::vector<ResourceManager::ImageDescription>
+		resolutionDependentImagesDescription;
 
+	for (auto& image : m_data.transientImagesRequired) {
+		if (!m_swapchainDependentImages.contains(image)) continue;
+		auto creationInfo = m_imageCreationInfos.at(image);
+
+		uint8_t ratio = m_swapchainDependentImages[image];
+		float multiplier = ratio > 0 ? ratio : (1 / -ratio);
+
+		vk::Extent2D res = m_swapchain.getResolution();
+		creationInfo.width = res.width * multiplier;
+		creationInfo.height = res.height * multiplier;
+
+		resolutionDependentImagesDescription.push_back(creationInfo);
+	}
+
+	m_resolutionDependentAllocation = m_resourceManager.createResources(
+		resolutionDependentImagesDescription, {}
+	);
+
+	uint32_t index = 0;
+
+	auto& resolutionDependentImages =
+		m_resourceManager.getImages(m_resolutionDependentAllocation);
+	for (auto& image : m_data.transientImagesRequired) {
+		if (!m_swapchainDependentImages.contains(image)) continue;
+		m_resourceManager.setName(image, resolutionDependentImages.at(index));
+		index++;
+	}
+}
 void RenderGraph::rebuildSwapchain() {
 	m_swapchain.rebuild();
 	if (m_swapchain.getResolution() == vk::Extent2D(0)) return;
-	/*
-	for (auto& [name, _] : m_data.imageStatuses) {
-	    if (!m_swapchainDependentImages.contains(name)) continue;
-	    m_unusedImages[2].push_back(m_resourceManager.getNamedImageHandle(name)
-	);
-
-	vk::Extent2D resolution = m_swapchain.getResolution();
-	ResourceManager::ImageDescription info = m_imageCreationInfos[name];
-	uint8_t multiplier = m_swapchainDependentImages[name];
-	float ratio = multiplier >= 1 ? (1 / multiplier) : (1 * -multiplier);
-
-	info.width = resolution.width * ratio;
-	info.height = resolution.height * ratio;
-
-	ImageHandle image = m_resourceManager.createImage(info);
-
-	m_resourceManager.setName(name, image);
-	}
-
-	*/
+	m_oldResolutionDependentAllocation = m_resolutionDependentAllocation;
+	buildSwapchainResources();
 	m_swapchainFlushCounter = 2;
 }
 
@@ -329,7 +321,7 @@ void RenderGraph::submit(const Scene& scene) {
 
 	vk::AcquireNextImageInfoKHR acquireInfo;
 	acquireInfo.swapchain = m_swapchain.getSwapchain();
-	acquireInfo.timeout = 1e12;
+	acquireInfo.timeout = UINT64_MAX;
 	acquireInfo.semaphore = frame.imageAvailable;
 	acquireInfo.fence = nullptr;
 	acquireInfo.deviceMask = 1;
@@ -432,16 +424,10 @@ void RenderGraph::build(GraphData graphData) {
 	m_data.transientImagesRequired.erase("result");
 
 	std::vector<ResourceManager::ImageDescription> imagesDescription;
-	std::vector<ResourceManager::ImageDescription>
-		resolutionDependentImagesDescription;
 	std::vector<ResourceManager::BufferDescription> buffersDescription;
 	for (auto& image : graphData.transientImagesRequired) {
-		if (m_swapchainDependentImages.contains(image)) {
-			resolutionDependentImagesDescription.push_back(
-				m_imageCreationInfos.at(image)
-			);
-		} else
-			imagesDescription.push_back(m_imageCreationInfos.at(image));
+		if (m_swapchainDependentImages.contains(image)) continue;
+		imagesDescription.push_back(m_imageCreationInfos.at(image));
 	}
 	for (auto& image : graphData.transientBuffersRequired) {
 		buffersDescription.push_back(m_bufferCreationsInfos.at(image));
@@ -466,17 +452,5 @@ void RenderGraph::build(GraphData graphData) {
 		index++;
 	}
 
-	m_resolutionDependentAllocation = m_resourceManager.createResources(
-		resolutionDependentImagesDescription, {}
-	);
-
-	index = 0;
-
-	auto& resolutionDependentImages =
-		m_resourceManager.getImages(m_resolutionDependentAllocation);
-	for (auto& image : graphData.transientImagesRequired) {
-		if (!m_swapchainDependentImages.contains(image)) continue;
-		m_resourceManager.setName(image, resolutionDependentImages.at(index));
-		index++;
-	}
+	buildSwapchainResources();
 }

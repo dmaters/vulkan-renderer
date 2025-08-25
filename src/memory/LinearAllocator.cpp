@@ -17,10 +17,10 @@ SubAllocation LinearAllocator::subAllocate(vk::MemoryRequirements requirements
 	                              : 0;
 	assert((offsetAligment + requirements.size) <= m_allocation.size);
 
-	m_occupiedOffset += offsetAligment;
-
+	uint32_t baseOffset = m_occupiedOffset + offsetAligment;
+	m_occupiedOffset += offsetAligment + requirements.size;
 	return {
-		.offset = m_occupiedOffset,
+		.offset = baseOffset,
 		.size = requirements.size,
 	};
 }

@@ -172,17 +172,17 @@ void SceneLoader::loadMaterials(
 	std::vector<ResourceManager::TextureInfo> textures;
 	textures.push_back({
 		"resources/textures/default_albedo.png",
-		vk::Format::eBc7SrgbBlock,
+		vk::Format::eR8G8B8A8Unorm,
 	});
 
 	textures.push_back({
 		"resources/textures/default_normal.png",
-		vk::Format::eBc5SnormBlock,
+		vk::Format::eR8G8B8A8Unorm,
 	});
 
 	textures.push_back({
 		"resources/textures/default_metallicRoughness.png",
-		vk::Format::eBc5SnormBlock,
+		vk::Format::eR8G8B8A8Unorm,
 	});
 
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
@@ -194,7 +194,7 @@ void SceneLoader::loadMaterials(
 		    path.length > 0) {
 			textures.push_back({
 				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eBc7SrgbBlock,
+				vk::Format::eR8G8B8A8Unorm,
 			});
 			imageIndices.push_back(imageCount++);
 		} else {
@@ -205,7 +205,7 @@ void SceneLoader::loadMaterials(
 		    path.length > 0) {
 			textures.push_back({
 				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eBc5SnormBlock,
+				vk::Format::eR8G8Unorm,
 			});
 			imageIndices.push_back(imageCount++);
 		} else {
@@ -217,7 +217,7 @@ void SceneLoader::loadMaterials(
 		    path.length > 0) {
 			textures.push_back({
 				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eBc7SrgbBlock,
+				vk::Format::eR8G8B8A8Unorm,
 			});
 			imageIndices.push_back(imageCount++);
 		} else {
@@ -235,7 +235,7 @@ void SceneLoader::loadMaterials(
 	m_materialManager.updateMaterialData<MaterialDefinitions::PBRUniforms>(
 		material,
 		[instanceCount,
-	     imageIndices](MaterialDefinitions::PBRUniforms instances) {
+	     imageIndices](MaterialDefinitions::PBRUniforms& instances) {
 			for (int i = 0; i < instanceCount; i++) {
 				instances[i].albedo = imageIndices.at(i * 3);
 				instances[i].normal = imageIndices.at(i * 3 + 1);

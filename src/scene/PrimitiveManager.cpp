@@ -48,13 +48,13 @@ ResourceManager::AllocationIndex PrimitiveManager::buildBuffers(
 
 	resourceManager.updateBufferSync(
 		buffers.at(0),
-		[vertices = m_vertexbuffer](std::byte* address) {
+		[&vertices = m_vertexbuffer](std::byte* address) {
 			memcpy(address, vertices.data(), vertices.size());
 		}
 	);
 	resourceManager.updateBufferSync(
 		buffers.at(1),
-		[indices = m_indexBuffer](std::byte* address) {
+		[&indices = m_indexBuffer](std::byte* address) {
 			memcpy(address, indices.data(), indices.size());
 		}
 	);

@@ -108,9 +108,10 @@ const std::unordered_map<std::string_view, ResourceManager::ImageDescription>
 
 const std::unordered_map<std::string_view, int8_t>
 	ResourceManager::_swapchainRatio = {
-		{ "gbuffer_albedo",   1 },
-		{ "gbuffer_normal",   1 },
-		{ "gbuffer_worldpos", 1 },
-		{ "main_color",       1 },
-		{ "depth",            1 },
+		{ "gbuffer_albedo",            1 },
+        { "gbuffer_normal",            1 },
+		{ "gbuffer_worldpos",          1 },
+        { "gbuffer_roughnessMetallic", 1 },
+		{ "main_color",                1 },
+        { "depth",                     1 },
 };

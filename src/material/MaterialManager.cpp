@@ -52,6 +52,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 		.addressModeU = vk::SamplerAddressMode::eRepeat,
 		.addressModeV = vk::SamplerAddressMode::eRepeat,
 		.addressModeW = vk::SamplerAddressMode::eRepeat,
+		.maxLod = 100,
 	};
 
 	m_linearSampler = device.createSampler(samplerInfo);

@@ -11,7 +11,7 @@ struct Allocation {
 	Allocation(vk::MemoryPropertyFlags type, uint32_t size);
 	size_t size = 0;
 	vk::DeviceMemory memory;
-	void* address = nullptr;
+	std::byte* address = nullptr;
 };
 
 struct SubAllocation {

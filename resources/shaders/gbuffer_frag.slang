@@ -21,6 +21,10 @@ struct PrimitiveInstance {
 
 [[vk::binding(0, 1)]] ConstantBuffer<PrimitiveInstance[512]> _instances;
 
+float3 reconstructNormal(float2 xy) {
+    float z = sqrt(max(0.0, 1.0 - xy.x*xy.x - xy.y*xy.y));
+    return normalize(float3(xy, z));
+}
 
 [shader("fragment")]
 FragmentOutput main(VertexOutput input){
@@ -31,13 +35,12 @@ FragmentOutput main(VertexOutput input){
 
     output.color = _textures[instance.albedo].Sample(input.texcoord);
     output.world_space = input.frag_position;
+    
 
+ 
+    float3 normal = reconstructNormal(_textures[instance.normal].Sample(input.texcoord).rg);
 	float3x3 TBN = float3x3(input.tangent, input.bitangent,-input.normal);
-	float3 localNormal = normalize(
-		_textures[instance.normal].Sample(input.texcoord).rgb *
-			2.0 -
-		1.0
-	);
+	float3 localNormal = normalize(normal * 2.0 - 1.0);
 	float3 transformedNormal = mul( localNormal,TBN);
     output.normal = float4(transformedNormal,1);
     output.metallic_roughness = _textures[instance.metallic_roughness].Sample(input.texcoord).gb;

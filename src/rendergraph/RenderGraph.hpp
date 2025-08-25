@@ -39,8 +39,7 @@ private:
 	ResourceManager::AllocationIndex m_frameDataAllocation;
 	ResourceManager::AllocationIndex m_resolutionDependentAllocation;
 
-	std::array<std::vector<ImageHandle>, 3> m_unusedImages;
-	std::array<std::vector<BufferHandle>, 3> m_unusedBuffers;
+	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation;
 	uint8_t m_swapchainFlushCounter = 0;
 
 	GraphData m_data;
@@ -59,7 +58,7 @@ private:
 
 	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);
 	void clearUnusedResources();
-
+	void buildSwapchainResources();
 	void rebuildSwapchain();
 
 public:

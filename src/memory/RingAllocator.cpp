@@ -9,14 +9,9 @@ RingAllocator::RingAllocator(
 	m_allocation(memoryType, size) {}
 
 SubAllocation RingAllocator::subAllocate(vk::MemoryRequirements requirements) {
-	uint32_t startingOffset = 0;
-	if (m_occupiedOffset > 0) {
-		startingOffset = m_occupiedOffset;
-		if (requirements.alignment > 0)
-			startingOffset +=
-				(requirements.alignment -
-			     m_occupiedOffset % requirements.alignment);
-	}
+	uint32_t startingOffset = m_occupiedOffset;
+	if (requirements.alignment > 0)
+		startingOffset += startingOffset % requirements.alignment;
 
 	if (m_allocation.size - startingOffset < requirements.size)
 		startingOffset = 0;

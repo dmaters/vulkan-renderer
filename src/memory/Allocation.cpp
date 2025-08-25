@@ -30,8 +30,10 @@ Allocation::Allocation(
 			.memoryTypeIndex = (uint32_t)i,
 		});
 
-		if (requiredType & vk::MemoryPropertyFlagBits::eHostCoherent)
-			address = device.mapMemory(memory, 0, requiredSize);
+		if (requiredType & vk::MemoryPropertyFlagBits::eHostVisible)
+			address = static_cast<std::byte*>(
+				device.mapMemory(memory, 0, requiredSize)
+			);
 
 		size = requiredSize;
 
