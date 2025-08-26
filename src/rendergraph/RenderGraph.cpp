@@ -269,7 +269,7 @@ void RenderGraph::writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer) {
 			.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
 			.dstStageMask = vk::PipelineStageFlagBits2::eAllGraphics,
 			.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite |
-                 vk::AccessFlagBits2::eDepthStencilAttachmentWrite | 
+                 vk::AccessFlagBits2::eDepthStencilAttachmentWrite |
 				 vk::AccessFlagBits2::eShaderRead,
 			.oldLayout = image.layout,
 			.newLayout = initialLayout,
@@ -321,19 +321,19 @@ void RenderGraph::submit(const Scene& scene) {
 
 	vk::AcquireNextImageInfoKHR acquireInfo;
 	acquireInfo.swapchain = m_swapchain.getSwapchain();
-	acquireInfo.timeout = UINT64_MAX;
+	acquireInfo.timeout = 1e12;
 	acquireInfo.semaphore = frame.imageAvailable;
 	acquireInfo.fence = nullptr;
 	acquireInfo.deviceMask = 1;
 
-	uint32_t imageIndex = 0;
-	try {
-		auto result = device.acquireNextImage2KHR(acquireInfo);
-		imageIndex = result.value;
+	auto [acquireResult, imageIndex] = device.acquireNextImage2KHR(acquireInfo);
 
-	} catch (vk::OutOfDateKHRError& _) {
-		rebuildSwapchain();
-		return;
+	if(acquireResult == vk::Result::eSuboptimalKHR)
+        rebuildSwapchain();
+
+	if(acquireResult == vk::Result::eErrorOutOfDateKHR){
+	    rebuildSwapchain();
+	    return;
 	}
 
 	vk::CommandBufferAllocateInfo commandInfo;
@@ -403,12 +403,11 @@ void RenderGraph::submit(const Scene& scene) {
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = { &(m_swapchain.getSwapchain()) };
 	presentInfo.pImageIndices = &imageIndex;
-	try {
-		auto _ = Instance::Get().presentQueue.presentKHR(presentInfo);
-	} catch (const vk::OutOfDateKHRError& _) {
-		rebuildSwapchain();
-		return;
-	}
+
+	auto presentResult = Instance::Get().presentQueue.presentKHR(presentInfo);
+	if(presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
+        rebuildSwapchain();
+
 
 	for (auto& [name, statuses] : m_data.imageStatuses) {
 		Image& image = m_resourceManager.getNamedImage(name);

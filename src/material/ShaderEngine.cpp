@@ -36,6 +36,8 @@ ShaderEngine::~ShaderEngine() {
 std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	const std::filesystem::path& path, SlangStage stage
 ) {
+	assert(!path.empty());
+	
 	slang::TargetDesc desc {
 		.format = SLANG_SPIRV,
 		.profile = m_session->findProfile("glsl_460"),

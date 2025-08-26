@@ -1,5 +1,6 @@
 #include "BuddyAllocator.hpp"
 
+#include <cmath>
 #include <optional>
 #include <vulkan/vulkan_enums.hpp>
 

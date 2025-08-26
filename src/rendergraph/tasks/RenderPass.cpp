@@ -276,7 +276,7 @@ void RenderPass::execute(
 			vk::ShaderStageFlagBits::eVertex |
 				vk::ShaderStageFlagBits::eFragment,
 			0,
-			sizeof(glm::mat4) + sizeof(uint32_t),
+			sizeof(uint32_t),
 			&primitive.materials[0].instance
 		);
 

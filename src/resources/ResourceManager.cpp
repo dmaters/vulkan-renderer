@@ -240,7 +240,7 @@ void writeMipMaps(
 			.levelCount = 1,
 			.layerCount = 1,
 		},
-	
+
 	};
 
 	vk::Extent3D res = baseResolution;
@@ -265,23 +265,23 @@ void writeMipMaps(
 		});
 
 		vk::ImageBlit blit {
-			.srcSubresource = { 
+			.srcSubresource = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = i - 1,
                 .baseArrayLayer = 0,
                 .layerCount = 1,
 			},
-			.dstSubresource = { 
+			.dstSubresource = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = i,
                 .baseArrayLayer = 0,
                 .layerCount = 1,
 			},
 		};
-		blit.srcOffsets[0] = { 0, 0, 0 };
-		blit.srcOffsets[1] = { (int32_t)res.width, (int32_t)res.height, 1 };
-		blit.dstOffsets[0] = { 0, 0, 0 };
-		blit.dstOffsets[1] = { (int32_t)res.width / 2,
+		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+		blit.srcOffsets[1] = vk::Offset3D{ (int32_t)res.width, (int32_t)res.height, 1 };
+		blit.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
+		blit.dstOffsets[1] = vk::Offset3D{ (int32_t)res.width / 2,
 			                   (int32_t)res.height / 2,
 			                   1 };
 
@@ -358,9 +358,6 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 ) {
 	stbi_set_flip_vertically_on_load(true);
 	vk::Device &device = Instance::Get().device;
-	uint32_t alignment = Instance::Get()
-	                         .physicalDevice.getProperties()
-	                         .limits.optimalBufferCopyOffsetAlignment;
 
 	for (const auto &info : textures) {
 		assert(std::filesystem::exists(info.path));
@@ -425,16 +422,16 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 			m_allocationResources.at(allocationIndex).first.at(i).value
 		);
 
-		uint32_t imageMemorySize =
-			device.getImageMemoryRequirements(image.image).size;
+		vk::MemoryRequirements requirements =
+			device.getImageMemoryRequirements(image.image);
 		Channels expectedChannels =
 			image.format == vk::Format::eR8G8Unorm
 				? (ChannelsValues::R | ChannelsValues::G)
 				: (0xff);
 
 		SubAllocation stagingAllocation = stagingAllocator.subAllocate({
-			.size = imageMemorySize,
-			.alignment = alignment,
+			.size = requirements.size,
+			.alignment = requirements.alignment,
 		});
 
 		std::byte *address =
@@ -448,7 +445,7 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 		copyToImage(
 			stagingBuffer,
 			image.image,
-			{ 
+			{
 				.bufferOffset = stagingAllocation.offset,
 				.bufferRowLength  = (uint32_t)image.size.width,
 				.imageSubresource = { .aspectMask =
@@ -554,11 +551,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		ImageHandle handle = { ++m_resourceCounter };
 
-		requiredSize += requirements.size;
-		if (requirements.alignment > 1)
-			requiredSize +=
-				(requirements.alignment -
-			     (requiredSize % requirements.alignment));
+		requiredSize += requirements.size + requirements.alignment;
 
 		resourcesRequirements.push_back(requirements);
 		images[resourceCount++] = handle;
@@ -584,11 +577,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		vk::MemoryRequirements requirements =
 			device.getBufferMemoryRequirements(buffer);
 
-		requiredSize += requirements.size;
-		if (requirements.alignment > 1)
-			requiredSize +=
-				(requirements.alignment -
-			     (requiredSize % requirements.alignment));
+		requiredSize += requirements.size + requirements.alignment;
 
 		resourcesRequirements.push_back(requirements);
 
