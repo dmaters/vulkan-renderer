@@ -19,9 +19,10 @@ class SceneLoader {
 	PrimitiveManager m_primitiveManager;
 
 	std::unordered_map<uint16_t, MaterialInstance> m_materialCache;
+	std::vector<std::vector<glm::mat4>> m_instanceCache;
 
 	Primitive loadMesh(aiMesh& mesh);
-	std::vector<Primitive> loadNode(aiNode& root, const aiScene& importedScene);
+	void loadNode(aiNode& root, const aiScene& importedScene);
 	std::optional<ImageHandle> loadTexture(
 		aiMaterial* material,
 		aiTextureType type,

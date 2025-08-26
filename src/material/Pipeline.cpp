@@ -30,14 +30,25 @@ struct PipelineStateCreateInfo {
 
 		return info;
 	};
-	std::array<vk::VertexInputAttributeDescription, 4> vertexAttributes;
-	std::array<vk::VertexInputBindingDescription, 1> vertexBindings;
+	std::array<vk::VertexInputAttributeDescription, 8> vertexAttributes;
+	std::array<vk::VertexInputBindingDescription, 3> vertexBindings;
 	vk::PipelineVertexInputStateCreateInfo vertex() {
 		vertexBindings = {
 			vk::VertexInputBindingDescription {
 											   .binding = 0,
-											   .stride = 44,
-											   .inputRate = vk::VertexInputRate::eVertex },
+											   .stride = 12,
+											   .inputRate = vk::VertexInputRate::eVertex,
+											   },
+			vk::VertexInputBindingDescription {
+											   .binding = 1,
+											   .stride = 32,
+											   .inputRate = vk::VertexInputRate::eVertex,
+											   },
+			vk::VertexInputBindingDescription {
+											   .binding = 2,
+											   .stride = 64,
+											   .inputRate = vk::VertexInputRate::eInstance,
+											   },
 		};
 
 		vertexAttributes = {
@@ -45,27 +56,55 @@ struct PipelineStateCreateInfo {
 												 .location = 0,
 												 .binding = 0,
 												 .format = vk::Format::eR32G32B32Sfloat,
-												 .offset = 0  },
+												 .offset = 0,
+												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 1,
-												 .binding = 0,
+												 .binding = 1,
 												 .format = vk::Format::eR32G32B32Sfloat,
-												 .offset = 12 },
+												 .offset = 0,
+												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 2,
-												 .binding = 0,
+												 .binding = 1,
 												 .format = vk::Format::eR32G32B32Sfloat,
-												 .offset = 24 },
+												 .offset = 12,
+												 },
 
-			vk::VertexInputAttributeDescription { .location = 3,
-                                                 .binding = 0,
-                                                 .format =
-			                                          vk::Format::eR32G32Sfloat,
-                                                 .offset = 36 }
+			vk::VertexInputAttributeDescription {
+												 .location = 3,
+												 .binding = 1,
+												 .format = vk::Format::eR32G32Sfloat,
+												 .offset = 24,
+												 },
+			vk::VertexInputAttributeDescription {
+												 .location = 4,
+												 .binding = 2,
+												 .format = vk::Format::eR32G32B32A32Sfloat,
+												 .offset = 0,
+												 },
+			vk::VertexInputAttributeDescription {
+												 .location = 5,
+												 .binding = 2,
+												 .format = vk::Format::eR32G32B32A32Sfloat,
+												 .offset = 16,
+												 },
+			vk::VertexInputAttributeDescription {
+												 .location = 6,
+												 .binding = 2,
+												 .format = vk::Format::eR32G32B32A32Sfloat,
+												 .offset = 32,
+												 },
+			vk::VertexInputAttributeDescription {
+												 .location = 7,
+												 .binding = 2,
+												 .format = vk::Format::eR32G32B32A32Sfloat,
+												 .offset = 48,
+												 },
 		};
 
 		vk::PipelineVertexInputStateCreateInfo info {
-			.vertexBindingDescriptionCount = 1,
+			.vertexBindingDescriptionCount = (uint32_t)vertexBindings.size(),
 			.pVertexBindingDescriptions = vertexBindings.data(),
 			.vertexAttributeDescriptionCount =
 				(uint32_t)vertexAttributes.size(),
@@ -87,7 +126,9 @@ struct PipelineStateCreateInfo {
 		return info;
 	};
 
-	vk::PipelineRasterizationStateCreateInfo rasterization(vk::CullModeFlags cullMode) {
+	vk::PipelineRasterizationStateCreateInfo rasterization(
+		vk::CullModeFlags cullMode
+	) {
 		vk::PipelineRasterizationStateCreateInfo info {
 			.polygonMode = vk::PolygonMode::eFill,
 			.cullMode = cullMode,
@@ -158,7 +199,10 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 			.blendEnable = false,
 			.srcColorBlendFactor = vk::BlendFactor::eOne,
 			.dstColorBlendFactor = vk::BlendFactor::eZero,
-			.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+			.colorWriteMask = vk::ColorComponentFlagBits::eR |
+	                          vk::ColorComponentFlagBits::eG |
+	                          vk::ColorComponentFlagBits::eB |
+	                          vk::ColorComponentFlagBits::eA,
 		}
 	);
 	vk::PipelineColorBlendStateCreateInfo colorBlendState {
@@ -183,7 +227,6 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 		.stencilAttachmentFormat = info.configuration.stencilEnabled
 		                               ? vk::Format::eD24UnormS8Uint
 		                               : vk::Format::eUndefined,
-
 
 	};
 	pipelineInfo.pNext = &renderingInfo;
@@ -210,7 +253,7 @@ vk::PipelineLayout getLayout(
 							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
 		                  vk::ShaderStageFlagBits::eFragment,
 							   .offset = 0,
-							   .size = 68,
+							   .size = 4,
 							   },
 	};
 	vk::PipelineLayoutCreateInfo info {

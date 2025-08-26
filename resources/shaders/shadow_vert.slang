@@ -9,5 +9,5 @@
 float4  main(VertexInput input) : SV_Position {
 	
 
-	return 	mul(mul(mul(Shadow::shadowProjectionMatrix(),uLightData.lights[uLightData.directIndex].view ),uPrimitive.transformation), float4(input.position, 1.0));
+	return 	mul(mul(mul(Shadow::shadowProjectionMatrix(),uLightData.lights[uLightData.directIndex].view ),input.transformation), float4(input.position, 1.0));
 }

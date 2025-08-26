@@ -126,6 +126,7 @@ void Renderer::load(const std::filesystem::path& path) {
 		.baseVertex = 0,
 		.baseIndex = 0,
 		.indexCount = 3,
+		.instanceCount = 1,
 		.materials = { {
 			lighting,
 		} },

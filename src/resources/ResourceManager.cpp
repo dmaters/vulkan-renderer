@@ -555,8 +555,10 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		ImageHandle handle = { ++m_resourceCounter };
 
 		requiredSize += requirements.size;
-		if (requirements.alignment > 0)
-			requiredSize += requiredSize % requirements.alignment;
+		if (requirements.alignment > 1)
+			requiredSize +=
+				(requirements.alignment -
+			     (requiredSize % requirements.alignment));
 
 		resourcesRequirements.push_back(requirements);
 		images[resourceCount++] = handle;
@@ -583,8 +585,10 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			device.getBufferMemoryRequirements(buffer);
 
 		requiredSize += requirements.size;
-		if (requirements.alignment > 0)
-			requiredSize += requiredSize % requirements.alignment;
+		if (requirements.alignment > 1)
+			requiredSize +=
+				(requirements.alignment -
+			     (requiredSize % requirements.alignment));
 
 		resourcesRequirements.push_back(requirements);
 

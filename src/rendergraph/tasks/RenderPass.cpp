@@ -197,14 +197,26 @@ void setupAttachments(
     }
 	);
 
-	Buffer& vertexBuffer =
-		resources.resourceManager.getNamedBuffer("vertex_buffer"
+	Buffer& positionBuffer =
+		resources.resourceManager.getNamedBuffer("vertex_buffer_positions");
 
-	    );
+	Buffer& attributeBuffer =
+		resources.resourceManager.getNamedBuffer("vertex_buffer_attributes");
+	Buffer& instanceBuffer =
+		resources.resourceManager.getNamedBuffer("instance_buffer");
+
 	Buffer& indexBuffer =
 		resources.resourceManager.getNamedBuffer("index_buffer");
 
-	commandBuffer.bindVertexBuffers(0, { vertexBuffer.buffer }, { 0 });
+	commandBuffer.bindVertexBuffers(
+		0,
+		{
+			positionBuffer.buffer,
+			attributeBuffer.buffer,
+			instanceBuffer.buffer,
+		},
+		{ 0, 0, 0 }
+	);
 	commandBuffer.bindIndexBuffer(
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
 	);
@@ -259,27 +271,21 @@ void RenderPass::execute(
 			))
 			continue;
 
-		struct PushConstants {
-			glm::mat4 transform;
-			uint32_t instanceIndex;
-		};
-		PushConstants data = { glm::transpose(primitive.modelMatrix),
-			                   primitive.materials[0].instance };
 		commandBuffer.pushConstants(
 			material.pipeline.pipelineLayout,
 			vk::ShaderStageFlagBits::eVertex |
 				vk::ShaderStageFlagBits::eFragment,
 			0,
 			sizeof(glm::mat4) + sizeof(uint32_t),
-			&data
+			&primitive.materials[0].instance
 		);
 
 		commandBuffer.drawIndexed(
 			primitive.indexCount,
-			1,
+			primitive.instanceCount,
 			primitive.baseIndex,
 			primitive.baseVertex,
-			0
+			primitive.baseInstance
 		);
 	}
 

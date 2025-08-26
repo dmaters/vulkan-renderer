@@ -40,13 +40,6 @@ SceneLoader::SceneLoader(
 	m_materialManager(materialManager),
 	m_primitiveManager() {}
 
-struct Vertex {
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec3 tangent;
-	glm::vec2 texcoord;
-};
-
 void loadMaterials() {}
 
 glm::mat4 getBaseTransform(aiNode& node, const aiScene& scene) {
@@ -78,6 +71,7 @@ glm::mat4 getBaseTransform(aiNode& node, const aiScene& scene) {
 Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
+
 	float size = 0;
 
 	for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
@@ -96,70 +90,43 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		size = fmax(size, vertex.Length());
 		vertices.push_back(Vertex {
 			{ vertex.x, vertex.y, vertex.z },
-			{ normal.x, normal.y, normal.z },
-			{ tangent.x, tangent.y, tangent.z },
-			{ texcoord.x, texcoord.y }
+			{
+             { normal.x, normal.y, normal.z },
+             { tangent.x, tangent.y, tangent.z },
+             { texcoord.x, texcoord.y },
+			 }
         });
 	};
-
-	size_t vertexBufferSize = sizeof(Vertex) * vertices.size();
-
-	auto vertexData = reinterpret_cast<const std::byte*>(vertices.data());
-	std::vector<std::byte> rawVertices(
-		vertexData, vertexData + vertexBufferSize
-	);
-	uint32_t indexBufferSize = sizeof(uint32_t) * indices.size();
-
-	auto indexData = reinterpret_cast<const std::byte*>(indices.data());
-	std::vector<std::byte> rawIndices(indexData, indexData + indexBufferSize);
 
 	uint32_t vertexOffset;
 	uint32_t indexOffset;
 	m_primitiveManager.addPrimitive(
-		rawVertices, rawIndices, vertexOffset, indexOffset
+		vertices, indices, vertexOffset, indexOffset
 	);
 
 	return Primitive {
-		.baseVertex = vertexOffset / (uint32_t)sizeof(Vertex),
-		.baseIndex = indexOffset / (uint32_t)sizeof(uint32_t),
+		.baseVertex = vertexOffset,
+		.baseIndex = indexOffset,
 		.indexCount = (uint32_t)indices.size(),
 		.size = size,
 	};
 }
 
-std::vector<Primitive> SceneLoader::loadNode(
-	aiNode& root, const aiScene& importedScene
-) {
-	std::vector<Primitive> nodePrimitives;
-
+void SceneLoader::loadNode(aiNode& root, const aiScene& importedScene) {
 	if (root.mNumMeshes > 0) {
 		glm::mat4 transform = getBaseTransform(root, importedScene);
 
 		for (uint32_t i = 0; i < root.mNumMeshes; i++) {
-			aiMesh* mesh = importedScene.mMeshes[root.mMeshes[i]];
-			Primitive primitive = loadMesh(*mesh);
-
-			primitive.materials.push_back({
-				m_materialManager.getMaterialIndex("pbr_deferred"),
-				mesh->mMaterialIndex,
-			});
-			primitive.materials.push_back({
-				m_materialManager.getMaterialIndex("shadow_map"),
-				mesh->mMaterialIndex,
-			});
-			primitive.modelMatrix = transform;
-			nodePrimitives.push_back(primitive);
+			m_instanceCache[root.mMeshes[i]].push_back(transform);
 		}
 	}
 
 	for (int i = 0; i < root.mNumChildren; i++) {
-		auto primitives = loadNode(*root.mChildren[i], importedScene);
-		nodePrimitives.insert(
-			nodePrimitives.end(), primitives.begin(), primitives.end()
-		);
+		loadNode(*root.mChildren[i], importedScene);
 	}
-	return nodePrimitives;
 }
+
+void loadPrimitives() {}
 
 void SceneLoader::loadMaterials(
 	const aiScene& scene, std::filesystem::path& texturePath
@@ -249,7 +216,8 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	Assimp::Importer importer;
 
 	auto import = importer.ReadFile(
-		path.string().c_str(), aiProcessPreset_TargetRealtime_Quality
+		path.string().c_str(),
+		aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals
 	);
 
 	if (import == nullptr) std::cerr << importer.GetErrorString() << std::endl;
@@ -257,16 +225,52 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 
 	auto folderPath = path.parent_path();
 	loadMaterials(*import, folderPath);
-	std::vector<Primitive> primitives = loadNode(*import->mRootNode, *import);
+
+	std::vector<glm::mat4> instances;
+	m_instanceCache = std::vector<std::vector<glm::mat4>>(import->mNumMeshes);
+
+	loadNode(*import->mRootNode, *import);
+
+	std::vector<Primitive> primitives;
+	primitives.reserve(import->mNumMeshes);
 
 	float sceneSize = 0;
-	for (auto& primitive : primitives) {
-		sceneSize = fmax(
-			sceneSize,
-			glm::vec3(primitive.modelMatrix[3]).length() + primitive.size
-		);
+	for (int i = 0; i < import->mNumMeshes; i++) {
+		aiMesh* mesh = import->mMeshes[i];
+		Primitive primitive = loadMesh(*mesh);
+
+		uint32_t firstInstance = instances.size();
+
+		for (auto instance : m_instanceCache[i]) {
+			sceneSize = fmax(
+				sceneSize, glm::vec3(instance[3]).length() + primitive.size
+			);
+			instances.push_back(instance);
+		}
+
+		uint32_t instanceCount = instances.size() - firstInstance;
+
+		primitive.baseInstance = firstInstance;
+		primitive.instanceCount = instanceCount;
+
+		primitive.materials.push_back({
+			m_materialManager.getMaterialIndex("pbr_deferred"),
+			mesh->mMaterialIndex,
+		});
+		primitive.materials.push_back({
+			m_materialManager.getMaterialIndex("shadow_map"),
+			mesh->mMaterialIndex,
+		});
+
+		primitives.push_back(primitive);
+	}
+
+	m_primitiveManager.addInstances(instances);
+
+	Scene scene {
+		.primitives = primitives,
+		.size = sceneSize,
 	};
-	Scene scene { .primitives = primitives, .size = sceneSize };
 
 	m_primitiveManager.buildBuffers(m_resourceManager);
 
