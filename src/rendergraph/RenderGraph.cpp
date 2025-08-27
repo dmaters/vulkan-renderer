@@ -328,12 +328,11 @@ void RenderGraph::submit(const Scene& scene) {
 
 	auto [acquireResult, imageIndex] = device.acquireNextImage2KHR(acquireInfo);
 
-	if(acquireResult == vk::Result::eSuboptimalKHR)
-        rebuildSwapchain();
+	if (acquireResult == vk::Result::eSuboptimalKHR) rebuildSwapchain();
 
-	if(acquireResult == vk::Result::eErrorOutOfDateKHR){
-	    rebuildSwapchain();
-	    return;
+	if (acquireResult == vk::Result::eErrorOutOfDateKHR) {
+		rebuildSwapchain();
+		return;
 	}
 
 	vk::CommandBufferAllocateInfo commandInfo;
@@ -383,31 +382,44 @@ void RenderGraph::submit(const Scene& scene) {
 
 	commandBuffer.end();
 
-	auto semaphore = m_renderSemaphores[imageIndex];
+	uint64_t semaphoreWaitValues[2] = { m_resourceManager.sync(), 0 };
 
+	vk::Semaphore semaphores[2] = {
+		m_resourceManager.getSemaphore(),
+		frame.imageAvailable,
+	};
+	vk::TimelineSemaphoreSubmitInfo waitInfo {
+		.waitSemaphoreValueCount = 2,
+		.pWaitSemaphoreValues = semaphoreWaitValues,
+	};
 	vk::SubmitInfo submitInfo;
-	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = { &frame.imageAvailable };
-	auto stage = vk::Flags(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-	submitInfo.pWaitDstStageMask = { &stage };
+	submitInfo.pNext = &waitInfo;
+	submitInfo.waitSemaphoreCount = 2;
+	submitInfo.pWaitSemaphores = semaphores;
+	vk::PipelineStageFlags stages[2] = {
+		vk::PipelineStageFlagBits::eVertexInput,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput
+	};
+	submitInfo.pWaitDstStageMask = stages;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = { &commandBuffer };
 	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = { &semaphore };
+	vk::Semaphore renderSemaphore = m_renderSemaphores[imageIndex];
+	submitInfo.pSignalSemaphores = { &renderSemaphore };
 
 	Instance::Get().graphicQueue.submit({ submitInfo }, { frame.fence });
 
 	vk::PresentInfoKHR presentInfo {};
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &semaphore;
+	presentInfo.pWaitSemaphores = &renderSemaphore;
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = { &(m_swapchain.getSwapchain()) };
 	presentInfo.pImageIndices = &imageIndex;
 
 	auto presentResult = Instance::Get().presentQueue.presentKHR(presentInfo);
-	if(presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
-        rebuildSwapchain();
-
+	if (presentResult == vk::Result::eErrorOutOfDateKHR ||
+	    presentResult == vk::Result::eSuboptimalKHR)
+		rebuildSwapchain();
 
 	for (auto& [name, statuses] : m_data.imageStatuses) {
 		Image& image = m_resourceManager.getNamedImage(name);

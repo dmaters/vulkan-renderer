@@ -40,3 +40,9 @@ Allocation::Allocation(
 		return;
 	}
 }
+
+void Allocation::free() {
+	vk::Device& device = Instance::Get().device;
+	if (address) device.unmapMemory(memory);
+	device.freeMemory(memory);
+}

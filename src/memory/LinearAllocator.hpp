@@ -11,11 +11,8 @@ private:
 
 public:
 	LinearAllocator(vk::MemoryPropertyFlags memory, uint32_t size);
-	LinearAllocator(const LinearAllocator&) = delete;
 
 	Allocation& getAllocation() { return m_allocation; }
 
 	SubAllocation subAllocate(vk::MemoryRequirements requirements);
-
-	~LinearAllocator();
 };

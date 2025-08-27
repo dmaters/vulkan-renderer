@@ -73,6 +73,8 @@ private:
 	std::unordered_map<std::string_view, ImageHandle> m_imageNames;
 	std::unordered_map<std::string_view, BufferHandle> m_bufferNames;
 
+	std::vector<LinearAllocator> m_stagingAdditionalAllocators;
+	vk::CommandBuffer m_stagingCommandBuffer;
 	RingAllocator m_stagingAllocation;
 	vk::Buffer m_stagingBuffer;
 
@@ -136,11 +138,14 @@ public:
 
 	template <typename T, typename F>
 		requires std::invocable<F, T&>
-	void updateBufferSync(BufferHandle handle, F updateFunction);
+	void queueBufferUpdate(BufferHandle handle, F updateFunction);
 
 	template <typename F>
 		requires std::invocable<F, std::byte*>
-	void updateBufferSync(BufferHandle handle, F updateFunction);
+	void queueBufferUpdate(BufferHandle handle, F updateFunction);
+
+	const vk::Semaphore& getSemaphore() const { return m_semaphore; }
+	uint64_t sync();
 };
 
 struct ResourceManager::ImageDescription {
@@ -164,7 +169,7 @@ struct ResourceManager::BufferCopy {
 
 template <typename T, typename F>
 	requires std::invocable<F, T&>
-void ResourceManager::updateBufferSync(BufferHandle handle, F updateFunction) {
+void ResourceManager::queueBufferUpdate(BufferHandle handle, F updateFunction) {
 	Buffer& buffer = getBuffer(handle);
 	// assert(buffer.size == sizeof(T));
 
@@ -195,7 +200,7 @@ void ResourceManager::updateBufferSync(BufferHandle handle, F updateFunction) {
 
 template <typename F>
 	requires std::invocable<F, std::byte*>
-void ResourceManager::updateBufferSync(BufferHandle handle, F updateFunction) {
+void ResourceManager::queueBufferUpdate(BufferHandle handle, F updateFunction) {
 	Buffer& buffer = getBuffer(handle);
 
 	vk::Device& device = Instance::Get().device;

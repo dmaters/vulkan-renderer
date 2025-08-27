@@ -98,7 +98,7 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	const auto& lights = m_currentScene.lights;
 
-	m_resourceManager.updateBufferSync<MaterialDefinitions::Lights>(
+	m_resourceManager.queueBufferUpdate<MaterialDefinitions::Lights>(
 		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
 			lightUBO.count = lights.size();
@@ -109,7 +109,7 @@ void Renderer::load(const std::filesystem::path& path) {
 		}
 	);
 
-	m_resourceManager.updateBufferSync<MaterialDefinitions::EnvironmentData>(
+	m_resourceManager.queueBufferUpdate<MaterialDefinitions::EnvironmentData>(
 		m_resourceManager.getNamedBufferIndex("environment_data"),
 		[size =
 	         m_currentScene.size](MaterialDefinitions::EnvironmentData& envData

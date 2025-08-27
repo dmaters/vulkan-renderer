@@ -60,6 +60,17 @@ ResourceManager::ResourceManager() :
 	instance.device.bindBufferMemory(
 		m_stagingBuffer, m_stagingAllocation.getAllocation().memory, 0
 	);
+
+	m_stagingCommandBuffer =
+		instance.device.allocateCommandBuffers(vk::CommandBufferAllocateInfo {
+			.commandPool = m_transferPool,
+			.level = vk::CommandBufferLevel::ePrimary,
+			.commandBufferCount = 1,
+		})[0];
+
+	m_stagingCommandBuffer.begin({
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+	});
 }
 
 void ResourceManager::setName(std::string_view name, ImageHandle handle) {
@@ -105,19 +116,18 @@ void resetPool(
 void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 	Instance &instance = Instance::Get();
 
-	// resetPool(m_semaphore, m_transferCount, m_commandPool);
-
 	vk::CommandBufferAllocateInfo commandBufferInfo {
 		.commandPool = m_transferPool,
-		.level = vk::CommandBufferLevel::ePrimary,
+		.level = vk::CommandBufferLevel::eSecondary,
 		.commandBufferCount = 1,
 
 	};
 	vk::CommandBuffer commandBuffer =
 		instance.device.allocateCommandBuffers(commandBufferInfo)[0];
-
+	vk::CommandBufferInheritanceInfo inheritanceInfo {};
 	vk::CommandBufferBeginInfo beginInfo {
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		.pInheritanceInfo = &inheritanceInfo,
 	};
 	commandBuffer.begin(beginInfo);
 	std::vector<vk::BufferMemoryBarrier2> barriers;
@@ -146,19 +156,8 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 	});
 
 	commandBuffer.end();
-	vk::TimelineSemaphoreSubmitInfo semaphore {
-		.signalSemaphoreValueCount = 1,
-		.pSignalSemaphoreValues = &(++m_transferCount),
-	};
-	vk::SubmitInfo submitInfo {
-		.pNext = &semaphore,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer,
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &m_semaphore,
-	};
 
-	Instance::Get().transferQueue.submit({ submitInfo });
+	m_stagingCommandBuffer.executeCommands(commandBuffer);
 };
 
 void copyToImage(
@@ -278,12 +277,12 @@ void writeMipMaps(
                 .layerCount = 1,
 			},
 		};
-		blit.srcOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.srcOffsets[1] = vk::Offset3D{ (int32_t)res.width, (int32_t)res.height, 1 };
-		blit.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-		blit.dstOffsets[1] = vk::Offset3D{ (int32_t)res.width / 2,
-			                   (int32_t)res.height / 2,
-			                   1 };
+		blit.srcOffsets[0] = vk::Offset3D { 0, 0, 0 };
+		blit.srcOffsets[1] =
+			vk::Offset3D { (int32_t)res.width, (int32_t)res.height, 1 };
+		blit.dstOffsets[0] = vk::Offset3D { 0, 0, 0 };
+		blit.dstOffsets[1] =
+			vk::Offset3D { (int32_t)res.width / 2, (int32_t)res.height / 2, 1 };
 
 		commandBuffer.blitImage(
 			image,
@@ -399,17 +398,19 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 
 	vk::CommandBuffer transferBuffer = device.allocateCommandBuffers({
 		.commandPool = m_transferPool,
-		.level = vk::CommandBufferLevel::ePrimary,
+		.level = vk::CommandBufferLevel::eSecondary,
 		.commandBufferCount = 1,
+
 	})[0];
 	vk::CommandBuffer mipmapBuffer = device.allocateCommandBuffers({
 		.commandPool = m_graphicPool,
 		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 2,
+		.commandBufferCount = 1,
 	})[0];
-
+	vk::CommandBufferInheritanceInfo inheritanceInfo {};
 	vk::CommandBufferBeginInfo beginInfo {
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		.pInheritanceInfo = &inheritanceInfo,
 	};
 
 	transferBuffer.begin(beginInfo);
@@ -461,30 +462,16 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 			image.image, image.size, textureDesc[i].miplevels, mipmapBuffer
 		);
 	}
-
 	transferBuffer.end();
+	m_stagingCommandBuffer.executeCommands(transferBuffer);
+
 	mipmapBuffer.end();
-
 	for (auto &thread : threads) thread.join();
-
-	vk::TimelineSemaphoreSubmitInfo signalSemaphoreInfo {
-		.signalSemaphoreValueCount = 1,
-		.pSignalSemaphoreValues = &(++m_transferCount),
-	};
-	vk::SubmitInfo transferSubmitInfo {
-		.pNext = &signalSemaphoreInfo,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &transferBuffer,
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &m_semaphore,
-	};
-
-	Instance::Get().transferQueue.submit({ transferSubmitInfo });
-
+	uint64_t waitValue = m_transferCount + 1;
 	vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eTransfer;
 	vk::TimelineSemaphoreSubmitInfo waitSemaphoreInfo {
 		.waitSemaphoreValueCount = 1,
-		.pWaitSemaphoreValues = &m_transferCount,
+		.pWaitSemaphoreValues = &waitValue,
 	};
 	vk::SubmitInfo mipmapSubmitInfo {
 		.pNext = &waitSemaphoreInfo,
@@ -497,15 +484,7 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 
 	Instance::Get().graphicQueue.submit({ mipmapSubmitInfo });
 
-	device.waitSemaphores(
-		vk::SemaphoreWaitInfo {
-			.semaphoreCount = 1,
-			.pSemaphores = &m_semaphore,
-			.pValues = &m_transferCount,
-		},
-		UINT64_MAX
-	);
-	device.destroyBuffer(stagingBuffer);
+	m_stagingAdditionalAllocators.push_back(stagingAllocator);
 
 	return allocationIndex;
 }
@@ -590,8 +569,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		m_allocationResources[allocIndex].second.push_back(handle);
 	}
 
-	m_allocations.try_emplace(
-		allocIndex, vk::MemoryPropertyFlagBits::eDeviceLocal, requiredSize
+	m_allocations.emplace(
+		allocIndex,
+		LinearAllocator(vk::MemoryPropertyFlagBits::eDeviceLocal, requiredSize)
 	);
 
 	for (int i = 0; i < resourcesRequirements.size(); i++) {
@@ -649,5 +629,55 @@ void ResourceManager::freeAllocation(AllocationIndex index) {
 	}
 
 	m_allocationResources.erase(index);
+	m_allocations.at(index).getAllocation().free();
 	m_allocations.erase(index);
+}
+
+uint64_t ResourceManager::sync() {
+	vk::Device &device = Instance::Get().device;
+
+	m_stagingCommandBuffer.end();
+
+	vk::TimelineSemaphoreSubmitInfo semaphoreInfo {
+		.signalSemaphoreValueCount = 1,
+		.pSignalSemaphoreValues = &(++m_transferCount),
+	};
+	vk::SubmitInfo submit {
+		.pNext = &semaphoreInfo,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &m_stagingCommandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_semaphore,
+	};
+
+	Instance::Get().transferQueue.submit({ submit });
+
+	std::thread([allocations = m_stagingAdditionalAllocators,
+	             &device,
+	             waitValue = m_transferCount,
+	             &semaphore = m_semaphore]() mutable {
+		device.waitSemaphores(
+			vk::SemaphoreWaitInfo {
+				.semaphoreCount = 1,
+				.pSemaphores = &semaphore,
+				.pValues = &waitValue,
+			},
+			UINT64_MAX
+		);
+		for (auto &allocator : allocations) allocator.getAllocation().free();
+	}).detach();
+
+	m_stagingAdditionalAllocators.clear();
+
+	m_stagingCommandBuffer = device.allocateCommandBuffers({
+		.commandPool = m_transferPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+	})[0];
+
+	m_stagingCommandBuffer.begin({
+		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+	});
+
+	return m_transferCount;
 }

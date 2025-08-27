@@ -12,6 +12,8 @@ struct Allocation {
 	size_t size = 0;
 	vk::DeviceMemory memory;
 	std::byte* address = nullptr;
+
+	void free();
 };
 
 struct SubAllocation {

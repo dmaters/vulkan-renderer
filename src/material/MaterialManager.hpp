@@ -142,7 +142,7 @@ void MaterialManager::updateMaterialData(
 	updateFunction(data);
 	uint32_t bufferSize = m_materialMetadata.at(index).materialBufferSize;
 
-	m_resourceManager.updateBufferSync(
+	m_resourceManager.queueBufferUpdate(
 		m_materialData.at(index).materialBuffers.back(),
 		[&data, bufferSize](std::byte* address) {
 			memcpy(address, &data, bufferSize);

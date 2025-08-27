@@ -26,7 +26,3 @@ SubAllocation LinearAllocator::subAllocate(vk::MemoryRequirements requirements
 		.size = requirements.size,
 	};
 }
-
-LinearAllocator::~LinearAllocator() {
-	Instance::Get().device.free(m_allocation.memory);
-}

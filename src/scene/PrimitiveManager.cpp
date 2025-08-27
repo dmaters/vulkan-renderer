@@ -62,28 +62,28 @@ ResourceManager::AllocationIndex PrimitiveManager::buildBuffers(
 	resourceManager.setName("index_buffer", buffers.at(2));
 	resourceManager.setName("instance_buffer", buffers.at(3));
 
-	resourceManager.updateBufferSync(buffers.at(0), [&](std::byte* address) {
+	resourceManager.queueBufferUpdate(buffers.at(0), [&](std::byte* address) {
 		memcpy(
 			address,
 			m_positions.data(),
 			m_positions.size() * sizeof(Vertex::position)
 		);
 	});
-	resourceManager.updateBufferSync(buffers.at(1), [&](std::byte* address) {
+	resourceManager.queueBufferUpdate(buffers.at(1), [&](std::byte* address) {
 		memcpy(
 			address,
 			m_attributes.data(),
 			m_attributes.size() * sizeof(Vertex::Attributes)
 		);
 	});
-	resourceManager.updateBufferSync(buffers.at(2), [&](std::byte* address) {
+	resourceManager.queueBufferUpdate(buffers.at(2), [&](std::byte* address) {
 		memcpy(
 			address,
 			m_indexBuffer.data(),
 			m_indexBuffer.size() * sizeof(uint32_t)
 		);
 	});
-	resourceManager.updateBufferSync(buffers.at(3), [&](std::byte* address) {
+	resourceManager.queueBufferUpdate(buffers.at(3), [&](std::byte* address) {
 		memcpy(
 			address, m_instances.data(), m_instances.size() * sizeof(glm::mat4)
 		);
