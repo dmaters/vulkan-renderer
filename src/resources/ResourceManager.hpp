@@ -29,19 +29,8 @@ struct ImageHandle {
 };
 
 struct ResourceUsage {
-	enum class Type : uint8_t {
-		WRITE = 0,
-		READ_WRITE = 1,
-		READ = 2,
-	};
-	Type type;
 	vk::AccessFlags2 access;
 	vk::PipelineStageFlags2 stage;
-
-	bool operator==(const ResourceUsage& b) const {
-		return (type == Type::READ && b.type == ResourceUsage::Type::READ) ||
-		       (type == Type::WRITE && b.type == ResourceUsage::Type::WRITE);
-	}
 };
 
 class ResourceManager {

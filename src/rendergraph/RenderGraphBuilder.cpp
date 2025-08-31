@@ -79,144 +79,130 @@ bool buildImageBarrier(
 	return true;
 }
 
-void RenderGraphBuilder::addTask(Task task) {
-	std::unordered_map<std::string_view, ResourceDependency> images;
-	std::unordered_map<std::string_view, ResourceDependency> buffers;
-
-	std::visit(
-		[&images, &buffers](auto&& t) { t.setup(images, buffers); }, task
-	);
-
+void RenderGraphBuilder::addTask(std::string_view name, std::vector<ResourceDependency> inputResources,std::vector<ResourceDependency> outputResources, Task task) {
+	
 	m_tasks.push_back({
 		.task = task,
-		.images = images,
-		.buffers = buffers,
+		.name = name,
+		.images = inputResources,
+		.buffers = outputResources,
 	});
 
-	for (const auto& [name, reference] : images) {
-		if (!m_imageReferences.contains(name))
-			m_imageReferences[name] = std::vector<ResourceTaskReference>();
+	for (const auto& resource : inputResources) {
+		if (!m_imageReferences.contains(resource.index))
+			m_imageReferences[resource.index] = std::vector<ResourceTaskReference>();
 
-		m_imageReferences[name].push_back({
+		m_imageReferences[resource.index].push_back({
 			.task = (uint32_t)m_tasks.size() - 1,
-			.usage = reference.usage,
-			.requiredLayout = reference.requiredLayout,
+			.usage = resource.usage,
+			.requiredLayout = resource.requiredLayout,
 		});
 	}
-	for (const auto& [name, reference] : buffers) {
-		if (!m_bufferReferences.contains(name))
-			m_bufferReferences[name] = std::vector<ResourceTaskReference>();
+	for (const auto& resource : outputResources) {
+		if (!m_bufferReferences.contains(resource.index))
+			m_bufferReferences[resource.index] = std::vector<ResourceTaskReference>();
 
-		m_bufferReferences[name].push_back({
+		m_bufferReferences[resource.index].push_back({
 			.task = (uint32_t)m_tasks.size() - 1,
-			.usage = reference.usage,
+			.usage = resource.usage,
 		});
 	}
 }
+
+
+GraphData::TaskData RenderGraphBuilder::visitTask(RegisteredTask& task) const {
+
+	std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>
+		imageBarriers;
+	std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>
+		bufferBarriers;
+
+	for (auto& [index, reference] : task.resources) {
+		
+		auto& taskResourceAccesses = m_imageReferences[name];
+		requiredImages.insert(name);
+		int accessIndex = 0;
+		for (int i = 0; i < taskResourceAccesses.size(); i++) {
+			accessIndex = i;
+			auto& taskAccess = taskResourceAccesses[i];
+			tasksToVisit.push(taskAccess.task);
+			if (taskAccess.task == taskName) {
+				break;
+			}
+		}
+
+		vk::ImageMemoryBarrier2 barrier;
+		if (accessIndex > 0) {
+			if (buildImageBarrier(
+					taskResourceAccesses[accessIndex - 1].usage,
+					taskResourceAccesses[accessIndex].usage,
+					taskResourceAccesses[accessIndex - 1].requiredLayout,
+					taskResourceAccesses[accessIndex].requiredLayout,
+					barrier
+				)) {
+				imageBarriers[name] = barrier;
+			}
+		}
+	}
+	for (auto& [name, reference] : task.buffers) {
+		auto& taskResourceAccesses = m_bufferReferences[name];
+		requiredBuffers.insert(name);
+		int accessIndex = 0;
+		for (int i = 0; i < taskResourceAccesses.size(); i++) {
+			accessIndex = i;
+			auto& taskAccess = taskResourceAccesses[i];
+			tasksToVisit.push(taskAccess.task);
+			if (taskAccess.task == taskName) {
+				break;
+			}
+		}
+
+		vk::BufferMemoryBarrier2 barrier;
+
+		if (accessIndex > 0) {
+			if (buildBufferBarrier(
+					taskResourceAccesses[accessIndex - 1].usage,
+					taskResourceAccesses[accessIndex].usage,
+					barrier
+				)) {
+				bufferBarriers[name] = barrier;
+			}
+		} else {
+			if (buildBufferBarrier(
+					taskResourceAccesses.back().usage,
+					taskResourceAccesses[0].usage,
+					barrier
+				)) {
+				bufferBarriers[name] = barrier;
+			}
+		}
+	}
+
+	return GraphData::TaskData {
+		.task = std::move(task.task),
+		.barriers = {
+			 .imageBarriers = imageBarriers,
+			 .bufferBarriers = bufferBarriers,
+		}
+    };
+}
+
+
 GraphData RenderGraphBuilder::build() {
-	const auto sort = [](const ResourceTaskReference& r1,
-	                     const ResourceTaskReference& r2) {
-		return r1.usage.type < r2.usage.type;
-	};
-
-	for (auto& [name, accesses] : m_imageReferences) {
-		std::sort(accesses.begin(), accesses.end(), sort);
-	}
-
-	for (auto& [name, accesses] : m_bufferReferences) {
-		std::sort(accesses.begin(), accesses.end(), sort);
-	}
 
 	std::vector<GraphData::TaskData> tasks;
-	std::unordered_set<TaskIndex> visitedTasks;
-	std::queue<TaskIndex> tasksToVisit;
+	
+	for(auto& it = m_tasks.rbegin(); it != m_tasks.rend(); it++){
+		auto& task = *it;
 
-	std::unordered_set<std::string_view> requiredImages;
-	std::unordered_set<std::string_view> requiredBuffers;
+		tasks.push_back(GraphData::TaskData{
+			.name = task.
+		})
 
-	for (auto reference : m_imageReferences["main_color"])
-		tasksToVisit.push(reference.task);
-
-	while (!tasksToVisit.empty()) {
-		TaskIndex taskName = tasksToVisit.front();
-		RegisteredTask& task = m_tasks[taskName];
-		tasksToVisit.pop();
-		if (visitedTasks.contains(taskName)) continue;
-
-		std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>
-			imageBarriers;
-		std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>
-			bufferBarriers;
-
-		visitedTasks.insert(taskName);
-		for (auto& [name, reference] : task.images) {
-			auto& taskResourceAccesses = m_imageReferences[name];
-			requiredImages.insert(name);
-			int accessIndex = 0;
-			for (int i = 0; i < taskResourceAccesses.size(); i++) {
-				accessIndex = i;
-				auto& taskAccess = taskResourceAccesses[i];
-				tasksToVisit.push(taskAccess.task);
-				if (taskAccess.task == taskName) {
-					break;
-				}
-			}
-
-			vk::ImageMemoryBarrier2 barrier;
-			if (accessIndex > 0) {
-				if (buildImageBarrier(
-						taskResourceAccesses[accessIndex - 1].usage,
-						taskResourceAccesses[accessIndex].usage,
-						taskResourceAccesses[accessIndex - 1].requiredLayout,
-						taskResourceAccesses[accessIndex].requiredLayout,
-						barrier
-					)) {
-					imageBarriers[name] = barrier;
-				}
-			}
-		}
-		for (auto& [name, reference] : task.buffers) {
-			auto& taskResourceAccesses = m_bufferReferences[name];
-			requiredBuffers.insert(name);
-			int accessIndex = 0;
-			for (int i = 0; i < taskResourceAccesses.size(); i++) {
-				accessIndex = i;
-				auto& taskAccess = taskResourceAccesses[i];
-				tasksToVisit.push(taskAccess.task);
-				if (taskAccess.task == taskName) {
-					break;
-				}
-			}
-
-			vk::BufferMemoryBarrier2 barrier;
-
-			if (accessIndex > 0) {
-				if (buildBufferBarrier(
-						taskResourceAccesses[accessIndex - 1].usage,
-						taskResourceAccesses[accessIndex].usage,
-						barrier
-					)) {
-					bufferBarriers[name] = barrier;
-				}
-			} else {
-				if (buildBufferBarrier(
-						taskResourceAccesses.back().usage,
-						taskResourceAccesses[0].usage,
-						barrier
-					)) {
-					bufferBarriers[name] = barrier;
-				}
-			}
-		}
-
-		tasks.push_back(GraphData::TaskData {
-			.task = std::move(task.task),
-			.barriers = {
-						 .imageBarriers = imageBarriers,
-						 .bufferBarriers = bufferBarriers,
-						 }
-        });
 	}
+
+
+
 	std::reverse(tasks.begin(), tasks.end());
 
 	std::unordered_map<std::string_view, GraphData::ImageStatus> imageStatus;

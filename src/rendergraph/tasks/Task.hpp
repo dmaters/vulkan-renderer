@@ -1,11 +1,22 @@
 #pragma once
-
+#include <functional>
 #include <variant>
 #include <vulkan/vulkan.hpp>
 
-#include "BufferCopy.hpp"
-#include "ImageCopy.hpp"
-#include "RenderPass.hpp"
 #include "resources/Buffer.hpp"
 
-using Task = std::variant<RenderPass, ImageCopy, BufferCopy>;
+struct TaskContext{
+    vk::CommandBuffer& commandBuffer;
+    std::vector<ImageHandle> images;
+    std::vector<BufferHandle> buffers;
+    ResourceManager& resourceManager;
+    MaterialManager& materialManager;
+};
+
+enum class TaskType {
+    CPU,
+    Graphic,
+    Compute,
+    Transfer,
+};
+using Task = std::function<void(TaskContext&)>;
