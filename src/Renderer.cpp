@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
@@ -20,6 +21,7 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
+#include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"
 #include "scene/Scene.hpp"
@@ -43,23 +45,266 @@ Renderer::Renderer(SDL_Window* window) :
 }
 
 void Renderer::createRenderGraph() {
-	for (const auto& [name, desc] : ResourceManager::_defaultNamedImageData) {
-		auto it = ResourceManager::_swapchainRatio.find(name);
-		int8_t ratio =
-			(it != ResourceManager::_swapchainRatio.end()) ? it->second : 0;
-		m_renderGraph.addImage(name, desc, ratio);
-	}
-
-	for (const auto& [name, desc] : ResourceManager::_defaultNamedBufferData) {
-		m_renderGraph.addBuffer(name, desc);
-	}
 	RenderGraphBuilder builder;
 
-	for (const auto& [index, metadata] :
-	     m_materialManager.getMaterialMetadatas()) {
-		builder.addTask(RenderPass(index, metadata.namedResourceDependencies));
-	}
+	ResourceIndex shadowAtlas = builder.createImage(
+		"shadow_atlas",
+		{
+			.width = 1024,
+			.height = 1024,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eD16Unorm,
+			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
 
+		}
+	);
+	builder.addTask(
+		"shadowmap",
+		TaskType::Graphic,
+		{ },
+		{ { shadowAtlas,
+	        	{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+					},
+					.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+				},},},
+	[material = m_materialManager.getMaterialIndex("shadow_map"),  &primitives = m_currentScene.primitives]
+			(TaskContext& context){RenderPass(context,material, primitives);}	
+	);
+
+	ResourceIndex albedo = builder.createImage(
+		"gbuffer_albedo",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eInputAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		},
+		1
+	);
+	ResourceIndex normal = builder.createImage(
+		"gbuffer_normal",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eInputAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		},
+		1
+	);
+	ResourceIndex worldPos = builder.createImage(
+		"gbuffer_worldpos",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eInputAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		},
+		1
+	);
+	ResourceIndex roughnessMetallic = builder.createImage(
+		"gbuffer_roughnessMetallic",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eInputAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		},
+		1
+	);
+	ResourceIndex depth = builder.createImage(
+		"depth",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eD24UnormS8Uint,
+			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+
+		},
+		1
+	);
+	builder.addTask(
+		"gbuffer",
+		TaskType::Graphic,
+		{
+    },
+		{
+			{
+				albedo,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+					},
+					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				},
+			},
+			{
+				normal,
+				 {
+					.usage = { .access =
+	                               vk::AccessFlagBits2::eColorAttachmentWrite,
+	                           .stage = vk::PipelineStageFlagBits2::
+	                               eColorAttachmentOutput,
+							},
+					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				},
+			},
+			{
+				worldPos,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+					},
+					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				},
+			},
+			{
+				roughnessMetallic,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+					},
+					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				},
+			},
+			{
+				depth,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+					},
+					.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+				},
+			},
+		},
+		[material = m_materialManager.getMaterialIndex("pbr_deferred"), &primitives = m_currentScene.primitives](TaskContext& context) {RenderPass(context,material, primitives);}
+	);
+
+	ResourceIndex hdr_output = builder.createImage(
+		"hdr_output",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eTransferSrc,
+
+		},
+		1
+	);
+	builder.addTask(
+		"pbr_lighting",
+		TaskType::Graphic,
+		{{
+				albedo,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eShaderSampledRead,
+	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
+					},
+					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				},
+			},
+			{
+				normal,
+				 {
+					.usage = { 
+						.access = vk::AccessFlagBits2::eShaderSampledRead,
+	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
+					},
+					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				},
+			},
+			{
+				worldPos,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eShaderSampledRead,
+	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
+					},
+					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				},
+			},
+			{
+				roughnessMetallic,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eShaderSampledRead,
+	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
+					},
+					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				},
+			},
+			{
+				shadowAtlas,{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eShaderSampledRead,
+	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
+					},
+					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				},
+			}
+    	},
+		
+			{	
+			{
+				hdr_output,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+					},
+					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				},
+			},
+			{
+				depth,
+				{
+					.usage = { 
+						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+					},
+					.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+				},
+			},
+		},
+		[material = m_materialManager.getMaterialIndex("lighting_deferred"), &primitives = m_currentScene.primitives](TaskContext& context) {
+			RenderPass(context, material, primitives);
+		}
+	);
+	builder.setOutputImage(hdr_output);
 	GraphData data = builder.build();
 	m_renderGraph.build(data);
 }

@@ -39,13 +39,6 @@ public:
 	struct BufferDescription;
 	struct BufferCopy;
 
-	static const std::unordered_map<std::string_view, BufferDescription>
-		_defaultNamedBufferData;
-	static const std::unordered_map<std::string_view, ImageDescription>
-		_defaultNamedImageData;
-
-	static const std::unordered_map<std::string_view, int8_t> _swapchainRatio;
-
 	typedef uint32_t AllocationIndex;
 
 private:

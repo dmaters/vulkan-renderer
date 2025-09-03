@@ -46,12 +46,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 		},
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
-					 .materialBufferSize =
-						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.materialBufferSize =
+			(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
 	};
 
 	m_materialMetadata[index] = metadata;
@@ -114,13 +114,13 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
-					 .materialBufferSize =
-						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-		};
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.materialBufferSize =
+			(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
+	};
 
 	m_materialMetadata[index] = metadata;
 
@@ -213,10 +213,11 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		}
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.depthReadOnly = true,
 	};
 	m_materialMetadata[index] = metadata;
 
@@ -261,10 +262,10 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 		}
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = {},
-		             .materialLayout = m_emptySetLayout,
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = {},
+		.materialLayout = m_emptySetLayout,
 	};
 
 	m_materialMetadata[index] = metadata;

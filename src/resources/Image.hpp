@@ -13,7 +13,6 @@ struct Image {
 	vk::Format format;
 	vk::Extent3D size;
 	std::optional<SubAllocation> allocation;
-	vk::ImageLayout layout;
 
 	vk::ImageAspectFlags getAspectFlags() const {
 		return GetAspectFlags(format);

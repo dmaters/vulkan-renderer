@@ -393,15 +393,6 @@ void MaterialManager::createMaterialData() {
 			                 vk::BufferUsageFlagBits::eTransferDst,
 				}
 			);
-
-		for (auto name : metadata.sharedMaterialBuffers) {
-			if (sharedBuffersIndices.contains(name)) continue;
-
-			sharedBuffersIndices[name] = sharedBufferDescriptions.size();
-			sharedBufferDescriptions.push_back(
-				ResourceManager::_defaultNamedBufferData.at(name)
-			);
-		}
 	}
 	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
 
@@ -427,10 +418,6 @@ void MaterialManager::createMaterialData() {
 	uint32_t offset = sharedBufferDescriptions.size();
 	for (const auto& [index, metadata] : m_materialMetadata) {
 		std::vector<BufferHandle> materialHandles;
-		for (auto& sharedBuffer : metadata.sharedMaterialBuffers) {
-			uint32_t sharedBufferIndex = sharedBuffersIndices.at(sharedBuffer);
-			materialHandles.push_back(handles.at(sharedBufferIndex));
-		}
 
 		if (metadata.materialBufferSize > 0) {
 			materialHandles.push_back(handles.at(offset));

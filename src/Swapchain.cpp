@@ -94,7 +94,6 @@ void Swapchain::createImages() {
 				.depth = 1,
 			},
 			.allocation = std::nullopt,
-			.layout = vk::ImageLayout::eUndefined
 		};
 	}
 }

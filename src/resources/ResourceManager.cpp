@@ -540,8 +540,8 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			.format = description.format,
 			.size = { description.width,
                      description.height,
-                     description.depth, },
-			.layout = vk::ImageLayout::eUndefined,
+                     description.depth, 
+					},
 		};
 
 		m_allocationResources[allocIndex].first.push_back(handle);

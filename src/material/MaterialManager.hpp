@@ -114,6 +114,8 @@ struct MaterialManager::MaterialMetadata {
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings;
 	vk::DescriptorSetLayout materialLayout;
 	uint32_t materialBufferSize = 0;
+
+	bool depthReadOnly = false;
 };
 
 template <typename T, typename F>
