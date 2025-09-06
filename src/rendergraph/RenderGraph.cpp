@@ -165,9 +165,10 @@ void RenderGraph::outputToSwapchain(
 	sourceBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
 	sourceBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	sourceBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferRead;
-	sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderRead;
+	sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
 	sourceBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-	sourceBarrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+	sourceBarrier.dstStageMask =
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput;
 
 	swapchainBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 	swapchainBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
@@ -213,13 +214,21 @@ void RenderGraph::buildSwapchainResources() {
 	m_resolutionDependentAllocation = m_resourceManager.createResources(
 		resolutionDependentImagesDescription, {}
 	);
+
+	auto& images = m_resourceManager.getImages(m_resolutionDependentAllocation);
+	int i = 0;
+	for (auto& [index, _] : m_data.swapchainImageRatio) {
+		m_images[index] = images[i];
+		m_resourceManager.setName(m_data.names[index], images[i]);
+		i++;
+	}
 }
 void RenderGraph::rebuildSwapchain() {
 	m_swapchain.rebuild();
 	if (m_swapchain.getResolution() == vk::Extent2D(0)) return;
 	m_oldResolutionDependentAllocation = m_resolutionDependentAllocation;
 	buildSwapchainResources();
-	m_swapchainFlushCounter = 2;
+	m_swapchainFlushCounter = 4;
 	m_swapchainImagesInitialized = false;
 }
 
@@ -422,17 +431,18 @@ void RenderGraph::submit(const Scene& scene) {
 void RenderGraph::build(GraphData graphData) {
 	m_data = graphData;
 
-	std::vector<ResourceManager::ImageDescription> imagesDescription;
+	std::vector<ResourceManager::ImageDescription> staticImagesDescriptions;
 	std::vector<ResourceManager::BufferDescription> buffersDescription;
 	for (auto& [index, description] : graphData.images) {
-		imagesDescription.push_back(description);
+		if (graphData.swapchainImageRatio.contains(index)) continue;
+		staticImagesDescriptions.push_back(description);
 	}
 	for (auto& [index, description] : graphData.buffers) {
 		buffersDescription.push_back(description);
 	}
 
 	m_frameDataAllocation = m_resourceManager.createResources(
-		imagesDescription, buffersDescription
+		staticImagesDescriptions, buffersDescription
 	);
 	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
@@ -440,13 +450,18 @@ void RenderGraph::build(GraphData graphData) {
 
 	int i = 0;
 	for (auto& [index, _] : graphData.images) {
+		if (graphData.swapchainImageRatio.contains(index)) continue;
 		m_images[index] = images[i];
+		m_resourceManager.setName(graphData.names[index], images[i]);
+
 		i++;
 	}
 
 	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
 	for (auto& [buffer, _] : graphData.buffers) {
 		m_buffers[index] = buffers[i];
+		m_resourceManager.setName(graphData.names[index], buffers[i]);
+
 		i++;
 	}
 

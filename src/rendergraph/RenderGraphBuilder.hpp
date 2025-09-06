@@ -1,20 +1,14 @@
 #pragma once
 
-#include <optional>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 
+#include "ResourceUsage.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
-
-struct ResourceDependency {
-	ResourceUsage usage;
-	vk::ImageLayout requiredLayout = vk::ImageLayout::eUndefined;
-};
 
 struct GraphData {
 	struct Barriers {
@@ -29,8 +23,8 @@ struct GraphData {
 		TaskType type;
 		std::string_view name;
 		Barriers barriers;
-		std::unordered_map<ResourceIndex, ResourceDependency> inputs;
-		std::unordered_map<ResourceIndex, ResourceDependency> outputs;
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputs;
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputs;
 	};
 	std::vector<TaskData> tasks;
 
@@ -41,16 +35,8 @@ struct GraphData {
 	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
 	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
 		buffers;
-};
 
-struct TaskResourceDependency {
-	ResourceDependency dependencyInfo;
-	uint32_t taskIndex;
-	enum class UsageType {
-		Input,
-		Output,
-	};
-	UsageType usageType;
+	std::unordered_map<ResourceIndex, std::string_view> names;
 };
 
 class RenderGraphBuilder {
@@ -65,10 +51,15 @@ private:
 		m_buffers;
 
 	std::vector<GraphData::TaskData> m_tasks;
+
+	struct TaskResourceDependency;
 	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
 		m_dependencies;
 
+	std::unordered_map<ResourceIndex, std::string_view> m_names;
+
 	ResourceIndex m_outputImage;
+
 	GraphData::Barriers getBarriers(uint32_t task) const;
 
 public:
@@ -84,11 +75,21 @@ public:
 	void addTask(
 		std::string_view name,
 		TaskType type,
-		std::unordered_map<ResourceIndex, ResourceDependency> inputResources,
-		std::unordered_map<ResourceIndex, ResourceDependency> outputResources,
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputResources,
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputResources,
 		Task task
 	);
 
 	void setOutputImage(ResourceIndex index) { m_outputImage = index; }
 	GraphData build();
+};
+
+struct RenderGraphBuilder::TaskResourceDependency {
+	ResourceUsage::Type usage;
+	uint32_t taskIndex;
+	enum class UsageType {
+		Input,
+		Output,
+	};
+	UsageType usageType;
 };

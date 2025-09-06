@@ -20,6 +20,7 @@
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
+#include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
@@ -63,17 +64,15 @@ void Renderer::createRenderGraph() {
 	builder.addTask(
 		"shadowmap",
 		TaskType::Graphic,
-		{ },
-		{ { shadowAtlas,
-	        	{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-					},
-					.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-				},},},
-	[material = m_materialManager.getMaterialIndex("shadow_map"),  &primitives = m_currentScene.primitives]
-			(TaskContext& context){RenderPass(context,material, primitives);}	
+		{
+    },
+		{
+			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("shadow_map"),
+	     &primitives = m_currentScene.primitives](TaskContext& context) {
+			RenderPass(context, material, primitives);
+		}
 	);
 
 	ResourceIndex albedo = builder.createImage(
@@ -155,59 +154,16 @@ void Renderer::createRenderGraph() {
 		{
     },
 		{
-			{
-				albedo,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-					},
-					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-				},
-			},
-			{
-				normal,
-				 {
-					.usage = { .access =
-	                               vk::AccessFlagBits2::eColorAttachmentWrite,
-	                           .stage = vk::PipelineStageFlagBits2::
-	                               eColorAttachmentOutput,
-							},
-					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-				},
-			},
-			{
-				worldPos,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-					},
-					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-				},
-			},
-			{
-				roughnessMetallic,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-					},
-					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-				},
-			},
-			{
-				depth,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-					},
-					.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-				},
-			},
+			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },
+			{ normal, ResourceUsage::Type::ColorAttachmentWrite },
+			{ worldPos, ResourceUsage::Type::ColorAttachmentWrite },
+			{ roughnessMetallic, ResourceUsage::Type::ColorAttachmentWrite },
+			{ depth, ResourceUsage::Type::DepthStencilWrite },
 		},
-		[material = m_materialManager.getMaterialIndex("pbr_deferred"), &primitives = m_currentScene.primitives](TaskContext& context) {RenderPass(context,material, primitives);}
+		[material = m_materialManager.getMaterialIndex("pbr_deferred"),
+	     &primitives = m_currentScene.primitives](TaskContext& context) {
+			RenderPass(context, material, primitives);
+		}
 	);
 
 	ResourceIndex hdr_output = builder.createImage(
@@ -227,80 +183,19 @@ void Renderer::createRenderGraph() {
 	builder.addTask(
 		"pbr_lighting",
 		TaskType::Graphic,
-		{{
-				albedo,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eShaderSampledRead,
-	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
-					},
-					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-				},
-			},
-			{
-				normal,
-				 {
-					.usage = { 
-						.access = vk::AccessFlagBits2::eShaderSampledRead,
-	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
-					},
-					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-				},
-			},
-			{
-				worldPos,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eShaderSampledRead,
-	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
-					},
-					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-				},
-			},
-			{
-				roughnessMetallic,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eShaderSampledRead,
-	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
-					},
-					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-				},
-			},
-			{
-				shadowAtlas,{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eShaderSampledRead,
-	                    .stage = vk::PipelineStageFlagBits2::eFragmentShader,
-					},
-					.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-				},
-			}
-    	},
-		
-			{	
-			{
-				hdr_output,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eColorAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-					},
-					.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-				},
-			},
-			{
-				depth,
-				{
-					.usage = { 
-						.access = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-	                    .stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-					},
-					.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-				},
-			},
+		{
+			{ albedo,            ResourceUsage::Type::SampledRead },
+			{ normal,            ResourceUsage::Type::SampledRead },
+			{ worldPos,          ResourceUsage::Type::SampledRead },
+			{ roughnessMetallic, ResourceUsage::Type::SampledRead },
+			{ shadowAtlas,       ResourceUsage::Type::SampledRead }
+    },
+		{
+			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
+			{ depth, ResourceUsage::Type::DepthStencilRead },
 		},
-		[material = m_materialManager.getMaterialIndex("lighting_deferred"), &primitives = m_currentScene.primitives](TaskContext& context) {
+		[material = m_materialManager.getMaterialIndex("lighting_deferred"),
+	     &primitives = m_currentScene.primitives](TaskContext& context) {
 			RenderPass(context, material, primitives);
 		}
 	);

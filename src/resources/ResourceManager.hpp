@@ -28,11 +28,6 @@ struct ImageHandle {
 	uint32_t value;
 };
 
-struct ResourceUsage {
-	vk::AccessFlags2 access;
-	vk::PipelineStageFlags2 stage;
-};
-
 class ResourceManager {
 public:
 	struct ImageDescription;
@@ -65,6 +60,7 @@ private:
 		AllocationIndex,
 		std::pair<std::vector<ImageHandle>, std::vector<BufferHandle>>>
 		m_allocationResources;
+
 	uint32_t m_allocationCount = 0;
 
 	ImageHandle registerImage(Image image, ImageHandle handle = { 0 });

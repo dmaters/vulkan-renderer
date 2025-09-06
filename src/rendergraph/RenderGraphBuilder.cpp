@@ -9,6 +9,7 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "ResourceUsage.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 ResourceIndex RenderGraphBuilder::createImage(
@@ -21,6 +22,8 @@ ResourceIndex RenderGraphBuilder::createImage(
 
 	if (swapchainRatio != 0) m_swapchainImageRatio[index] = swapchainRatio;
 
+	m_names[index] = name;
+
 	return index;
 }
 
@@ -29,6 +32,7 @@ ResourceIndex RenderGraphBuilder::createBuffer(
 ) {
 	ResourceIndex index = ++m_resourceCount;
 	m_buffers[index] = desc;
+	m_names[index] = name;
 
 	return index;
 }
@@ -39,6 +43,7 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 
 	for (auto& [index, reference] : m_tasks.at(taskIndex).inputs) {
 		TaskResourceDependency lastAccess;
+
 		TaskResourceDependency currentAccess;
 
 		for (int i = 0; i < m_dependencies.at(index).size(); i++) {
@@ -52,24 +57,27 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 		}
 
 		if (m_images.contains(index)) {
-			if (reference.requiredLayout ==
-			    lastAccess.dependencyInfo.requiredLayout)
+			if (ResourceUsage::GetLayout(reference) ==
+			    ResourceUsage::GetLayout(lastAccess.usage))
 				continue;
-
+			auto source = ResourceUsage::GetAccess(lastAccess.usage);
+			auto destination = ResourceUsage::GetAccess(reference);
 			imageBarriers[index] = vk::ImageMemoryBarrier2 {
-				.srcStageMask = lastAccess.dependencyInfo.usage.stage,
-				.srcAccessMask = lastAccess.dependencyInfo.usage.access,
-				.dstStageMask = reference.usage.stage,
-				.dstAccessMask = reference.usage.access,
-				.oldLayout = lastAccess.dependencyInfo.requiredLayout,
-				.newLayout = reference.requiredLayout,
+				.srcStageMask = source.stage,
+				.srcAccessMask = source.access,
+				.dstStageMask = destination.stage,
+				.dstAccessMask = destination.access,
+				.oldLayout = ResourceUsage::GetLayout(lastAccess.usage),
+				.newLayout = ResourceUsage::GetLayout(reference),
 			};
 		} else {
+			auto source = ResourceUsage::GetAccess(lastAccess.usage);
+			auto destination = ResourceUsage::GetAccess(reference);
 			bufferBarriers[index] = vk::BufferMemoryBarrier2 {
-				.srcStageMask = lastAccess.dependencyInfo.usage.stage,
-				.srcAccessMask = lastAccess.dependencyInfo.usage.access,
-				.dstStageMask = reference.usage.stage,
-				.dstAccessMask = reference.usage.access,
+				.srcStageMask = source.stage,
+				.srcAccessMask = source.access,
+				.dstStageMask = destination.stage,
+				.dstAccessMask = destination.access,
 			};
 		}
 	}
@@ -89,24 +97,27 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 		}
 
 		if (m_images.contains(index)) {
-			if (reference.requiredLayout ==
-			    lastAccess.dependencyInfo.requiredLayout)
+			if (ResourceUsage::GetLayout(reference) ==
+			    ResourceUsage::GetLayout(lastAccess.usage))
 				continue;
-
+			auto source = ResourceUsage::GetAccess(lastAccess.usage);
+			auto destination = ResourceUsage::GetAccess(reference);
 			imageBarriers[index] = vk::ImageMemoryBarrier2 {
-				.srcStageMask = lastAccess.dependencyInfo.usage.stage,
-				.srcAccessMask = lastAccess.dependencyInfo.usage.access,
-				.dstStageMask = reference.usage.stage,
-				.dstAccessMask = reference.usage.access,
-				.oldLayout = lastAccess.dependencyInfo.requiredLayout,
-				.newLayout = reference.requiredLayout,
+				.srcStageMask = source.stage,
+				.srcAccessMask = source.access,
+				.dstStageMask = destination.stage,
+				.dstAccessMask = destination.access,
+				.oldLayout = ResourceUsage::GetLayout(lastAccess.usage),
+				.newLayout = ResourceUsage::GetLayout(reference),
 			};
 		} else {
+			auto source = ResourceUsage::GetAccess(lastAccess.usage);
+			auto destination = ResourceUsage::GetAccess(reference);
 			bufferBarriers[index] = vk::BufferMemoryBarrier2 {
-				.srcStageMask = lastAccess.dependencyInfo.usage.stage,
-				.srcAccessMask = lastAccess.dependencyInfo.usage.access,
-				.dstStageMask = reference.usage.stage,
-				.dstAccessMask = reference.usage.access,
+				.srcStageMask = source.stage,
+				.srcAccessMask = source.access,
+				.dstStageMask = destination.stage,
+				.dstAccessMask = destination.access,
 			};
 		}
 	}
@@ -119,8 +130,8 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 void RenderGraphBuilder::addTask(
 	std::string_view name,
 	TaskType type,
-	std::unordered_map<ResourceIndex, ResourceDependency> inputResources,
-	std::unordered_map<ResourceIndex, ResourceDependency> outputResources,
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> inputResources,
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> outputResources,
 	Task task
 ) {
 	uint32_t taskIndex = m_tasks.size();
@@ -142,7 +153,7 @@ void RenderGraphBuilder::addTask(
 		);  // We don't read uninitalized resource;
 
 		m_dependencies[index].push_back(TaskResourceDependency {
-			.dependencyInfo = dependency,
+			.usage = dependency,
 			.taskIndex = taskIndex,
 			.usageType = TaskResourceDependency::UsageType::Input,
 		});
@@ -160,7 +171,7 @@ void RenderGraphBuilder::addTask(
 		);  // We don't read uninitalized resource;
 
 		m_dependencies[index].push_back(TaskResourceDependency {
-			.dependencyInfo = dependency,
+			.usage = dependency,
 			.taskIndex = taskIndex,
 			.usageType = TaskResourceDependency::UsageType::Output,
 		});
@@ -178,7 +189,7 @@ GraphData RenderGraphBuilder::build() {
 
 	for (auto& [index, dependencies] : m_dependencies) {
 		auto findFunc = [](TaskResourceDependency& dependency) {
-			return dependency.dependencyInfo.requiredLayout !=
+			return ResourceUsage::GetLayout(dependency.usage) !=
 			       vk::ImageLayout::eUndefined;
 		};
 
@@ -188,14 +199,16 @@ GraphData RenderGraphBuilder::build() {
 		if (lastLayout == dependencies.rend()) continue;
 
 		requiredInitialLayouts[index] =
-			lastLayout->dependencyInfo.requiredLayout;
+			ResourceUsage::GetLayout(lastLayout->usage);
 	}
 
 	return {
 		.tasks = m_tasks,
 		.outputImage = m_outputImage,
 		.requiredLayouts = requiredInitialLayouts,
+		.swapchainImageRatio = m_swapchainImageRatio,
 		.images = m_images,
 		.buffers = m_buffers,
+		.names = m_names,
 	};
 }

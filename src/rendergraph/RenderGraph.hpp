@@ -27,9 +27,8 @@ private:
 	bool m_swapchainImagesInitialized = false;
 
 	ResourceManager::AllocationIndex m_frameDataAllocation;
-	ResourceManager::AllocationIndex m_resolutionDependentAllocation;
-
-	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation;
+	ResourceManager::AllocationIndex m_resolutionDependentAllocation = 0;
+	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation = 0;
 	uint8_t m_swapchainFlushCounter = 0;
 
 	GraphData m_data;

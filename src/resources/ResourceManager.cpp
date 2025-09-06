@@ -490,10 +490,10 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 }
 
 ResourceManager::AllocationIndex ResourceManager::createResources(
-	std::vector<ImageDescription> imagesDescription,
-	std::vector<BufferDescription> buffersDescription
+	std::vector<ImageDescription> imagesDescriptions,
+	std::vector<BufferDescription> buffersDescriptions
 ) {
-	if (imagesDescription.size() == 0 && buffersDescription.size() == 0) {
+	if (imagesDescriptions.size() == 0 && buffersDescriptions.size() == 0) {
 		std::cerr << "Tried to allocate with no resources" << std::endl;
 		return 0;
 	}
@@ -517,12 +517,14 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	std::vector<vk::MemoryRequirements> resourcesRequirements;
 
 	uint32_t allocationSize =
-		imagesDescription.size() + buffersDescription.size();
+		imagesDescriptions.size() + buffersDescriptions.size();
 	resourcesRequirements.reserve(allocationSize);
 
 	AllocationIndex allocIndex = ++m_allocationCount;
 
-	for (auto &description : imagesDescription) {
+	for (int i = 0; i < imagesDescriptions.size(); i++) {
+		auto &description = imagesDescriptions[i];
+
 		vk::Image image = createImage(description);
 
 		vk::MemoryRequirements requirements =
@@ -547,7 +549,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		m_allocationResources[allocIndex].first.push_back(handle);
 	}
 
-	for (auto &description : buffersDescription) {
+	for (int i = 0; i < buffersDescriptions.size(); i++) {
+		auto &description = buffersDescriptions[i];
+
 		vk::Buffer buffer = device.createBuffer(vk::BufferCreateInfo {
 			.size = description.size,
 			.usage = description.usage,
@@ -561,6 +565,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		resourcesRequirements.push_back(requirements);
 
 		BufferHandle handle = { ++m_resourceCounter };
+
 		buffers[resourceCount++] = handle;
 		m_buffers[handle.value] = Buffer {
 			.buffer = buffer,
@@ -593,7 +598,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 				.subresourceRange = { .aspectMask =
 										Image::GetAspectFlags(image.format),
 									.baseMipLevel = 0,
-									.levelCount = imagesDescription[i].miplevels,
+									.levelCount = imagesDescriptions[i].miplevels,
 									.baseArrayLayer = 0,
 									.layerCount = 1,
 									},
@@ -618,7 +623,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 void ResourceManager::freeAllocation(AllocationIndex index) {
 	vk::Device &device = Instance::Get().device;
+
 	for (auto &image : m_allocationResources[index].first) {
+		device.destroyImageView(m_images[image.value].view);
 		device.destroyImage(m_images[image.value].image);
 		m_images.erase(image.value);
 	}
@@ -627,8 +634,8 @@ void ResourceManager::freeAllocation(AllocationIndex index) {
 		device.destroyBuffer(m_buffers[buffer.value].buffer);
 		m_buffers.erase(buffer.value);
 	}
-
 	m_allocationResources.erase(index);
+
 	m_allocations.at(index).getAllocation().free();
 	m_allocations.erase(index);
 }
