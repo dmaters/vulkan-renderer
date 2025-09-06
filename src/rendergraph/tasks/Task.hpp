@@ -1,11 +1,28 @@
 #pragma once
-
-#include <variant>
+#include <functional>
+#include <unordered_map>
+#include <vector>
 #include <vulkan/vulkan.hpp>
 
-#include "BufferCopy.hpp"
-#include "ImageCopy.hpp"
-#include "RenderPass.hpp"
-#include "resources/Buffer.hpp"
+#include "material/MaterialManager.hpp"
+#include "resources/ResourceManager.hpp"
+#include "scene/Primitive.hpp"
+using ResourceIndex = uint32_t;
 
-using Task = std::variant<RenderPass, ImageCopy, BufferCopy>;
+struct TaskContext {
+	vk::CommandBuffer& commandBuffer;
+	std::vector<ResourceIndex>& inputs;
+	std::vector<ResourceIndex>& outputs;
+	std::unordered_map<ResourceIndex, ImageHandle>& images;
+	std::unordered_map<ResourceIndex, BufferHandle>& buffers;
+	ResourceManager& resourceManager;
+	MaterialManager& materialManager;
+};
+
+enum class TaskType {
+	CPU,
+	Graphic,
+	Compute,
+	Transfer,
+};
+using Task = std::function<void(TaskContext&)>;

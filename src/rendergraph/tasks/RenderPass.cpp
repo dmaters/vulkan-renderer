@@ -1,106 +1,83 @@
 #include "RenderPass.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "Task.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
 #include "resources/ResourceManager.hpp"
-#include "scene/Primitive.hpp"
 
-void RenderPass::setup(
-	std::unordered_map<std::string_view, ResourceDependency>& images,
-	std::unordered_map<std::string_view, ResourceDependency>& buffers
+struct TransientResources {
+	std::vector<vk::DescriptorImageInfo> _imageInfo = {};
+	std::vector<vk::DescriptorBufferInfo> _bufferInfo = {};
+	std::vector<vk::WriteDescriptorSet> descriptors = {};
+};
+
+TransientResources getTransientResources(
+	ResourceManager& resourceManager,
+	std::vector<ResourceIndex>& inputs,
+	std::unordered_map<ResourceIndex, ImageHandle>& images,
+	std::unordered_map<ResourceIndex, BufferHandle>& buffers,
+	vk::Sampler sampler
 ) {
-	for (auto& dependency : m_dependencies) {
-		switch (dependency.kind) {
-			case MaterialManager::ResourceDependency::Kind::RenderTarget:
-				images[dependency.name] = {
-					.usage = dependency.usage,
-					.requiredLayout = dependency.requiredLayout,
-				};
-				break;
-			case MaterialManager::ResourceDependency::Kind::Sampler:
-				images[dependency.name] = {
-					.usage = dependency.usage,
-					.requiredLayout = dependency.requiredLayout,
-				};
-				break;
-			case MaterialManager::ResourceDependency::Kind::Buffer:
-				buffers[dependency.name] = {
-					.usage = dependency.usage,
-				};
-				break;
-		}
-	}
-}
-
-std::vector<vk::WriteDescriptorSet> getTransientResources(
-	vk::CommandBuffer& commandBuffer,
-	const std::vector<MaterialManager::ResourceDependency> dependencies,
-	const Resources& resources,
-	std::vector<vk::DescriptorImageInfo>& imageInfo,
-	std::vector<vk::DescriptorBufferInfo>& bufferInfo
-
-) {
-	std::vector<vk::WriteDescriptorSet> descriptors;
 	uint32_t bindingCount = 0;
+	TransientResources resources;
 
-	for (auto& dependency : dependencies) {
-		if (dependency.kind ==
-		    MaterialManager::ResourceDependency::Kind::RenderTarget)
-			continue;
+	resources._imageInfo.reserve(inputs.size());
 
-		if (dependency.kind ==
-		    MaterialManager::ResourceDependency::Kind::Sampler) {
-			Image& image =
-				resources.resourceManager.getNamedImage(dependency.name);
+	resources._bufferInfo.reserve(inputs.size());
 
-			imageInfo.push_back({
-				.sampler = resources.materialManager.getLinearSampler(),
+	for (auto index : inputs) {
+		if (images.contains(index)) {
+			Image& image = resourceManager.getImage(images[index]);
+
+			resources._imageInfo.push_back({
+				.sampler = sampler,
 				.imageView = image.view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			});
 
-			descriptors.push_back(vk::WriteDescriptorSet {
+			resources.descriptors.push_back(vk::WriteDescriptorSet {
 				.dstSet = nullptr,
 				.dstBinding = bindingCount,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.pImageInfo = &imageInfo.back(),
+				.pImageInfo = &resources._imageInfo.back(),
 			});
-		}
-		if (dependency.kind ==
-		    MaterialManager::ResourceDependency::Kind::Buffer) {
-			Buffer& buffer =
-				resources.resourceManager.getNamedBuffer(dependency.name);
+		} else if (buffers.contains(index)) {
+			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
 
-			bufferInfo.push_back({
+			resources._bufferInfo.push_back({
 				.buffer = buffer.buffer,
 				.range = buffer.size,
 			});
 
-			descriptors.push_back(vk::WriteDescriptorSet {
+			resources.descriptors.push_back(vk::WriteDescriptorSet {
 				.dstSet = nullptr,
 				.dstBinding = bindingCount,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &bufferInfo.back(),
+				.pBufferInfo = &resources._bufferInfo.back(),
 			});
 		}
 		bindingCount++;
 	}
-	return descriptors;
+	return resources;
 }
 
 void setupAttachments(
 	vk::CommandBuffer& commandBuffer,
-	const std::vector<MaterialManager::ResourceDependency> dependencies,
-	const Resources& resources
+	ResourceManager& resourceManager,
+	std::unordered_map<ResourceIndex, ImageHandle>& images,
+	std::vector<ResourceIndex>& outputs,
+	bool depthWrite
 ) {
 	std::vector<vk::RenderingAttachmentInfo> attachments;
 
@@ -110,39 +87,26 @@ void setupAttachments(
 
 	uint32_t width = 0, height = 0;
 
-	for (auto& dependency : dependencies) {
-		if (dependency.kind !=
-		    MaterialManager::ResourceDependency::Kind::RenderTarget)
-			continue;
+	for (ResourceIndex image : outputs) {
+		Image& attachment = resourceManager.getImage(images.at(image));
 
-		Image& attachment =
-			resources.resourceManager.getNamedImage(dependency.name);
-
-		vk::AttachmentLoadOp loadOp;
-		vk::AttachmentStoreOp storeOp;
-		switch (dependency.usage.type) {
-			case (ResourceUsage::Type::READ):
-				loadOp = vk::AttachmentLoadOp::eLoad;
-				storeOp = vk::AttachmentStoreOp::eNone;
-				break;
-			case (ResourceUsage::Type::WRITE):
-				loadOp = vk::AttachmentLoadOp::eClear;
-				storeOp = vk::AttachmentStoreOp::eStore;
-				break;
-			default:
-				loadOp = vk::AttachmentLoadOp::eDontCare;
-				storeOp = vk::AttachmentStoreOp::eDontCare;
-		}
+		vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear;
+		vk::AttachmentStoreOp storeOp = vk::AttachmentStoreOp::eStore;
 
 		bool isStencil = attachment.format == vk::Format::eD24UnormS8Uint;
 		if (isStencil) hasStencil = true;
 
 		bool isDepth = attachment.format == vk::Format::eD16Unorm || isStencil;
 		if (isDepth) {
+			if (!depthWrite) {
+				loadOp = vk::AttachmentLoadOp::eLoad;
+				storeOp = vk::AttachmentStoreOp::eDontCare;
+			}
+
 			depthAttachment = vk::RenderingAttachmentInfo{
 				.imageView = attachment.view,
 				.imageLayout =
-					attachment.layout,
+					isStencil ? vk::ImageLayout::eDepthStencilReadOnlyOptimal : vk::ImageLayout::eDepthAttachmentOptimal,
 				.loadOp = loadOp,
 				.storeOp = storeOp,
 				.clearValue = { .depthStencil = { .depth = 1, .stencil = 0 }, },
@@ -154,7 +118,7 @@ void setupAttachments(
 		} else {
 			colorAttachments.push_back({
 			.imageView = attachment.view,
-			.imageLayout = attachment.layout,
+			.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
 			.loadOp = loadOp,
 			.storeOp = storeOp,
 			.clearValue = { .color =
@@ -198,15 +162,12 @@ void setupAttachments(
 	);
 
 	Buffer& positionBuffer =
-		resources.resourceManager.getNamedBuffer("vertex_buffer_positions");
+		resourceManager.getNamedBuffer("vertex_buffer_positions");
 
 	Buffer& attributeBuffer =
-		resources.resourceManager.getNamedBuffer("vertex_buffer_attributes");
-	Buffer& instanceBuffer =
-		resources.resourceManager.getNamedBuffer("instance_buffer");
-
-	Buffer& indexBuffer =
-		resources.resourceManager.getNamedBuffer("index_buffer");
+		resourceManager.getNamedBuffer("vertex_buffer_attributes");
+	Buffer& instanceBuffer = resourceManager.getNamedBuffer("instance_buffer");
+	Buffer& indexBuffer = resourceManager.getNamedBuffer("index_buffer");
 
 	commandBuffer.bindVertexBuffers(
 		0,
@@ -222,21 +183,32 @@ void setupAttachments(
 	);
 }
 
-void RenderPass::execute(
-	vk::CommandBuffer& commandBuffer, const Resources& resources
+void RenderPass(
+	TaskContext& context,
+	MaterialIndex materialIndex,
+	const std::vector<Primitive>& primitives
 ) {
-	setupAttachments(commandBuffer, m_dependencies, resources);
+	auto& metadata =
+		context.materialManager.getMaterialMetadatas().at(materialIndex);
+
+	setupAttachments(
+		context.commandBuffer,
+		context.resourceManager,
+		context.images,
+		context.outputs,
+		!metadata.depthReadOnly
+	);
 
 	const Material& material =
-		resources.materialManager.getMaterial(m_material);
+		context.materialManager.getMaterial(materialIndex);
 
-	commandBuffer.bindPipeline(
+	context.commandBuffer.bindPipeline(
 		vk::PipelineBindPoint::eGraphics, material.pipeline.pipeline
 	);
 
-	vk::DescriptorSet globalSet = resources.materialManager.getGlobalSet();
+	vk::DescriptorSet globalSet = context.materialManager.getGlobalSet();
 
-	commandBuffer.bindDescriptorSets(
+	context.commandBuffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		material.pipeline.pipelineLayout,
 		0,
@@ -244,34 +216,35 @@ void RenderPass::execute(
 		{}
 	);
 
-	std::vector<vk::DescriptorImageInfo> imageInfo;
-	imageInfo.reserve(m_dependencies.size());
-	std::vector<vk::DescriptorBufferInfo> bufferInfo;
-	bufferInfo.reserve(m_dependencies.size());
-	std::vector<vk::WriteDescriptorSet> transientResources =
-		getTransientResources(
-			commandBuffer, m_dependencies, resources, imageInfo, bufferInfo
-		);
+	TransientResources transientResources = getTransientResources(
+		context.resourceManager,
+		context.inputs,
+		context.images,
+		context.buffers,
+		context.materialManager.getLinearSampler()
+	);
 
-	if (transientResources.size() > 0) {
-		commandBuffer.pushDescriptorSetKHR(
+	if (transientResources.descriptors.size() > 0) {
+		context.commandBuffer.pushDescriptorSetKHR(
 			vk::PipelineBindPoint::eGraphics,
 			material.pipeline.pipelineLayout,
 			2,
-			transientResources
+			transientResources.descriptors
 		);
 	}
 
-	for (const Primitive& primitive : resources.primitives) {
+	for (const Primitive& primitive : primitives) {
 		if (!std::any_of(
 				primitive.materials.begin(),
 				primitive.materials.end(),
-				[&passMaterial = m_material](MaterialInstance primitiveMaterial
-		        ) { return primitiveMaterial.index == passMaterial; }
+				[&passMaterial =
+		             materialIndex](MaterialInstance primitiveMaterial) {
+					return primitiveMaterial.index == passMaterial;
+				}
 			))
 			continue;
 
-		commandBuffer.pushConstants(
+		context.commandBuffer.pushConstants(
 			material.pipeline.pipelineLayout,
 			vk::ShaderStageFlagBits::eVertex |
 				vk::ShaderStageFlagBits::eFragment,
@@ -280,7 +253,7 @@ void RenderPass::execute(
 			&primitive.materials[0].instance
 		);
 
-		commandBuffer.drawIndexed(
+		context.commandBuffer.drawIndexed(
 			primitive.indexCount,
 			primitive.instanceCount,
 			primitive.baseIndex,
@@ -289,5 +262,5 @@ void RenderPass::execute(
 		);
 	}
 
-	commandBuffer.endRendering();
+	context.commandBuffer.endRendering();
 }

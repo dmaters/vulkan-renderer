@@ -10,16 +10,9 @@
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
+#include "resources/Image.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
-
-struct Primitive;
-struct Resources {
-	ResourceManager& resourceManager;
-	MaterialManager& materialManager;
-	const std::vector<Primitive>& primitives;
-	uint8_t currentFrame;
-};
 
 class RenderGraph {
 public:
@@ -30,31 +23,26 @@ private:
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
-	std::unordered_map<std::string_view, ResourceManager::BufferDescription>
-		m_bufferCreationsInfos;
-	std::unordered_map<std::string_view, ResourceManager::ImageDescription>
-		m_imageCreationInfos;
-	std::unordered_map<std::string_view, uint8_t> m_swapchainDependentImages;
+	bool m_baseImagesInitialized = false;
+	bool m_swapchainImagesInitialized = false;
 
 	ResourceManager::AllocationIndex m_frameDataAllocation;
-	ResourceManager::AllocationIndex m_resolutionDependentAllocation;
-
-	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation;
+	ResourceManager::AllocationIndex m_resolutionDependentAllocation = 0;
+	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation = 0;
 	uint8_t m_swapchainFlushCounter = 0;
 
 	GraphData m_data;
-	ImageHandle m_resultHandle = { 0 };
+	std::unordered_map<ResourceIndex, ImageHandle> m_images;
+	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
 
 	uint8_t m_currentFrame = 0;
 	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
-
-	void writeInitialSyncronizationBarrier(vk::CommandBuffer& buffer);
 
 	void writeMemoryBarrier(
 		vk::CommandBuffer& commandBuffer, GraphData::TaskData& task
 	) const;
 
-	void initializeExternalImages(vk::CommandBuffer& commandBuffer);
+	void initializeImages(vk::CommandBuffer& commandBuffer);
 
 	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);
 	void clearUnusedResources();
@@ -66,16 +54,6 @@ public:
 		Swapchain& swapchain,
 		ResourceManager& resourceManager,
 		MaterialManager& materialManager
-	);
-
-	void addImage(
-		std::string_view name,
-		ResourceManager::ImageDescription description,
-		uint8_t swapchainResolutionMultiplier
-	);
-
-	void addBuffer(
-		std::string_view name, ResourceManager::BufferDescription description
 	);
 
 	void submit(const Scene& scene);

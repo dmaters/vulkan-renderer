@@ -46,41 +46,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::PBRMaterial>() {
 		},
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
-					 .materialBufferSize =
-						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-					 
-		             .namedResourceDependencies =
-	{
-		{
-			.name = "main_color",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},
-		{
-			.name = "depth",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eAllGraphics,
-				},
-				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-		 },
-	},
-
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.materialBufferSize =
+			(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
 	};
 
 	m_materialMetadata[index] = metadata;
@@ -143,74 +114,13 @@ MaterialManager::registerMaterial<MaterialDefinitions::GBufferBase>() {
 
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
-					 .materialBufferSize =
-						(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
-					 
-		             .namedResourceDependencies =
-	{
-		{
-			.name = "gbuffer_albedo",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},  {
-			.name = "gbuffer_worldpos",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},  {
-			.name = "gbuffer_normal",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},  {
-			.name = "gbuffer_roughnessMetallic",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},
-		{
-			.name = "depth",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eAllGraphics,
-				},
-				.requiredLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-		 },
-	},
-};
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.materialBufferSize =
+			(uint32_t)sizeof(MaterialDefinitions::PBRUniforms),
+	};
 
 	m_materialMetadata[index] = metadata;
 
@@ -303,93 +213,11 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		}
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = materialBindings,
-		             .materialLayout = materialLayout,
-		             .namedResourceDependencies =
-	{{
-			.name = "main_color",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eColorAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eColorAttachmentOutput,
-			},
-			.requiredLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		},
-		{
-			.name = "depth",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eDepthStencilAttachmentRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eAllGraphics,
-			},
-			.requiredLayout = vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal,
-		},
-		{
-			.name = "gbuffer_albedo",
-			.kind = ResourceDependency::Kind::Sampler,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eShaderSampledRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eFragmentShader,
-			},
-			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},  {
-			.name = "gbuffer_worldpos",
-			.kind = ResourceDependency::Kind::Sampler,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eShaderSampledRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eFragmentShader,
-			},
-			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},  {
-			.name = "gbuffer_normal",
-			.kind = ResourceDependency::Kind::Sampler,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eShaderSampledRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eFragmentShader,
-			},
-			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},  {
-			.name = "gbuffer_roughnessMetallic",
-			.kind = ResourceDependency::Kind::Sampler,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eShaderSampledRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eFragmentShader,
-			},
-			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},
-		{
-			.name = "shadow_atlas",
-			.kind = ResourceDependency::Kind::Sampler,
-			.usage = {
-				.type = ResourceUsage::Type::READ,
-				.access =
-					vk::AccessFlagBits2::eShaderSampledRead,
-				.stage = vk::PipelineStageFlagBits2::
-					eFragmentShader,
-			},
-			.requiredLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		},
-	},
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = materialBindings,
+		.materialLayout = materialLayout,
+		.depthReadOnly = true,
 	};
 	m_materialMetadata[index] = metadata;
 
@@ -434,26 +262,10 @@ MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 		}
     });
 
-	MaterialMetadata
-		metadata = { .pipeline = pipeline,
-		             .materialBindings = {},
-		             .materialLayout = m_emptySetLayout,
-		             .namedResourceDependencies =
-	{
-		{
-			.name = "shadow_atlas",
-			.kind = ResourceDependency::Kind::RenderTarget,
-			.usage = {
-				.type = ResourceUsage::Type::WRITE,
-				.access =
-					vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-				.stage = vk::PipelineStageFlagBits2::
-					eAllGraphics,
-				},
-				.requiredLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-		 },
-	},
-
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = {},
+		.materialLayout = m_emptySetLayout,
 	};
 
 	m_materialMetadata[index] = metadata;

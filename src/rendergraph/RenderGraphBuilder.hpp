@@ -1,78 +1,95 @@
 #pragma once
 
-#include <optional>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 
+#include "ResourceUsage.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 
-struct ResourceDependency {
-	ResourceUsage usage;
-	std::optional<vk::ImageLayout> requiredLayout;
-};
-
 struct GraphData {
 	struct Barriers {
-		std::unordered_map<std::string_view, vk::ImageMemoryBarrier2>
+		std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2>
 			imageBarriers;
-		std::unordered_map<std::string_view, vk::BufferMemoryBarrier2>
+		std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2>
 			bufferBarriers;
 	};
 
 	struct TaskData {
 		Task task;
+		TaskType type;
 		std::string_view name;
 		Barriers barriers;
-		std::unordered_map<std::string_view, ResourceDependency> images;
-		std::unordered_map<std::string_view, ResourceDependency> buffers;
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputs;
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputs;
 	};
-
-	struct ImageStatus {
-		vk::ImageLayout initialLayout;
-		vk::ImageLayout finalLayout;
-	};
-
 	std::vector<TaskData> tasks;
-	std::unordered_set<std::string_view> transientImagesRequired;
-	std::unordered_set<std::string_view> transientBuffersRequired;
 
-	std::unordered_map<std::string_view, ImageStatus> imageStatuses;
+	ResourceIndex outputImage;
+
+	std::unordered_map<ResourceIndex, vk::ImageLayout> requiredLayouts;
+	std::unordered_map<ResourceIndex, uint8_t> swapchainImageRatio;
+	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
+	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
+		buffers;
+
+	std::unordered_map<ResourceIndex, std::string_view> names;
 };
 
 class RenderGraphBuilder {
 private:
-	struct RegisteredTask;
-	struct ResourceTaskReference;
+	uint32_t m_resourceCount = 0;
 
-	typedef uint32_t TaskIndex;
+	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription>
+		m_images;
+	std::unordered_map<ResourceIndex, uint8_t> m_swapchainImageRatio;
 
-	std::unordered_map<std::string_view, std::vector<ResourceTaskReference>>
-		m_imageReferences;
-	std::unordered_map<std::string_view, std::vector<ResourceTaskReference>>
-		m_bufferReferences;
+	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
+		m_buffers;
 
-	std::vector<RegisteredTask> m_tasks;
+	std::vector<GraphData::TaskData> m_tasks;
+
+	struct TaskResourceDependency;
+	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
+		m_dependencies;
+
+	std::unordered_map<ResourceIndex, std::string_view> m_names;
+
+	ResourceIndex m_outputImage;
+
+	GraphData::Barriers getBarriers(uint32_t task) const;
 
 public:
-	void addTask(Task task);
+	ResourceIndex createImage(
+		std::string_view name,
+		ResourceManager::ImageDescription desc,
+		uint8_t swapchainRatio = 0
+	);
+	ResourceIndex createBuffer(
+		std::string_view name, ResourceManager::BufferDescription desc
+	);
 
-	std::vector<std::string_view> getReferencedResources() const;
+	void addTask(
+		std::string_view name,
+		TaskType type,
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputResources,
+		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputResources,
+		Task task
+	);
 
+	void setOutputImage(ResourceIndex index) { m_outputImage = index; }
 	GraphData build();
 };
 
-struct RenderGraphBuilder::RegisteredTask {
-	Task task;
-	std::unordered_map<std::string_view, ResourceDependency> images;
-	std::unordered_map<std::string_view, ResourceDependency> buffers;
-};
-struct RenderGraphBuilder::ResourceTaskReference {
-	TaskIndex task;
-	ResourceUsage usage;
-	std::optional<vk::ImageLayout> requiredLayout;
+struct RenderGraphBuilder::TaskResourceDependency {
+	ResourceUsage::Type usage;
+	uint32_t taskIndex;
+	enum class UsageType {
+		Input,
+		Output,
+	};
+	UsageType usageType;
 };

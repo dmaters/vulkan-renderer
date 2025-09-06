@@ -107,19 +107,6 @@ struct MaterialManager::MaterialData {
 	vk::DescriptorSet materialSet;
 };
 
-struct MaterialManager::ResourceDependency {
-	enum class Kind {
-		RenderTarget,
-		Sampler,
-		Buffer,
-	};
-
-	std::string_view name;
-	Kind kind;
-	ResourceUsage usage;
-	std::optional<vk::ImageLayout> requiredLayout;
-};
-
 struct MaterialManager::MaterialMetadata {
 	std::string_view name;
 	PipelineIndex pipeline;
@@ -127,10 +114,8 @@ struct MaterialManager::MaterialMetadata {
 	std::vector<vk::DescriptorSetLayoutBinding> materialBindings;
 	vk::DescriptorSetLayout materialLayout;
 	uint32_t materialBufferSize = 0;
-	std::vector<std::string_view> sharedMaterialBuffers;
-	std::vector<MaterialManager::ResourceDependency> namedResourceDependencies;
 
-	bool enabled = true;
+	bool depthReadOnly = false;
 };
 
 template <typename T, typename F>

@@ -28,34 +28,11 @@ struct ImageHandle {
 	uint32_t value;
 };
 
-struct ResourceUsage {
-	enum class Type : uint8_t {
-		WRITE = 0,
-		READ_WRITE = 1,
-		READ = 2,
-	};
-	Type type;
-	vk::AccessFlags2 access;
-	vk::PipelineStageFlags2 stage;
-
-	bool operator==(const ResourceUsage& b) const {
-		return (type == Type::READ && b.type == ResourceUsage::Type::READ) ||
-		       (type == Type::WRITE && b.type == ResourceUsage::Type::WRITE);
-	}
-};
-
 class ResourceManager {
 public:
 	struct ImageDescription;
 	struct BufferDescription;
 	struct BufferCopy;
-
-	static const std::unordered_map<std::string_view, BufferDescription>
-		_defaultNamedBufferData;
-	static const std::unordered_map<std::string_view, ImageDescription>
-		_defaultNamedImageData;
-
-	static const std::unordered_map<std::string_view, int8_t> _swapchainRatio;
 
 	typedef uint32_t AllocationIndex;
 
@@ -83,6 +60,7 @@ private:
 		AllocationIndex,
 		std::pair<std::vector<ImageHandle>, std::vector<BufferHandle>>>
 		m_allocationResources;
+
 	uint32_t m_allocationCount = 0;
 
 	ImageHandle registerImage(Image image, ImageHandle handle = { 0 });
