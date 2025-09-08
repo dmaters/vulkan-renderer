@@ -467,12 +467,15 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 
 	mipmapBuffer.end();
 	for (auto &thread : threads) thread.join();
-	uint64_t waitValue = m_transferCount + 1;
+
+	sync();
+
 	vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eTransfer;
 	vk::TimelineSemaphoreSubmitInfo waitSemaphoreInfo {
 		.waitSemaphoreValueCount = 1,
-		.pWaitSemaphoreValues = &waitValue,
+		.pWaitSemaphoreValues = &m_transferCount,
 	};
+
 	vk::SubmitInfo mipmapSubmitInfo {
 		.pNext = &waitSemaphoreInfo,
 		.waitSemaphoreCount = 1,
@@ -481,7 +484,6 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 		.commandBufferCount = 1,
 		.pCommandBuffers = &mipmapBuffer,
 	};
-
 	Instance::Get().graphicQueue.submit({ mipmapSubmitInfo });
 
 	m_stagingAdditionalAllocators.push_back(stagingAllocator);
