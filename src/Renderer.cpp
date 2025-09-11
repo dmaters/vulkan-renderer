@@ -21,6 +21,7 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/RenderGraphBuilder.hpp"
 #include "rendergraph/ResourceUsage.hpp"
+#include "rendergraph/tasks/ComputePass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
@@ -175,7 +176,7 @@ void Renderer::createRenderGraph() {
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
 			.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                 vk::ImageUsageFlagBits::eTransferSrc,
+	                 vk::ImageUsageFlagBits::eSampled,
 
 		},
 		1
@@ -199,7 +200,43 @@ void Renderer::createRenderGraph() {
 			RenderPass(context, material, primitives);
 		}
 	);
-	builder.setOutputImage(hdr_output);
+
+	ResourceIndex result = builder.createImage(
+		"result",
+		{
+			.width = 800,
+			.height = 600,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR8G8B8A8Snorm,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eTransferSrc,
+
+		},
+		1
+	);
+	builder.addTask(
+		"composition",
+		TaskType::Compute,
+		{
+			{ hdr_output, ResourceUsage::Type::ShaderRead },
+    },
+		{
+			{ result, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("composition"
+	     )](TaskContext& context) {
+			ImageHandle input = context.images[context.inputs[0]];
+			auto dispatch = context.resourceManager.getImage(input).size;
+
+			ComputePass(
+				context,
+				material,
+				glm::uvec3(dispatch.width, dispatch.height, 1)
+			);
+		}
+	);
+	builder.setOutputImage(result);
 	GraphData data = builder.build();
 	m_renderGraph.build(data);
 }

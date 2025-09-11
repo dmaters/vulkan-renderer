@@ -63,4 +63,6 @@ struct ShadowMap {
 	//	const Lights* light_data;
 };
 
+struct CompositionPass {};
+
 }  // namespace MaterialDefinitions

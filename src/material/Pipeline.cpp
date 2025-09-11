@@ -11,6 +11,29 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "Instance.hpp"
+
+vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts);
+
+std::optional<Pipeline> PipelineBuilder::BuildComputePipeline(
+	const ComputePipelineBuildInfo& info
+) {
+	vk::ComputePipelineCreateInfo pipelineInfo {
+		.stage = info.stage,
+		.layout = getLayout(info.setLayouts),
+	};
+
+	auto res = Instance::Get().device.createComputePipeline(
+		vk::PipelineCache(), pipelineInfo
+	);
+	if (res.result != vk::Result::eSuccess) return std::nullopt;
+
+	return Pipeline {
+		.pipeline = res.value,
+		.pipelineLayout = pipelineInfo.layout,
+	};
+}
+
 struct PipelineStateCreateInfo {
 	vk::PipelineInputAssemblyStateCreateInfo inputAssembly() {
 		vk::PipelineInputAssemblyStateCreateInfo info {
@@ -162,12 +185,8 @@ struct PipelineStateCreateInfo {
 	}
 };
 
-vk::PipelineLayout getLayout(
-	vk::Device& device, std::vector<vk::DescriptorSetLayout> layouts
-);
-
-std::optional<Pipeline> PipelineBuilder::BuildPipeline(
-	vk::Device& device, const PipelineBuildInfo& info
+std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
+	const GraphicPipelineBuildInfo& info
 ) {
 	vk::GraphicsPipelineCreateInfo pipelineInfo;
 	PipelineStateCreateInfo helper;
@@ -214,7 +233,7 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 
 	auto dynamicState = helper.dynamicState();
 	pipelineInfo.pDynamicState = &dynamicState;
-	pipelineInfo.layout = getLayout(device, info.setLayouts);
+	pipelineInfo.layout = getLayout(info.setLayouts);
 	pipelineInfo.renderPass = nullptr;
 
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
@@ -236,7 +255,9 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	pipelineInfo.basePipelineHandle = nullptr;
 	pipelineInfo.basePipelineIndex = 0;
 
-	auto res = device.createGraphicsPipeline(vk::PipelineCache(), pipelineInfo);
+	auto res = Instance::Get().device.createGraphicsPipeline(
+		vk::PipelineCache(), pipelineInfo
+	);
 	if (res.result != vk::Result::eSuccess) return std::nullopt;
 
 	return Pipeline {
@@ -245,9 +266,7 @@ std::optional<Pipeline> PipelineBuilder::BuildPipeline(
 	};
 }
 
-vk::PipelineLayout getLayout(
-	vk::Device& device, std::vector<vk::DescriptorSetLayout> layouts
-) {
+vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts) {
 	std::array<vk::PushConstantRange, 1> ranges {
 		vk::PushConstantRange {
 							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
@@ -263,5 +282,5 @@ vk::PipelineLayout getLayout(
 		.pPushConstantRanges = ranges.data(),
 
 	};
-	return device.createPipelineLayout(info);
+	return Instance::Get().device.createPipelineLayout(info);
 }

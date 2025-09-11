@@ -28,8 +28,9 @@ static vk::ImageLayout GetLayout(Type type) {
 		case Type::StorageBufferWrite:
 			return vk::ImageLayout::eUndefined;
 		case Type::ShaderWrite:
-		case Type::ShaderRead:
 			return vk::ImageLayout::eGeneral;
+		case Type::ShaderRead:
+			return vk::ImageLayout::eShaderReadOnlyOptimal;
 		case Type::SampledRead:
 			return vk::ImageLayout::eShaderReadOnlyOptimal;
 		case Type::ColorAttachmentWrite:

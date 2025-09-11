@@ -37,7 +37,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	const std::filesystem::path& path, SlangStage stage
 ) {
 	assert(!path.empty());
-	
+
 	slang::TargetDesc desc {
 		.format = SLANG_SPIRV,
 		.profile = m_session->findProfile("glsl_460"),
@@ -150,6 +150,24 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 std::optional<Pipeline> ShaderEngine::buildPipeline(
 	const PipelineMetadata& metadata
 ) {
+	if (!metadata.modules.compute.empty()) {
+		auto res = loadModule(
+			metadata.modules.compute, SlangStage::SLANG_STAGE_COMPUTE
+		);
+		if (!res.has_value()) return std::nullopt;
+
+		vk::PipelineShaderStageCreateInfo module = {
+			.stage = vk::ShaderStageFlagBits::eCompute,
+			.module = res.value(),
+			.pName = "main",
+		};
+
+		return PipelineBuilder::BuildComputePipeline({
+			.stage = module,
+			.setLayouts = metadata.layouts,
+		});
+	}
+
 	std::vector<vk::PipelineShaderStageCreateInfo> modules;
 
 	if (!metadata.modules.vertex.empty()) {
@@ -177,16 +195,11 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 		});
 	}
 
-	std::optional<Pipeline> pipeline = PipelineBuilder::BuildPipeline(
-		Instance::Get().device,
-		{
-			.shaderStages = modules,
-			.setLayouts = metadata.layouts,
-			.configuration = metadata.configuration,
-		}
-	);
-
-	return pipeline;
+	return PipelineBuilder::BuildGraphicPipeline({
+		.shaderStages = modules,
+		.setLayouts = metadata.layouts,
+		.configuration = metadata.configuration,
+	});
 }
 
 PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
@@ -210,6 +223,12 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 		m_modules[metadata.modules.fragment].insert(index);
 		m_lastEdited[metadata.modules.fragment] =
 			std::filesystem::last_write_time(metadata.modules.fragment);
+	}
+
+	if (!metadata.modules.compute.empty()) {
+		m_modules[metadata.modules.compute].insert(index);
+		m_lastEdited[metadata.modules.compute] =
+			std::filesystem::last_write_time(metadata.modules.compute);
 	}
 
 	return index;

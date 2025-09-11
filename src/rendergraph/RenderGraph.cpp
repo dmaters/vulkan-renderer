@@ -80,11 +80,11 @@ void RenderGraph::outputToSwapchain(
 	Image& swapchainImage = m_swapchain.getImage(index);
 
 	vk::ImageMemoryBarrier2 sourceBarrier = {
-		.srcStageMask =  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		.srcAccessMask =vk::AccessFlagBits2::eColorAttachmentWrite,
+		.srcStageMask =  vk::PipelineStageFlagBits2::eComputeShader,
+		.srcAccessMask =vk::AccessFlagBits2::eShaderStorageWrite,
 		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
 		.dstAccessMask = vk::AccessFlagBits2::eTransferRead,
-		.oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		.oldLayout = vk::ImageLayout::eGeneral,
 		.newLayout = vk::ImageLayout::eTransferSrcOptimal,
 		.image = resultImage.image,
 		.subresourceRange = {
@@ -163,12 +163,11 @@ void RenderGraph::outputToSwapchain(
 	);
 
 	sourceBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-	sourceBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+	sourceBarrier.newLayout = vk::ImageLayout::eGeneral;
 	sourceBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferRead;
-	sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+	sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
 	sourceBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-	sourceBarrier.dstStageMask =
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+	sourceBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
 
 	swapchainBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 	swapchainBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;

@@ -76,6 +76,8 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_names["lighting_deferred"] =
 		registerMaterial<MaterialDefinitions::DeferredLighting>();
 	m_names["shadow_map"] = registerMaterial<MaterialDefinitions::ShadowMap>();
+	m_names["composition"] =
+		registerMaterial<MaterialDefinitions::CompositionPass>();
 
 	createMaterialData();
 }

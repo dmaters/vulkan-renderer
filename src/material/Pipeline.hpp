@@ -20,8 +20,9 @@ struct PipelineConfiguration {
 };
 struct PipelineMetadata {
 	struct Modules {
-		std::string_view vertex;
-		std::string_view fragment;
+		std::string_view vertex = "";
+		std::string_view fragment = "";
+		std::string_view compute = "";
 	};
 	Modules modules;
 	std::vector<vk::DescriptorSetLayout> layouts;
@@ -35,13 +36,20 @@ struct Pipeline {
 
 class PipelineBuilder {
 public:
-	struct PipelineBuildInfo {
+	struct ComputePipelineBuildInfo {
+		vk::PipelineShaderStageCreateInfo stage;
+		std::vector<vk::DescriptorSetLayout> setLayouts;
+	};
+	static std::optional<Pipeline> BuildComputePipeline(
+		const ComputePipelineBuildInfo& info
+	);
+
+	struct GraphicPipelineBuildInfo {
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		std::vector<vk::DescriptorSetLayout> setLayouts;
 		PipelineConfiguration configuration;
 	};
-
-	static std::optional<Pipeline> BuildPipeline(
-		vk::Device& device, const PipelineBuildInfo& info
+	static std::optional<Pipeline> BuildGraphicPipeline(
+		const GraphicPipelineBuildInfo& info
 	);
 };
