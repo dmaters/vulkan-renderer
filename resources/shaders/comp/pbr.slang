@@ -33,7 +33,7 @@ namespace PBR {
 		float NdotH = max(dot(normal, halfview), 0.0);
 		float HdotV = max(dot(halfview, viewDir), 0.0);
 		
-		float3 F0 = (float3(0.04), albedo, metallic);
+		float3 F0 = lerp(float3(0.04), albedo, metallic);
 		
 		float a = roughness * roughness;
 		
@@ -44,7 +44,7 @@ namespace PBR {
 		float3 specular = NDF * F * V;
 		
 		float3 diffuse = (1.0 - F) * (1.0 - metallic) * albedo / PI;
-		
+
 		return (diffuse + specular) * NdotL;
 	}
 	
