@@ -10,6 +10,8 @@
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 
+using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
+
 struct GraphData {
 	struct Barriers {
 		std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2>
@@ -23,8 +25,8 @@ struct GraphData {
 		TaskType type;
 		std::string_view name;
 		Barriers barriers;
-		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputs;
-		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputs;
+		std::vector<ResourceDependency> inputs;
+		std::vector<ResourceDependency> outputs;
 	};
 	std::vector<TaskData> tasks;
 
@@ -75,8 +77,8 @@ public:
 	void addTask(
 		std::string_view name,
 		TaskType type,
-		std::unordered_map<ResourceIndex, ResourceUsage::Type> inputResources,
-		std::unordered_map<ResourceIndex, ResourceUsage::Type> outputResources,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
 		Task task
 	);
 

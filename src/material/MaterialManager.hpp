@@ -30,8 +30,6 @@ struct MaterialInstance {
 class MaterialManager {
 public:
 	struct MaterialMetadata;
-	struct ResourceDependency;
-
 private:
 	struct MaterialData;
 

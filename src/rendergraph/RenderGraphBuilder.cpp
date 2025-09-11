@@ -130,8 +130,8 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 void RenderGraphBuilder::addTask(
 	std::string_view name,
 	TaskType type,
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> inputResources,
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> outputResources,
+	std::vector<ResourceDependency> inputResources,
+	std::vector<ResourceDependency> outputResources,
 	Task task
 ) {
 	uint32_t taskIndex = m_tasks.size();

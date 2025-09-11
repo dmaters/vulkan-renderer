@@ -190,7 +190,7 @@ void Renderer::createRenderGraph() {
 			{ worldPos,          ResourceUsage::Type::SampledRead },
 			{ roughnessMetallic, ResourceUsage::Type::SampledRead },
 			{ shadowAtlas,       ResourceUsage::Type::SampledRead }
-    },
+    	},
 		{
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilRead },
