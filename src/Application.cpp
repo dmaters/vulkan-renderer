@@ -22,7 +22,7 @@ Application::Application(const std::filesystem::path& path) {
 	}
 
 	m_window = SDL_CreateWindow(
-		"SDLVulk Test", 800, 600, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
+		"SDLVulk Test", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
 	);
 	if (!m_window) {
 		std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;

@@ -16,7 +16,7 @@ private:
 	float m_yaw = 0;
 	float m_fov = 70;
 
-	glm::ivec2 m_resolution = glm::ivec2(800, 600);
+	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
 
 public:
 	void rotate(glm::vec2 rotation);

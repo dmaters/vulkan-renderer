@@ -79,8 +79,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex albedo = builder.createImage(
 		"gbuffer_albedo",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -94,8 +94,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex normal = builder.createImage(
 		"gbuffer_normal",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -109,8 +109,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex worldPos = builder.createImage(
 		"gbuffer_worldpos",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -124,8 +124,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex roughnessMetallic = builder.createImage(
 		"gbuffer_roughnessMetallic",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -139,8 +139,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex depth = builder.createImage(
 		"depth",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eD24UnormS8Uint,
@@ -170,8 +170,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex hdr_output = builder.createImage(
 		"hdr_output",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -190,7 +190,7 @@ void Renderer::createRenderGraph() {
 			{ worldPos,          ResourceUsage::Type::SampledRead },
 			{ roughnessMetallic, ResourceUsage::Type::SampledRead },
 			{ shadowAtlas,       ResourceUsage::Type::SampledRead }
-    	},
+    },
 		{
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilRead },
@@ -204,8 +204,8 @@ void Renderer::createRenderGraph() {
 	ResourceIndex result = builder.createImage(
 		"result",
 		{
-			.width = 800,
-			.height = 600,
+			.width = 1280,
+			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR8G8B8A8Snorm,

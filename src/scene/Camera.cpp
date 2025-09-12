@@ -43,7 +43,7 @@ glm::mat4 Camera::getViewMatrix() const {
 
 glm::mat4 Camera::getProjectionMatrix() const {
 	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(90.f), (float)m_resolution.x / m_resolution.y, 0.1f, 600.0f
+		glm::radians(90.f), (float)m_resolution.x / m_resolution.y, 0.1f, 720.0f
 	);
 	return proj;
 }
