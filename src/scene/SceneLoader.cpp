@@ -86,6 +86,8 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		auto vertex = mesh.mVertices[i];
 		auto normal = mesh.mNormals[i];
 		auto tangent = mesh.mTangents[i];
+		auto bitangent = mesh.mBitangents[i];
+
 		auto texcoord = mesh.mTextureCoords[0][i];
 		size = fmax(size, vertex.Length());
 		vertices.push_back(Vertex {
@@ -93,6 +95,7 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 			{
              { normal.x, normal.y, normal.z },
              { tangent.x, tangent.y, tangent.z },
+             { bitangent.x, bitangent.y, bitangent.z },
              { texcoord.x, texcoord.y },
 			 }
         });

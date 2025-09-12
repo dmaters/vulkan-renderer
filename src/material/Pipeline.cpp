@@ -53,7 +53,7 @@ struct PipelineStateCreateInfo {
 
 		return info;
 	};
-	std::array<vk::VertexInputAttributeDescription, 8> vertexAttributes;
+	std::array<vk::VertexInputAttributeDescription, 9> vertexAttributes;
 	std::array<vk::VertexInputBindingDescription, 3> vertexBindings;
 	vk::PipelineVertexInputStateCreateInfo vertex() {
 		vertexBindings = {
@@ -64,7 +64,7 @@ struct PipelineStateCreateInfo {
 											   },
 			vk::VertexInputBindingDescription {
 											   .binding = 1,
-											   .stride = 32,
+											   .stride = 44,
 											   .inputRate = vk::VertexInputRate::eVertex,
 											   },
 			vk::VertexInputBindingDescription {
@@ -93,33 +93,38 @@ struct PipelineStateCreateInfo {
 												 .format = vk::Format::eR32G32B32Sfloat,
 												 .offset = 12,
 												 },
-
 			vk::VertexInputAttributeDescription {
 												 .location = 3,
 												 .binding = 1,
-												 .format = vk::Format::eR32G32Sfloat,
+												 .format = vk::Format::eR32G32B32Sfloat,
 												 .offset = 24,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 4,
-												 .binding = 2,
-												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 0,
+												 .binding = 1,
+												 .format = vk::Format::eR32G32Sfloat,
+												 .offset = 36,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 5,
 												 .binding = 2,
 												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 16,
+												 .offset = 0,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 6,
 												 .binding = 2,
 												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 32,
+												 .offset = 16,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 7,
+												 .binding = 2,
+												 .format = vk::Format::eR32G32B32A32Sfloat,
+												 .offset = 32,
+												 },
+			vk::VertexInputAttributeDescription {
+												 .location = 8,
 												 .binding = 2,
 												 .format = vk::Format::eR32G32B32A32Sfloat,
 												 .offset = 48,

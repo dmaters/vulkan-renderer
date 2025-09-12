@@ -14,6 +14,6 @@ VertexOutput main(VertexInput input) {
 	output.normal = input.normal;
 	output.texcoord = input.texCoord;
 	output.tangent = input.tangent;
-	output.bitangent = cross(input.tangent,input.normal);
+	output.bitangent = input.bitangent;
 	return output;
 }
