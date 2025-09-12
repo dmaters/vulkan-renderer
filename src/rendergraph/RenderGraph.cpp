@@ -310,12 +310,14 @@ void RenderGraph::submit(const Scene& scene) {
 	acquireInfo.semaphore = frame.imageAvailable;
 	acquireInfo.fence = nullptr;
 	acquireInfo.deviceMask = 1;
+	uint32_t imageIndex = 0;
 
-	auto [acquireResult, imageIndex] = device.acquireNextImage2KHR(acquireInfo);
+	try {
+		auto [result, index] = device.acquireNextImage2KHR(acquireInfo);
+		imageIndex = index;
+		if (result == vk::Result::eSuboptimalKHR) rebuildSwapchain();
 
-	if (acquireResult == vk::Result::eSuboptimalKHR) rebuildSwapchain();
-
-	if (acquireResult == vk::Result::eErrorOutOfDateKHR) {
+	} catch (vk::OutOfDateKHRError _) {
 		rebuildSwapchain();
 		return;
 	}
@@ -419,10 +421,14 @@ void RenderGraph::submit(const Scene& scene) {
 	presentInfo.pSwapchains = { &(m_swapchain.getSwapchain()) };
 	presentInfo.pImageIndices = &imageIndex;
 
-	auto presentResult = Instance::Get().presentQueue.presentKHR(presentInfo);
-	if (presentResult == vk::Result::eErrorOutOfDateKHR ||
-	    presentResult == vk::Result::eSuboptimalKHR)
+	try {
+		auto presentResult =
+			Instance::Get().presentQueue.presentKHR(presentInfo);
+		if (presentResult == vk::Result::eSuboptimalKHR) rebuildSwapchain();
+
+	} catch (vk::OutOfDateKHRError _) {
 		rebuildSwapchain();
+	}
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
 }
