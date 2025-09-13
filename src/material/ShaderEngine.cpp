@@ -6,16 +6,17 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <unordered_map>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
+#include <unordered_set>
+#include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
 #include "Pipeline.hpp"
@@ -201,6 +202,36 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 		.configuration = metadata.configuration,
 	});
 }
+std::unordered_set<std::filesystem::path> getModuleTree(
+	std::filesystem::path base
+) {
+	std::ifstream file(base);
+	if (!file) {
+		return {};
+	}
+
+	std::string line;
+	std::regex pattern(R"(#include\s*\"([^\"]+)\")");
+	std::smatch match;
+
+	std::unordered_set<std::filesystem::path> result;
+
+	result.insert(base);
+
+	while (std::getline(file, line)) {
+		if (std::regex_search(line, match, pattern)) {
+			auto modules = getModuleTree(
+				base.parent_path() / std::filesystem::path(match[1].str())
+			);
+
+			for (auto module : modules) result.insert(module);
+		}
+	}
+
+	file.close();
+
+	return result;
+}
 
 PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 	PipelineIndex index = m_pipelineCount;
@@ -217,18 +248,37 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 		m_modules[metadata.modules.vertex].insert(index);
 		m_lastEdited[metadata.modules.vertex] =
 			std::filesystem::last_write_time(metadata.modules.vertex);
+
+		auto tree = getModuleTree(metadata.modules.vertex);
+
+		for (auto module : tree) {
+			m_modules[module].insert(index);
+			m_lastEdited[module] = std::filesystem::last_write_time(module);
+		}
 	}
 
 	if (!metadata.modules.fragment.empty()) {
 		m_modules[metadata.modules.fragment].insert(index);
 		m_lastEdited[metadata.modules.fragment] =
 			std::filesystem::last_write_time(metadata.modules.fragment);
+
+		auto tree = getModuleTree(metadata.modules.fragment);
+		for (auto module : tree) {
+			m_modules[module].insert(index);
+			m_lastEdited[module] = std::filesystem::last_write_time(module);
+		}
 	}
 
 	if (!metadata.modules.compute.empty()) {
 		m_modules[metadata.modules.compute].insert(index);
 		m_lastEdited[metadata.modules.compute] =
 			std::filesystem::last_write_time(metadata.modules.compute);
+
+		auto tree = getModuleTree(metadata.modules.compute);
+		for (auto module : tree) {
+			m_modules[module].insert(index);
+			m_lastEdited[module] = std::filesystem::last_write_time(module);
+		}
 	}
 
 	return index;
