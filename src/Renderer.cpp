@@ -50,6 +50,60 @@ Renderer::Renderer(SDL_Window* window) :
 void Renderer::createRenderGraph() {
 	RenderGraphBuilder builder;
 
+	ResourceIndex transmittanceLUT = builder.createImage(
+		"transmittanceLUT",
+		{
+			.width = 256,
+			.height = 64,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+
+	builder.addTask(
+		"transmittanceLUT",
+		TaskType::Compute,
+		{
+    },
+		{
+			{ transmittanceLUT, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("transmittanceLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 256, 64, 1 }); }
+	);
+
+	ResourceIndex skyviewLUT = builder.createImage(
+		"skyviewLUT",
+		{
+			.width = 200,
+			.height = 100,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+	builder.addTask(
+		"skyviewLUT",
+		TaskType::Compute,
+		{
+			{ transmittanceLUT, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ skyviewLUT, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("skyviewLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 200, 100, 1 }); }
+	);
+
 	ResourceIndex shadowAtlas = builder.createImage(
 		"shadow_atlas",
 		{

@@ -78,6 +78,9 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_names["shadow_map"] = registerMaterial<MaterialDefinitions::ShadowMap>();
 	m_names["composition"] =
 		registerMaterial<MaterialDefinitions::CompositionPass>();
+	m_names["transmittanceLUT"] =
+		registerMaterial<MaterialDefinitions::TransmittanceLUT>();
+	m_names["skyviewLUT"] = registerMaterial<MaterialDefinitions::SkyViewLUT>();
 
 	createMaterialData();
 }

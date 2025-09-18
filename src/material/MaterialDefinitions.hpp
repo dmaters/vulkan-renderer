@@ -64,4 +64,7 @@ struct ShadowMap {
 
 struct CompositionPass {};
 
+struct TransmittanceLUT {};
+struct SkyViewLUT {};
+
 }  // namespace MaterialDefinitions
