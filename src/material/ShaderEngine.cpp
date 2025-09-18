@@ -1,16 +1,20 @@
 #include "ShaderEngine.hpp"
 
 #include <slang/slang-com-ptr.h>
+#include <slang/slang-cpp-types-core.h>
+#include <slang/slang-cpp-types.h>
 #include <slang/slang.h>
 
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -202,16 +206,21 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 		.configuration = metadata.configuration,
 	});
 }
-std::unordered_set<std::filesystem::path> getModuleTree(
-	std::filesystem::path base
+void getDependencies(
+	std::filesystem::path base, std::unordered_set<std::filesystem::path>& paths
 ) {
+	if (paths.contains(base)) return;
+
 	std::ifstream file(base);
 	if (!file) {
-		return {};
+		return;
 	}
+	paths.insert(base);
 
 	std::string line;
-	std::regex pattern(R"(#include\s*\"([^\"]+)\")");
+	std::regex pattern1(R"(#include\s*\"([^\"]+)\")");
+	std::regex pattern2(R"(__include\s*([A-Za-z0-9.]+);)");
+
 	std::smatch match;
 
 	std::unordered_set<std::filesystem::path> result;
@@ -219,18 +228,24 @@ std::unordered_set<std::filesystem::path> getModuleTree(
 	result.insert(base);
 
 	while (std::getline(file, line)) {
-		if (std::regex_search(line, match, pattern)) {
-			auto modules = getModuleTree(
-				base.parent_path() / std::filesystem::path(match[1].str())
+		if (std::regex_search(line, match, pattern1)) {
+			getDependencies(
+				base.parent_path() / std::filesystem::path(match[1].str()),
+				paths
 			);
+		}
+		if (std::regex_search(line, match, pattern2)) {
+			std::string import = match[1].str();
+			std::replace(import.begin(), import.end(), '.', '/');
+			import.append(".slang");
 
-			for (auto module : modules) result.insert(module);
+			getDependencies(
+				base.parent_path() / std::filesystem::path(import), paths
+			);
 		}
 	}
 
 	file.close();
-
-	return result;
 }
 
 PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
@@ -244,17 +259,14 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 	m_pipelines[index] = pipeline.value();
 	m_pipelineMetadatas[index] = metadata;
 
+	std::unordered_set<std::filesystem::path> dependencies;
+
 	if (!metadata.modules.vertex.empty()) {
 		m_modules[metadata.modules.vertex].insert(index);
 		m_lastEdited[metadata.modules.vertex] =
 			std::filesystem::last_write_time(metadata.modules.vertex);
 
-		auto tree = getModuleTree(metadata.modules.vertex);
-
-		for (auto module : tree) {
-			m_modules[module].insert(index);
-			m_lastEdited[module] = std::filesystem::last_write_time(module);
-		}
+		getDependencies(metadata.modules.vertex, dependencies);
 	}
 
 	if (!metadata.modules.fragment.empty()) {
@@ -262,11 +274,7 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 		m_lastEdited[metadata.modules.fragment] =
 			std::filesystem::last_write_time(metadata.modules.fragment);
 
-		auto tree = getModuleTree(metadata.modules.fragment);
-		for (auto module : tree) {
-			m_modules[module].insert(index);
-			m_lastEdited[module] = std::filesystem::last_write_time(module);
-		}
+		getDependencies(metadata.modules.fragment, dependencies);
 	}
 
 	if (!metadata.modules.compute.empty()) {
@@ -274,11 +282,12 @@ PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
 		m_lastEdited[metadata.modules.compute] =
 			std::filesystem::last_write_time(metadata.modules.compute);
 
-		auto tree = getModuleTree(metadata.modules.compute);
-		for (auto module : tree) {
-			m_modules[module].insert(index);
-			m_lastEdited[module] = std::filesystem::last_write_time(module);
-		}
+		getDependencies(metadata.modules.compute, dependencies);
+	}
+
+	for (auto module : dependencies) {
+		m_modules[module].insert(index);
+		m_lastEdited[module] = std::filesystem::last_write_time(module);
 	}
 
 	return index;
