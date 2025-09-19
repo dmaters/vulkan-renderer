@@ -13,8 +13,7 @@ struct EnvironmentData {
 struct Camera {
 	glm::mat4 view;
 	glm::mat4 projection;
-	std::array<glm::vec4, 8> frustumBounds;
-	std::array<glm::vec4, 6> frustumPlanes;
+	std::array<glm::mat4, 4> frustumPlanes;
 };
 
 struct Light {

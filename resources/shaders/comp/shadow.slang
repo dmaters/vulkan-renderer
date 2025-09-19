@@ -10,9 +10,19 @@ namespace Shadow{
 
             
         float right = -1e9, left = 1e9, top = -1e9, bottom = 1e9, near = -1e9, far = 1e9;
+        float3[8] frustumPoints;
+
+        for(int i = 0; i < 4; i++) {
+            frustumPoints[i] = uCamera.frustumPlanes[0][i].xyz;
+            frustumPoints[i + 4] = uCamera.frustumPlanes[3][i].xyz;
+
+        }
+
+
+
 
         for(int i = 1; i< 8; i++){
-            float4 point = mul(uLightData.lights[uLightData.directIndex].view, uCamera.frustumBounds[i] );           
+            float4 point = mul(uLightData.lights[uLightData.directIndex].view, float4(frustumPoints[i],1) );           
 
 
             right = max(right,point.x);

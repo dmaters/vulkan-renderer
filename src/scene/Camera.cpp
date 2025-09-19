@@ -2,6 +2,7 @@
 
 #include "Camera.hpp"
 
+#include <array>
 #include <glm/common.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
@@ -43,84 +44,45 @@ glm::mat4 Camera::getViewMatrix() const {
 
 glm::mat4 Camera::getProjectionMatrix() const {
 	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(90.f), (float)m_resolution.x / m_resolution.y, 0.1f, 720.0f
+		glm::radians(m_vfov),
+		(float)m_resolution.x / m_resolution.y,
+		0.1f,
+		m_frustumPlanes.back()
 	);
 	return proj;
 }
 
-std::array<glm::vec4, 6> Camera::getFrustum() const {
-	glm::mat4 viewMatrix = glm::mat4(1);
-
-	glm::vec3 right = viewMatrix[0];
-	glm::vec3 up = viewMatrix[1];
-	glm::vec3 direction = -viewMatrix[2];
-
-	std::array<glm::vec4, 6> planes;
-	float aspectRatio = ((float)m_resolution.x / m_resolution.y);
-
-	float vertical = std::sin(glm::radians(m_fov * 0.5));
-	float horizontal = vertical * aspectRatio;
-
-	// Near and Far planes
-	planes[0] = glm::vec4(-direction, 0.1);
-	planes[1] = glm::vec4(direction, 600);
-
-	// Left and Right planes
-	glm::vec3 leftNormal =
-		glm::normalize(-glm::cross(up, direction + right * horizontal));
-	planes[2] = glm::vec4(leftNormal, 0);
-
-	glm::vec3 rightNormal =
-		glm::normalize(-glm::cross(up, direction - right * horizontal));
-	planes[3] = glm::vec4(rightNormal, 0);
-
-	// Top and Bottom planes
-
-	// ORDer inverted
-	glm::vec3 topNormal =
-		glm::normalize(glm::cross(right, direction - up * vertical));
-	planes[4] = glm::vec4(topNormal, 0);
-
-	glm::vec3 bottomNormal =
-		glm::normalize(-glm::cross(right, direction + up * vertical));
-	planes[5] = glm::vec4(bottomNormal, 0);
-
-	return planes;
+glm::vec2 Camera::getFov() const {
+	return {
+		m_resolution.x * m_vfov / m_resolution.y,
+		m_vfov,
+	};
 }
 
-std::array<glm::vec4, 8> Camera::getFrustumBounds() const {
-	std::array<glm::vec4, 6> planes = getFrustum();
+std::array<glm::mat4, 4> Camera::getFrustumPlanes() const {
+	float cosV = cos(m_vfov);
+	float cosH = cos(m_resolution.x * m_vfov / m_resolution.y);
 
-	std::array<glm::vec4, 8> bounds;
+	glm::vec3 right = glm::vec3(1, 0, 0);
+	glm::vec3 up = glm::vec3(0, 1, 0);
+	glm::vec3 forward = glm::vec3(0, 0, -1);
 
-	for (int i = 0; i < 8; i++) {
-		glm::uvec3 pc =
-			glm::uvec3((i >> 0u) & 1u, (i >> 1u) & 1u, (i >> 2u) & 1u);
+	glm::vec3 frustumVectors[4];
 
-		glm::mat3 base = glm::transpose(
-			glm::mat3(planes[pc.x], planes[pc.y + 2], planes[pc.z + 4])
-		);
+	frustumVectors[0] = normalize(forward + up * cosV + right * cosH);
+	frustumVectors[1] = normalize(forward - up * cosV + right * cosH);
+	frustumVectors[2] = normalize(forward + up * cosV - right * cosH);
+	frustumVectors[3] = normalize(forward - up * cosV - right * cosH);
 
-		float baseDet = glm::determinant(base);
-		glm::vec3 coefficents =
-			glm::vec3(planes[pc.x].w, planes[pc.y + 2].w, planes[pc.z + 4].w);
+	std::array<glm::mat4, 4> planes;
 
-		glm::vec3 position;
+	for (int p = 0; p < 4; p++) {
+		for (int pi = 0; pi < 4; pi++) {
+			float distance = m_frustumPlanes[p];
 
-		glm::mat3 x = base;
-		x[0] = coefficents;
-		position.x = glm::determinant(x) / baseDet;
-
-		glm::mat3 y = base;
-		y[1] = coefficents;
-		position.y = glm::determinant(y) / baseDet;
-
-		glm::mat3 z = base;
-		z[2] = coefficents;
-		position.z = glm::determinant(z) / baseDet;
-
-		bounds[i] = glm::vec4(getOrientation() * (position + m_position), 1);
+			planes[p][pi] = glm::vec4(frustumVectors[pi] * distance, 1);
+		}
 	}
 
-	return bounds;
+	return planes;
 }
