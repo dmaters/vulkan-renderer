@@ -336,7 +336,7 @@ void RenderGraph::submit(const Scene& scene) {
 	MaterialDefinitions::Camera cameraView {
 		.view = scene.camera.getViewMatrix(),
 		.projection = scene.camera.getProjectionMatrix(),
-		.frustumPlanes = scene.camera.getFrustumPlanes(),
+		.frustumPlanes = scene.camera.getFrustumPoints(),
 	};
 
 	Buffer& projViewBuffer = m_resourceManager.getNamedBuffer("camera_data");

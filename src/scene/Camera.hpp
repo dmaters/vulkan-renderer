@@ -16,7 +16,7 @@ private:
 	float m_yaw = 0;
 	float m_vfov = 70;
 
-	std::array<float, 4> m_frustumPlanes { 0.1, 5, 200, 600 };
+	std::array<float, 4> m_frustumPlanes { 0.1, 50, 500, 2000 };
 	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
 
 public:
@@ -29,5 +29,5 @@ public:
 	glm::mat4 getProjectionMatrix() const;
 	glm::vec2 getFov() const;
 
-	std::array<glm::mat4, 4> getFrustumPlanes() const;
+	std::array<glm::mat4, 4> getFrustumPoints() const;
 };
