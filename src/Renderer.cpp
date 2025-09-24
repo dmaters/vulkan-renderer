@@ -23,6 +23,7 @@
 #include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
+#include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Light.hpp"
@@ -52,7 +53,7 @@ void Renderer::createRenderGraph() {
 	ResourceIndex shadowAtlas = builder.createImage(
 		"shadow_atlas",
 		{
-			.width = 1024,
+			.width = 3072,
 			.height = 1024,
 			.depth = 1,
 			.miplevels = 1,
@@ -63,16 +64,17 @@ void Renderer::createRenderGraph() {
 		}
 	);
 	builder.addTask(
-		"shadowmap",
+		"shadowmap_near",
 		TaskType::Graphic,
 		{
     },
 		{
 			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
 		},
-		[material = m_materialManager.getMaterialIndex("shadow_map"),
-	     &primitives = m_currentScene.primitives](TaskContext& context) {
-			RenderPass(context, material, primitives);
+		[&primitives = m_currentScene.primitives](TaskContext& context) {
+			ShadowPass(context, 0, primitives);
+			ShadowPass(context, 1, primitives);
+			ShadowPass(context, 2, primitives);
 		}
 	);
 
@@ -268,7 +270,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	orientation[1] = glm::vec3(0, 0, 1);
 	orientation[2] = glm::vec3(0, 1, 0);
 	m_currentScene.lights.push_back({
-		.position = glm::vec3(0, 0, 150),
+		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
 		.intensity = 20,
 	});

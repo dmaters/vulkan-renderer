@@ -230,22 +230,7 @@ template <>
 MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::ShadowMap>(
 ) {
 	MaterialIndex index = ++m_materialCount;
-	/*
-	    std::vector<vk::DescriptorSetLayoutBinding> materialBindings {
-	        // {
-	        //  .binding = 0,
-	        //  .descriptorType = vk::DescriptorType::eUniformBuffer,
-	        //  .descriptorCount = 1,
-	        //  },
-	    };
-	    vk::DescriptorSetLayout materialLayout =
-	        Instance::Get().device.createDescriptorSetLayout(
-	            vk::DescriptorSetLayoutCreateInfo {
-	                .bindingCount = (uint32_t)materialBindings.size(),
-	                .pBindings = materialBindings.data(),
-	            }
-	        );
-	*/
+
 	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
 		.modules = {
 					.vertex = "resources/shaders/shadow_vert.slang",

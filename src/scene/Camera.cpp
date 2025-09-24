@@ -59,30 +59,26 @@ glm::vec2 Camera::getFov() const {
 	};
 }
 
-std::array<glm::mat4, 4> Camera::getFrustumPlanes() const {
-	float cosV = cos(m_vfov);
-	float cosH = cos(m_resolution.x * m_vfov / m_resolution.y);
-
-	glm::vec3 right = glm::vec3(1, 0, 0);
-	glm::vec3 up = glm::vec3(0, 1, 0);
-	glm::vec3 forward = glm::vec3(0, 0, -1);
+Camera::FrustumPoints Camera::getFrustumPoints() const {
+	float tanV = tan(glm::radians(m_vfov / 2.0));
+	float tanH = (float)m_resolution.x / m_resolution.y * tanV;
 
 	glm::vec3 frustumVectors[4];
 
-	frustumVectors[0] = normalize(forward + up * cosV + right * cosH);
-	frustumVectors[1] = normalize(forward - up * cosV + right * cosH);
-	frustumVectors[2] = normalize(forward + up * cosV - right * cosH);
-	frustumVectors[3] = normalize(forward - up * cosV - right * cosH);
+	frustumVectors[0] = glm::vec3(tanH, tanV, -1.0f);
+	frustumVectors[1] = glm::vec3(-tanH, tanV, -1.0f);
+	frustumVectors[2] = glm::vec3(tanH, -tanV, -1.0f);
+	frustumVectors[3] = glm::vec3(-tanH, -tanV, -1.0f);
 
-	std::array<glm::mat4, 4> planes;
-
-	for (int p = 0; p < 4; p++) {
+	FrustumPoints points;
+	glm::mat4 invView = glm::inverse(getViewMatrix());
+	for (int pl = 0; pl < 4; pl++) {
 		for (int pi = 0; pi < 4; pi++) {
-			float distance = m_frustumPlanes[p];
-
-			planes[p][pi] = glm::vec4(frustumVectors[pi] * distance, 1);
+			float distance = m_frustumPlanes[pl];
+			points[pl][pi] =
+				invView * glm::vec4(frustumVectors[pi] * distance, 1.0);
 		}
 	}
 
-	return planes;
+	return points;
 }
