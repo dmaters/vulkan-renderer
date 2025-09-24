@@ -32,8 +32,8 @@ float4 main(VertexOutput input) : SV_Target{
 	float3 normal = _normal.Sample(input.frag_position).rgb;
     float2 roughnessMetallic = _roughness_metallic.Sample(input.frag_position).gb;
 
-
-	float shadowPercentage = Shadow::shadowPercentage(_shadow_map,fragPos.xyz);
+	
+	float shadowPercentage =  Shadow::shadowPercentage(_shadow_map,fragPos.xyz);
 
 	for (int i = 0; i < uLightData.count; i++) {
 
@@ -42,9 +42,6 @@ float4 main(VertexOutput input) : SV_Target{
 		float3 irradiance =  PBR::microfacetBRDF(input.frag_position, view_dir, light_dir,albedo,normal,roughnessMetallic.x,roughnessMetallic.y);
 		brdf += (1 - shadowPercentage.x) * irradiance * uLightData.lights[i].color.xyz * uLightData.lights[i].intensity;
 	}
-
-
-
 
 	return float4 (brdf + uEnvironment.environment_color, 1);
 }

@@ -75,7 +75,6 @@ void Renderer::createRenderGraph() {
 			ShadowPass(context, 0, primitives);
 			ShadowPass(context, 1, primitives);
 			ShadowPass(context, 2, primitives);
-
 		}
 	);
 
@@ -271,7 +270,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	orientation[1] = glm::vec3(0, 0, 1);
 	orientation[2] = glm::vec3(0, 1, 0);
 	m_currentScene.lights.push_back({
-		.position = glm::vec3(0, 0, 150),
+		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
 		.intensity = 20,
 	});

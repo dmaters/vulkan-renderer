@@ -1,10 +1,8 @@
 #include "ShadowPass.hpp"
 
-
 #include <vulkan/vulkan.hpp>
 
 constexpr int32_t CASCADE_SIZE = 1024;
-
 
 void ShadowPass(
 	TaskContext& context, uint8_t cascade, std::vector<Primitive>& primitives
@@ -40,35 +38,34 @@ void ShadowPass(
 	
 	};
 
-	vk::Rect2D renderArea =  {
+	vk::Rect2D renderArea = {
 		{
-			CASCADE_SIZE * cascade,
-			0,
-		},
-		{
-			CASCADE_SIZE,
-			CASCADE_SIZE
-		}
-
+         CASCADE_SIZE * cascade,
+         0, },
+		{ CASCADE_SIZE, CASCADE_SIZE }
 	};
 
-	context.commandBuffer.beginRendering(vk::RenderingInfo{
-		.layerCount = 1,
+	context.commandBuffer.beginRendering(vk::RenderingInfo {
 		.renderArea = renderArea,
+		.layerCount = 1,
 		.pDepthAttachment = &attachment,
-		
 	});
-	context.commandBuffer.setScissor(0,{renderArea});
-	context.commandBuffer.setViewport(0,{{
-		.x = (float)renderArea.offset.x,
-		.width = CASCADE_SIZE,
-		.height = CASCADE_SIZE,
-	}});
+	context.commandBuffer.setScissor(0, { renderArea });
+	context.commandBuffer.setViewport(
+		0,
+		{
+			{
+             .x = (float)renderArea.offset.x,
+             .width = CASCADE_SIZE,
+             .height = CASCADE_SIZE,
+             .maxDepth = 1.0f,
+			 }
+    }
+	);
 	uint32_t pcascade = cascade;
 	context.commandBuffer.pushConstants(
 		material.pipeline.pipelineLayout,
-		vk::ShaderStageFlagBits::eVertex |
-			vk::ShaderStageFlagBits::eFragment,
+		vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 		0,
 		sizeof(uint32_t),
 		&pcascade
@@ -78,8 +75,10 @@ void ShadowPass(
 		context.resourceManager.getNamedBuffer("vertex_buffer_positions");
 	Buffer& attributeBuffer =
 		context.resourceManager.getNamedBuffer("vertex_buffer_attributes");
-	Buffer& instanceBuffer = context.resourceManager.getNamedBuffer("instance_buffer");
-	Buffer& indexBuffer = context.resourceManager.getNamedBuffer("index_buffer");
+	Buffer& instanceBuffer =
+		context.resourceManager.getNamedBuffer("instance_buffer");
+	Buffer& indexBuffer =
+		context.resourceManager.getNamedBuffer("index_buffer");
 
 	context.commandBuffer.bindVertexBuffers(
 		0,
@@ -94,7 +93,6 @@ void ShadowPass(
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
 	);
 
-
 	for (const Primitive& primitive : primitives) {
 		if (!std::any_of(
 				primitive.materials.begin(),
@@ -105,7 +103,6 @@ void ShadowPass(
 				}
 			))
 			continue;
-
 
 		context.commandBuffer.drawIndexed(
 			primitive.indexCount,

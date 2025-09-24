@@ -10,7 +10,5 @@
 
 [shader("vertex")]
 float4  main(VertexInput input) : SV_Position {
-	
-
 	return 	mul(mul(mul(Shadow::shadowProjectionMatrix(uShadowData.cascade),uLightData.lights[uLightData.directIndex].view ),input.transformation), float4(input.position, 1.0));
 }
