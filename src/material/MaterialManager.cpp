@@ -81,6 +81,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_names["transmittanceLUT"] =
 		registerMaterial<MaterialDefinitions::TransmittanceLUT>();
 	m_names["skyviewLUT"] = registerMaterial<MaterialDefinitions::SkyViewLUT>();
+	m_names["skybox"] = registerMaterial<MaterialDefinitions::Skybox>();
 
 	createMaterialData();
 }
@@ -123,28 +124,32 @@ void MaterialManager::createGlobalDescriptorSet() {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
 										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
+		                  vk::ShaderStageFlagBits::eCompute,
 										.pImmutableSamplers = {},
 										},
 		vk::DescriptorSetLayoutBinding {
 										.binding = 1,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
 										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
+		                  vk::ShaderStageFlagBits::eCompute,
 										.pImmutableSamplers = {},
 										},
 		vk::DescriptorSetLayoutBinding {
 										.binding = 2,
 										.descriptorType = vk::DescriptorType::eUniformBuffer,
 										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
+		                  vk::ShaderStageFlagBits::eCompute,
 										.pImmutableSamplers = {},
 										},
 		vk::DescriptorSetLayoutBinding {
 										.binding = 3,
 										.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 										.descriptorCount = 512,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
+		                  vk::ShaderStageFlagBits::eCompute,
 										.pImmutableSamplers = {},
 										}
 	};

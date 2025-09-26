@@ -76,7 +76,7 @@ internal float3 integrateScatteredLuminance(Sampler2D<float4> transmittanceLUT, 
         float3 transmittanceToSun = getTransmittance(transmittanceLUT,pHeight, muS);
         float3 phaseScattering = sample.scatteringRay * rayleighPhase + sample.scatteringMie * miePhase;
         float shadow = 1 - saturate(distanceToGround(pHeight,muS));
-        float3 scattering = 10 * shadow * transmittanceToSun * phaseScattering;
+        float3 scattering = 20 * shadow * transmittanceToSun * phaseScattering;
         float3 Sint = (scattering - scattering * sampleTransmittance) / sample.extinction;	
         
         

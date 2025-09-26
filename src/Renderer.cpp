@@ -16,6 +16,8 @@
 
 #include "Instance.hpp"
 #include "Swapchain.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/trigonometric.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
@@ -256,6 +258,21 @@ void Renderer::createRenderGraph() {
 			RenderPass(context, material, primitives);
 		}
 	);
+	builder.addTask(
+		"skybox",
+		TaskType::Graphic,
+		{
+			{ skyviewLUT, ResourceUsage::Type::SampledRead }
+    },
+		{
+			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
+			{ depth, ResourceUsage::Type::DepthStencilRead },
+		},
+		[material = m_materialManager.getMaterialIndex("skybox"),
+	     &primitives = m_currentScene.primitives](TaskContext& context) {
+			RenderPass(context, material, primitives);
+		}
+	);
 
 	ResourceIndex result = builder.createImage(
 		"result",
@@ -321,8 +338,11 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	glm::mat3 orientation = glm::mat3(1);
 	orientation[0] = glm::vec3(1, 0, 0);
-	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, 1, 0);
+	orientation[2] = glm::vec3(0, 0, 1);
+	orientation[1] = glm::vec3(0, 1, 0);
+	// orientation = glm::rotate_slow(
+	// 	glm::mat4(orientation), (float)glm::radians(45.0), glm::vec3(1, 0, 0)
+	// );
 	m_currentScene.lights.push_back({
 		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
@@ -334,11 +354,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_resourceManager.queueBufferUpdate<MaterialDefinitions::Lights>(
 		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
-			lightUBO.count = lights.size();
-			lightUBO.directLightIndex = 0;
-			for (int i = 0; i < lights.size(); i++) {
-				lightUBO.lights[i] = lights[i].getShaderObject();
-			}
+			lightUBO.light = lights[0].getShaderObject();
 		}
 	);
 
@@ -362,6 +378,17 @@ void Renderer::load(const std::filesystem::path& path) {
 		.instanceCount = 1,
 		.materials = { {
 			lighting,
+		} },
+	});
+
+	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
+	m_currentScene.primitives.push_back({
+		.baseVertex = 0,
+		.baseIndex = 0,
+		.indexCount = 3,
+		.instanceCount = 1,
+		.materials = { {
+			skybox,
 		} },
 	});
 	createRenderGraph();

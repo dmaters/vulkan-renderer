@@ -14,6 +14,7 @@
 #include "RenderGraph.hpp"
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
+#include "glm/matrix.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/Buffer.hpp"
@@ -332,10 +333,14 @@ void RenderGraph::submit(const Scene& scene) {
 	commandBuffer.begin(vk::CommandBufferBeginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 	});
+	glm::mat4 view = scene.camera.getViewMatrix();
+	glm::mat4 proj = scene.camera.getProjectionMatrix();
 
 	MaterialDefinitions::Camera cameraView {
-		.view = scene.camera.getViewMatrix(),
-		.projection = scene.camera.getProjectionMatrix(),
+		.view = view,
+		.projection = proj,
+		.invView = glm::inverse(view),
+		.invProj = glm::inverse(proj),
 		.frustumPoints = scene.camera.getFrustumPoints(),
 	};
 

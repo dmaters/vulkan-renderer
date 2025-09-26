@@ -13,6 +13,8 @@ struct EnvironmentData {
 struct Camera {
 	glm::mat4 view;
 	glm::mat4 projection;
+	glm::mat4 invView;
+	glm::mat4 invProj;
 	std::array<std::array<glm::vec4, 4>, 4> frustumPoints;
 };
 
@@ -23,10 +25,7 @@ struct Light {
 };
 
 struct Lights {
-	uint32_t count;
-	uint32_t directLightIndex;
-	uint32_t _padding[2];
-	Light lights[255];
+	Light light;
 };
 
 struct LightingMaterial {};
@@ -66,5 +65,6 @@ struct CompositionPass {};
 
 struct TransmittanceLUT {};
 struct SkyViewLUT {};
+struct Skybox {};
 
 }  // namespace MaterialDefinitions

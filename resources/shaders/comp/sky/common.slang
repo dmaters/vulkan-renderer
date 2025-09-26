@@ -5,25 +5,22 @@ implementing sky;
 internal static const float PI = 3.14159265358979323846f;
 
 internal struct Atmosphere {
-   	// Radius of the planet (center to ground)
+
     static const float BottomRadius = 6360;
-	// Maximum considered atmosphere height (center to atmosphere top)
 	static const float TopRadius = 6460;
 
-	// Rayleigh scattering exponential distribution scale in the atmosphere
+
 	static const float RayleighDensityExpScale = -1 / 8.0f;
-	// Rayleigh scattering coefficients
 	static const float3 RayleighScattering = float3(0.005802,0.013558,0.0331);
 
-	// Mie scattering exponential distribution scale in the atmosphere
 	static const float MieDensityExpScale = -1 / 1.2;
-	// Mie scattering coefficients
 	static const float3 MieScattering = float3(0.003996);
-	// Mie absorption coefficients
 	static const float3 MieAbsorption = float3(0.00440);
-	// Mie extinction coefficients
 	static const float3 MieExtinction = MieScattering + MieAbsorption;
 
+	static const float OzoneHeight = 25;
+	static const float OzoneWidth = 30;
+	static const float3 OzoneAbsorbtion = float3(0.000650,0.001881,0.000085);
 
 };
 
@@ -38,6 +35,7 @@ internal struct MediumSample
 	float3 scatteringMie;
 	float3 absorptionMie;
 	float3 extinctionMie;
+	float3 ozoneAbsorbtion;
 
 	float3 scatteringRay;
 	float3 absorptionRay;
@@ -49,8 +47,9 @@ internal struct MediumSample
 	
 	static internal MediumSample Get(float height)
 	{
-		const float densityMie = exp(Atmosphere.MieDensityExpScale * (height - Atmosphere.BottomRadius));
-		const float densityRay = exp(Atmosphere.RayleighDensityExpScale * (height - Atmosphere.BottomRadius));
+		float altitude = height - Atmosphere.BottomRadius;
+		const float densityMie = exp(Atmosphere.MieDensityExpScale * altitude);
+		const float densityRay = exp(Atmosphere.RayleighDensityExpScale * altitude);
 	
 
 		MediumSample s;
@@ -63,10 +62,10 @@ internal struct MediumSample
 		s.absorptionRay = 0.0f;
 		s.extinctionRay = s.scatteringRay + s.absorptionRay;
 
-		
-
+		s.ozoneAbsorbtion = Atmosphere.OzoneAbsorbtion * max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneHeight) / (Atmosphere.OzoneWidth / 2.0));
+	
 		s.scattering = s.scatteringMie + s.scatteringRay;
-		s.absorption = s.absorptionMie + s.absorptionRay;
+		s.absorption = s.absorptionMie + s.absorptionRay + s.ozoneAbsorbtion;
 		s.extinction = s.extinctionMie + s.extinctionRay;
 		s.albedo = s.scattering / max(0.001, s.extinction);
 

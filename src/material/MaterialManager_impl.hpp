@@ -217,7 +217,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
 		.pipeline = pipeline,
 		.materialBindings = materialBindings,
 		.materialLayout = materialLayout,
-		.depthReadOnly = true,
+		.depthOp = MaterialManager::MaterialMetadata::AttachmentOp::Read,
 	};
 	m_materialMetadata[index] = metadata;
 
@@ -404,17 +404,77 @@ MaterialManager::registerMaterial<MaterialDefinitions::SkyViewLUT>() {
 			m_emptySetLayout,
 			transientSetLayout
 		},
-
-		.configuration ={
-			.depthWrite = true,
-			.depthOp = vk::CompareOp::eLessOrEqual,
-		}
+		
     });
 
 	MaterialMetadata metadata = {
 		.pipeline = pipeline,
 		.materialBindings = {},
 		.materialLayout = m_emptySetLayout,
+	};
+
+	m_materialMetadata[index] = metadata;
+
+	return index;
+}
+
+#pragma region Skybox
+
+template <>
+MaterialIndex MaterialManager::registerMaterial<MaterialDefinitions::Skybox>() {
+	MaterialIndex index = ++m_materialCount;
+	std::vector<vk::DescriptorSetLayoutBinding> transientBindings {
+		{
+         .binding = 0,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eFragment,
+		 },
+	};
+	vk::DescriptorSetLayout transientSetLayout =
+		Instance::Get().device.createDescriptorSetLayout(
+			vk::DescriptorSetLayoutCreateInfo {
+				.flags =
+					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)transientBindings.size(),
+				.pBindings = transientBindings.data(),
+
+			}
+		);
+
+	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
+		.modules = {
+					.vertex = "resources/shaders/quad_vert.slang",
+					.fragment = "resources/shaders/skybox.slang",
+					},
+		.layouts = {
+			m_globalSetLayout,
+			m_emptySetLayout,
+			transientSetLayout
+		},
+
+		.configuration = {
+			.attachmentFormats = {
+			    vk::Format::eR16G16B16A16Sfloat
+			},
+			.stencilEnabled = true,
+			.stencilOp = 
+				{
+				.failOp = vk::StencilOp::eKeep,
+				.passOp = vk::StencilOp::eKeep,
+				.compareOp = vk::CompareOp::eEqual,
+				.compareMask = 0xFF,
+				.reference = 0,
+				}
+		}
+	});
+
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = {},
+		.materialLayout = m_emptySetLayout,
+		.colorOp = MaterialManager::MaterialMetadata::AttachmentOp::ReadWrite,
+		.depthOp = MaterialManager::MaterialMetadata::AttachmentOp::Read,
 	};
 
 	m_materialMetadata[index] = metadata;

@@ -10,7 +10,7 @@
 
 void main(uint3 dispatch : SV_DispatchThreadID) {
 
-    float3 sunDirection = transpose(uLightData.lights[uLightData.directIndex].view)[2].xyz;
+    float3 sunDirection = transpose(uLightData.view)[2].xyz;
     
     writeSkyViewLUT(_skyviewLUT,_transmittanceLUT,dispatch.xy,sunDirection);
 
