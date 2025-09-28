@@ -20,7 +20,7 @@ internal float sunAziTo01(float angle){
 //Cornette Shanks
 internal float miePhase(float cosTheta)
 {
-    static const float _g = 0.8;
+    static const float _g = .8;
 
     float k = 3.0 / (8.0 * PI) * (1.0 - _g * _g) / (2.0 + _g * _g);
 	return k * (1.0 + cosTheta * cosTheta) / pow(1.0 + _g * _g - 2.0 * _g * -cosTheta, 1.5);
@@ -44,7 +44,7 @@ internal float3 integrateScatteredLuminance(Sampler2D<float4> transmittanceLUT, 
     float da = distanceToAtmosphere(height,mu);
 
     float distance = dg > 0 ? min(dg,da) : da;
-    float dt = distance / _sampleCount;
+    float dt = distance / float(_sampleCount);
 
 
     float t = 0.0f;
@@ -73,14 +73,14 @@ internal float3 integrateScatteredLuminance(Sampler2D<float4> transmittanceLUT, 
         const float3 sampleOpticalDepth = sample.extinction * dt;
 		const float3 sampleTransmittance = exp(-sampleOpticalDepth);
         
-        float3 transmittanceToSun = getTransmittance(transmittanceLUT,pHeight, muS);
+        float3 transmittanceToSun = getTransmittance(transmittanceLUT, pHeight, muS);
         float3 phaseScattering = sample.scatteringRay * rayleighPhase + sample.scatteringMie * miePhase;
-        float shadow = 1 - saturate(distanceToGround(pHeight,muS));
-        float3 scattering = 20 * shadow * transmittanceToSun * phaseScattering;
+        float shadow = 1.0 - saturate(distanceToGround(pHeight,muS));
+        float3 scattering = shadow * transmittanceToSun * phaseScattering;
         float3 Sint = (scattering - scattering * sampleTransmittance) / sample.extinction;	
         
         
-        result += throughput * Sint;
+        result += throughput * Sint * dt;
         throughput *= sampleTransmittance;
          
     }

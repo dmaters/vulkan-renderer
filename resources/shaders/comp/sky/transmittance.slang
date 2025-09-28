@@ -72,7 +72,8 @@ internal float3 computeTrasmittance(float height, float mu)
 
     return exp(-(
         Atmosphere.RayleighScattering * opticalLength(Atmosphere.RayleighDensityExpScale, height, mu) +
-        Atmosphere.MieExtinction * opticalLength(Atmosphere.MieDensityExpScale, height, mu) 
+        Atmosphere.MieExtinction * opticalLength(Atmosphere.MieDensityExpScale, height, mu)
+        Atmosphere.OzoneAbsorbtion * opticalLength(Atmosphere.Ozo)
        //ozone
     ));
 }

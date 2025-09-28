@@ -13,7 +13,7 @@ internal struct Atmosphere {
 	static const float RayleighDensityExpScale = -1 / 8.0f;
 	static const float3 RayleighScattering = float3(0.005802,0.013558,0.0331);
 
-	static const float MieDensityExpScale = -1 / 1.2;
+	static const float MieDensityExpScale = -1 / 1.2f;
 	static const float3 MieScattering = float3(0.003996);
 	static const float3 MieAbsorption = float3(0.00440);
 	static const float3 MieExtinction = MieScattering + MieAbsorption;
@@ -63,7 +63,7 @@ internal struct MediumSample
 		s.extinctionRay = s.scatteringRay + s.absorptionRay;
 
 		s.ozoneAbsorbtion = Atmosphere.OzoneAbsorbtion * max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneHeight) / (Atmosphere.OzoneWidth / 2.0));
-	
+
 		s.scattering = s.scatteringMie + s.scatteringRay;
 		s.absorption = s.absorptionMie + s.absorptionRay + s.ozoneAbsorbtion;
 		s.extinction = s.extinctionMie + s.extinctionRay;
@@ -86,7 +86,7 @@ internal float distanceToAtmosphere(float height, float mu){
 internal float distanceToGround(float height, float mu){
     
 	float d = height * height * (mu * mu - 1.0) + Atmosphere.BottomRadius * Atmosphere.BottomRadius;
-	return d < 0 ? -1 : max(-height * mu - sqrt(d),0);
+	return d < 0.0 ? -1.0 : max(-height * mu - sqrt(d),0);
 }
 
 
