@@ -47,36 +47,36 @@ float3 getTransmittance(Sampler2D<float4> transmittanceLUT, float height, float 
 }
 
 
-internal float opticalLength(float densityScale, float height, float mu){
+internal float3 computeTrasmittance(float height, float mu){
 
     static const uint _sampleCount = 500;
 
 
     float dx = distanceToAtmosphere(height,mu) / _sampleCount;
-    float result = 0;
+
+    float rayleighOpticalLength = 0;
+    float mieOpticalLength = 0;
+    float ozoneOpticalLength = 0;
 
     for(uint i = 0; i <= _sampleCount; i++) {
         float d = i * dx;
         float r = sqrt(d * d + 2.0 * height * mu * d + height * height);
-        float y = exp(densityScale * (r - Atmosphere.BottomRadius));
-        y = saturate(y);
+        float altitude = r - Atmosphere.BottomRadius;
+
+
         float weight =  i == 0 || i == (_sampleCount - 1) ? 0.5 : 1.0;
-    
-        result += y * weight * dx;
+        
+        rayleighOpticalLength += exp(Atmosphere.RayleighDensityExpScale * altitude) * weight;
+        mieOpticalLength += exp(Atmosphere.MieDensityExpScale * altitude) * weight;
+        ozoneOpticalLength += max(0.0, (1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) / (Atmosphere.OzoneLayerWidth))) * weight;
+
     }
-    return result;
+
+    float3 scale = (
+        Atmosphere.RayleighScattering  * rayleighOpticalLength +
+        Atmosphere.MieExtinction * mieOpticalLength +
+        Atmosphere.OzoneAbsorbtion * ozoneOpticalLength
+    ) * dx;
+
+    return exp(-scale);
 }
-
-internal float3 computeTrasmittance(float height, float mu)
-{  
-
-    return exp(-(
-        Atmosphere.RayleighScattering * opticalLength(Atmosphere.RayleighDensityExpScale, height, mu) +
-        Atmosphere.MieExtinction * opticalLength(Atmosphere.MieDensityExpScale, height, mu)
-        Atmosphere.OzoneAbsorbtion * opticalLength(Atmosphere.Ozo)
-       //ozone
-    ));
-}
-
-
-

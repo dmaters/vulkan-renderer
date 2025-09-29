@@ -18,8 +18,8 @@ internal struct Atmosphere {
 	static const float3 MieAbsorption = float3(0.00440);
 	static const float3 MieExtinction = MieScattering + MieAbsorption;
 
-	static const float OzoneHeight = 25;
-	static const float OzoneWidth = 30;
+	static const float OzoneLayerHeight = 25;
+	static const float OzoneLayerWidth = 30;
 	static const float3 OzoneAbsorbtion = float3(0.000650,0.001881,0.000085);
 
 };
@@ -62,7 +62,7 @@ internal struct MediumSample
 		s.absorptionRay = 0.0f;
 		s.extinctionRay = s.scatteringRay + s.absorptionRay;
 
-		s.ozoneAbsorbtion = Atmosphere.OzoneAbsorbtion * max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneHeight) / (Atmosphere.OzoneWidth / 2.0));
+		s.ozoneAbsorbtion = Atmosphere.OzoneAbsorbtion * max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) / (Atmosphere.OzoneLayerWidth / 2.0));
 
 		s.scattering = s.scatteringMie + s.scatteringRay;
 		s.absorption = s.absorptionMie + s.absorptionRay + s.ozoneAbsorbtion;
