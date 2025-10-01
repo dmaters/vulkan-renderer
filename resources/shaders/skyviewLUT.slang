@@ -5,13 +5,15 @@
 
 
 [vk_binding(0,2)] Sampler2D<float4> _transmittanceLUT;
-[vk_binding(1,2)] WTexture2D<float4> _skyviewLUT;
+[vk_binding(1,2)] Sampler2D<float4> _multiscatteringLUT;
+[vk_binding(2,2)] WTexture2D<float4> _skyviewLUT;
+
 
 
 void main(uint3 dispatch : SV_DispatchThreadID) {
 
-    float3 sunDirection = transpose(uLightData.view)[2].xyz;
-    sunDirection = normalize(float3(0,cos(PI/4),cos(PI/4)));
-    writeSkyViewLUT(_skyviewLUT,_transmittanceLUT,dispatch.xy,sunDirection);
+    float3 sunDirection = -transpose(uLightData.view)[2].xyz;
+    sunDirection = normalize(float3(0,0,-1));
+    writeSkyViewLUT(_skyviewLUT,_transmittanceLUT,_multiscatteringLUT,dispatch.xy,sunDirection);
 
 }

@@ -364,6 +364,60 @@ MaterialManager::registerMaterial<MaterialDefinitions::TransmittanceLUT>() {
 	return index;
 }
 
+#pragma region Multiscattering LUT Pass
+
+template <>
+MaterialIndex
+MaterialManager::registerMaterial<MaterialDefinitions::MultiscatteringLUT>() {
+	MaterialIndex index = ++m_materialCount;
+	std::vector<vk::DescriptorSetLayoutBinding> transientBindings {
+		{
+         .binding = 0,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+		{
+         .binding = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+	};
+	vk::DescriptorSetLayout transientSetLayout =
+		Instance::Get().device.createDescriptorSetLayout(
+			vk::DescriptorSetLayoutCreateInfo {
+				.flags =
+					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)transientBindings.size(),
+				.pBindings = transientBindings.data(),
+
+			}
+		);
+
+	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
+		.modules = {
+					.compute = "resources/shaders/multiscatteringLUT.slang",
+					},
+		.layouts = {
+			m_globalSetLayout,
+			m_emptySetLayout,
+			transientSetLayout
+		},
+		
+    });
+
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = {},
+		.materialLayout = m_emptySetLayout,
+	};
+
+	m_materialMetadata[index] = metadata;
+
+	return index;
+}
+
 #pragma region SkyView LUT Pass
 
 template <>
@@ -379,6 +433,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::SkyViewLUT>() {
 		 },
 		{
          .binding = 1,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+		{
+         .binding = 2,
          .descriptorType = vk::DescriptorType::eStorageImage,
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eCompute,
@@ -417,7 +477,6 @@ MaterialManager::registerMaterial<MaterialDefinitions::SkyViewLUT>() {
 
 	return index;
 }
-
 #pragma region Skybox
 
 template <>

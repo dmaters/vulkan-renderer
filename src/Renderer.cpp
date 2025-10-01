@@ -79,6 +79,34 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 256, 64, 1 }); }
 	);
 
+	ResourceIndex multiscatteringLUT = builder.createImage(
+		"multiscatteringLUT",
+		{
+			.width = 64,
+			.height = 64,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+
+	builder.addTask(
+		"multiscatteringLUT",
+		TaskType::Compute,
+		{
+			{ transmittanceLUT, ResourceUsage::Type::SampledRead }
+    },
+		{
+			{ multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("multiscatteringLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 64, 64, 1 }); }
+	);
+
 	ResourceIndex skyviewLUT = builder.createImage(
 		"skyviewLUT",
 		{
@@ -96,7 +124,8 @@ void Renderer::createRenderGraph() {
 		"skyviewLUT",
 		TaskType::Compute,
 		{
-			{ transmittanceLUT, ResourceUsage::Type::SampledRead },
+			{ transmittanceLUT,   ResourceUsage::Type::SampledRead },
+			{ multiscatteringLUT, ResourceUsage::Type::SampledRead },
     },
 		{
 			{ skyviewLUT, ResourceUsage::Type::ShaderWrite },
@@ -338,8 +367,8 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	glm::mat3 orientation = glm::mat3(1);
 	orientation[0] = glm::vec3(1, 0, 0);
-	orientation[2] = glm::vec3(0, 0, 1);
-	orientation[1] = glm::vec3(0, 1, 0);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, 1, 0);
 	// orientation = glm::rotate_slow(
 	// 	glm::mat4(orientation), (float)glm::radians(-45.0), glm::vec3(1, 0, 0)
 	// );

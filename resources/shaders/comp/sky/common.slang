@@ -48,8 +48,9 @@ internal struct MediumSample
 	static internal MediumSample Get(float height)
 	{
 		float altitude = height - Atmosphere.BottomRadius;
-		const float densityMie = exp(Atmosphere.MieDensityExpScale * altitude);
-		const float densityRay = exp(Atmosphere.RayleighDensityExpScale * altitude);
+		float densityMie = exp(Atmosphere.MieDensityExpScale * altitude);
+		float densityRay = exp(Atmosphere.RayleighDensityExpScale * altitude);
+		float densityOzo = max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) / (Atmosphere.OzoneLayerWidth / 2.0));
 	
 
 		MediumSample s;
@@ -62,11 +63,11 @@ internal struct MediumSample
 		s.absorptionRay = 0.0f;
 		s.extinctionRay = s.scatteringRay + s.absorptionRay;
 
-		s.ozoneAbsorbtion = Atmosphere.OzoneAbsorbtion * max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) / (Atmosphere.OzoneLayerWidth / 2.0));
-
+		s.ozoneAbsorbtion = densityOzo * Atmosphere.OzoneAbsorbtion;
+		
 		s.scattering = s.scatteringMie + s.scatteringRay;
 		s.absorption = s.absorptionMie + s.absorptionRay + s.ozoneAbsorbtion;
-		s.extinction = s.extinctionMie + s.extinctionRay;
+		s.extinction = s.extinctionMie + s.extinctionRay + s.ozoneAbsorbtion;
 		s.albedo = s.scattering / max(0.001, s.extinction);
 
 		return s;
@@ -86,7 +87,9 @@ internal float distanceToAtmosphere(float height, float mu){
 internal float distanceToGround(float height, float mu){
     
 	float d = height * height * (mu * mu - 1.0) + Atmosphere.BottomRadius * Atmosphere.BottomRadius;
-	return d < 0.0 ? -1.0 : max(-height * mu - sqrt(d),0);
+	
+	if (d < 0.0 || mu >= 0.0) return -1.0;
+    return -height * mu - sqrt(d);
 }
 
 

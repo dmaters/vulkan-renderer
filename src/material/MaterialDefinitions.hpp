@@ -65,6 +65,8 @@ struct CompositionPass {};
 
 struct TransmittanceLUT {};
 struct SkyViewLUT {};
+struct MultiscatteringLUT {};
+
 struct Skybox {};
 
 }  // namespace MaterialDefinitions

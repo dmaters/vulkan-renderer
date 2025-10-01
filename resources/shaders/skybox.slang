@@ -20,5 +20,5 @@ float4 main(VertexOutput input) : SV_Target{
     cameraSpaceDir /= cameraSpaceDir.w;
     float3 direction = mul(uCamera.invView,cameraSpaceDir).xyz;
     
-    return float4(readSkyViewLUT(_skyview,direction) * 20,1);
+    return float4(readSkyViewLUT(_skyview,direction),1);
 }

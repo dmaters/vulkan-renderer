@@ -41,6 +41,7 @@ ShaderEngine::~ShaderEngine() {
 std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	const std::filesystem::path& path, SlangStage stage
 ) {
+	std::cout << "Compiling :" << path.string() << std::endl;
 	assert(!path.empty());
 
 	slang::TargetDesc desc {

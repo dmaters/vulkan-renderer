@@ -20,7 +20,6 @@ void writeTransmittanceLUT(WTexture2D<float4>transmittanceLUT, uint2 coord) {
     float mu = t.mu;
 
     transmittanceLUT.Store(coord,float4(computeTrasmittance(height,mu),1));
-   //transmittanceLUT.Store(coord,float4(mu,height,0,1));
 
   
     
@@ -41,12 +40,9 @@ float3 readSkyViewLUT(Sampler2D<float4> skyviewLUT, float3 direction) {
 }
 
 
-void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmittanceLUT, uint2 coord, float3 sunDirection){
-    
+void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmittanceLUT, Sampler2D<float4> multitransferLUT, uint2 coord, float3 sunDirection){
     uint3 dimensions;
-
     skyviewLUT.GetDimensions(0,dimensions.x,dimensions.y,dimensions.z);
-
     float2 uv = (float2(coord.xy) / dimensions.xy);
     float lon = (uv.x * 2.0 - 1) * PI;
     float t = uv.y * 2 - 1;   
@@ -61,10 +57,26 @@ void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmitta
     
     
     float3 luminance = float3(0);
-    float height = Atmosphere.BottomRadius + 3;
-    //Add ground luminance
-
-    luminance = integrateScatteredLuminance(transmittanceLUT,height,direction,sunDirection);
-
+    float height = Atmosphere.BottomRadius + 10;
+    
+    luminance = getScatteredLuminanceMultiple(transmittanceLUT,height,direction, -sunDirection,false, true, true, multitransferLUT);
     skyviewLUT.Store(coord,float4(luminance,1));
+}
+
+void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT, Sampler2D<float4> transmittanceLUT, uint2 coord) {
+
+    uint3 dimensions;
+    multiscatteringLUT.GetDimensions(0,dimensions.x,dimensions.y,dimensions.z);
+    float2 uv = (coord.xy + float2(0.5)) / dimensions.xy;
+    
+    float muS;
+    float height;
+    getMultipleScatteringParams(uv, muS, height);
+    
+    
+    float3 sunDir = normalize(float3(0, muS, sqrt(saturate(1.0 - muS * muS))));
+
+    
+    float3 multiscattering = computeMultipleScattering(transmittanceLUT,height,sunDir);
+    multiscatteringLUT.Store(coord,float4(multiscattering,1));
 }
