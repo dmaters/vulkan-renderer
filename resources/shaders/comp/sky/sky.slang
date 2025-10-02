@@ -54,9 +54,8 @@ void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmitta
     );
     
     float3 luminance = float3(0);
-    float height = Atmosphere.BottomRadius + 1;
-    
-    luminance = getScatteredLuminance<AnisotropicPhase,LUTMultiscatteringProvider,true,false>(transmittanceLUT,height,direction, -sunDirection, {multitransferLUT});
+    float height = Atmosphere.BottomRadius + 0.1;
+    luminance = getScatteredLuminance<AnisotropicPhase,LUTMultiscatteringProvider,true,true>(transmittanceLUT,height,direction, -sunDirection, 20.0, {multitransferLUT});
     skyviewLUT.Store(coord,float4(luminance,1));
 }
 

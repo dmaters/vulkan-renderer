@@ -45,9 +45,8 @@ internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittan
 
 	for(int i = 0; i < _samples; i++) {
 		float3 dir = fibonacciSampling(i,_samples);
-		luminance2Ord += getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,false>(transmittanceLUT, height, dir, -sunDirection) ;
+		luminance2Ord += getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, -sunDirection) ;
 		factor += getScatteredLuminance<NeutralPhase,DummyMultiscatteringProvider,false,false>(transmittanceLUT, height, dir, -sunDirection) ;
-
 	}
 	float3 l = luminance2Ord / _samples;
 	float3 f = 1.0 / (1.0 - factor / _samples);

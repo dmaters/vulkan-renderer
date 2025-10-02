@@ -76,7 +76,8 @@ internal float3 getScatteredLuminance<
                 float height,
                 float3 direction,
                 float3 sunDirection,
-                Multiscattering multiscatteringProvider = {}    
+                float3 sunIlluminance = 1,
+                Multiscattering multiscatteringProvider = {}
     ) {
     static const uint _sampleCount = 20;
     float mu = dot(direction, float3(0,1,0));
@@ -118,7 +119,7 @@ internal float3 getScatteredLuminance<
         float3 phaseScattering = miePhase * sample.scatteringMie + rayleighPhase * sample.scatteringRay;
         float3 shadow = Shadow ? 1.0 - saturate(distanceToGround(pHeight, muS)) : 1.0 ;
         float3 MS = multiscatteringProvider.getMultiscattering(pHeight,muS);
-        float3 S = transmittanceToSun * shadow * phaseScattering + MS * sample.scattering;
+        float3 S = sunIlluminance *  transmittanceToSun * shadow * phaseScattering + MS * sample.scattering;
         float3 Sint = (S - S * T) / sample.extinction;
 
 
@@ -126,7 +127,7 @@ internal float3 getScatteredLuminance<
 
 
         if(Ground && dg > 0 && i == _sampleCount - 1){
-            result += transmittanceToSun * throughput * saturate(muS) * (sample.scattering / max(0.001, sample.extinction)) / PI;
+            result += sunIlluminance * transmittanceToSun * throughput * saturate(muS) * (sample.scattering / max(0.001, sample.extinction)) / PI;
         }
         throughput *= T;
       
