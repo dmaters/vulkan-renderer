@@ -9,7 +9,7 @@ internal void getMultipleScatteringUV(float muS, float height, out float2 uv) {
 	uv.y = saturate(altitude / (Atmosphere.TopRadius - Atmosphere.BottomRadius));
 }
 internal void getMultipleScatteringParams(float2 uv, out float muS, out float height) {
-	muS = (uv.x - 0.5) * 2.0;
+	muS = uv.x * 2.0 - 1.0;
 	height = (uv.y * (Atmosphere.TopRadius - Atmosphere.BottomRadius)) + Atmosphere.BottomRadius;
 }
 
@@ -29,7 +29,7 @@ float3 fibonacciSampling(uint i, uint N)
 	dir.y = y;
 	dir.z = r * sin(phi);
 
-	return dir;
+	return normalize(dir);
 }
 
 
@@ -45,12 +45,12 @@ internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittan
 
 	for(int i = 0; i < _samples; i++) {
 		float3 dir = fibonacciSampling(i,_samples);
-		luminance2Ord += getScatteredLuminance(transmittanceLUT, height, dir, -sunDirection, true, true, true) * angle;
-		factor += getScattering(transmittanceLUT, height, dir, -sunDirection) * angle;
+		luminance2Ord += getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,false>(transmittanceLUT, height, dir, -sunDirection) ;
+		factor += getScatteredLuminance<NeutralPhase,DummyMultiscatteringProvider,false,false>(transmittanceLUT, height, dir, -sunDirection) ;
 
 	}
-	float3 l = luminance2Ord * phase / _samples;
-	float3 f = 1.0 / (1.0 - factor * phase / _samples);
+	float3 l = luminance2Ord / _samples;
+	float3 f = 1.0 / (1.0 - factor / _samples);
 	
 	return l * f;
 }

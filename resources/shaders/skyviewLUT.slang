@@ -13,7 +13,6 @@
 void main(uint3 dispatch : SV_DispatchThreadID) {
 
     float3 sunDirection = -transpose(uLightData.view)[2].xyz;
-    sunDirection = normalize(float3(0,0,-1));
     writeSkyViewLUT(_skyviewLUT,_transmittanceLUT,_multiscatteringLUT,dispatch.xy,sunDirection);
 
 }
