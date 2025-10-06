@@ -39,7 +39,7 @@ float4 main(VertexOutput input) : SV_Target{
 	float3 light_dir = -transpose(uLightData.view)[2].xyz;
 
 	float3 irradiance =  PBR::microfacetBRDF(input.frag_position, view_dir, light_dir,albedo,normal,roughnessMetallic.x,roughnessMetallic.y);
-	brdf += (1 - shadowPercentage.x) * irradiance * uLightData.color.xyz * uLightData.color.w;
+	brdf += (1 - shadowPercentage.x) * irradiance * uLightData.color.xyz * uLightData.intensity;
 
 
 	return float4 (brdf + uEnvironment.environment_color, 1);

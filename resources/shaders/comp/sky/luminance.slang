@@ -4,15 +4,15 @@ __include multiscattering;
 __include transmittance;
 
 
-//Cornette Shanks
 
 
 interface IPhaseProvider { static float rayleighPhase (float nu); static float miePhase(float nu); }
 
 internal struct AnisotropicPhase : IPhaseProvider {
+    //Cornette Shanks
     static float miePhase(float cosTheta)
     {
-        static const float _g = .7;
+        static const float _g = .8;
 
         float k = 3.0 / (8.0 * PI) * (1.0 - _g * _g) / (2.0 + _g * _g);
         return k * (1.0 + cosTheta * cosTheta) / pow(1.0 + _g * _g - 2.0 * _g * cosTheta, 1.5);
@@ -37,18 +37,6 @@ internal struct IsotropicPhase : IPhaseProvider {
     }
 }
 
-internal struct NeutralPhase : IPhaseProvider {
-    static float miePhase(float cosTheta)
-    {
-        return 1.0;
-    }
-    static float rayleighPhase(float cosTheta)
-    {
-        return 1.0;
-    }
-};
-
-
 interface IMultiscatteringProvider { float3 getMultiscattering(float height, float muS); }
 struct  DummyMultiscatteringProvider : IMultiscatteringProvider {
     float3 getMultiscattering(float height, float muS) {return float3(0);}
@@ -62,11 +50,13 @@ struct LUTMultiscatteringProvider : IMultiscatteringProvider {
     }
 }
 
-struct ScatteredLuminanceRes{
+struct ScatteredLuminanceResult{
     float3 luminance;
-    float3 scattering;
+
+    //Additional parameter computed for multiscattering
+    float3 luminanceFactor;
 };
-internal float3 getScatteredLuminance<
+internal ScatteredLuminanceResult getScatteredLuminance<
                 Phase : IPhaseProvider,
                 Multiscattering : IMultiscatteringProvider,
                 let Shadow: bool,
@@ -79,24 +69,25 @@ internal float3 getScatteredLuminance<
                 float3 sunIlluminance = 1,
                 Multiscattering multiscatteringProvider = {}
     ) {
-    static const uint _sampleCount = 20;
+
+    static const uint _sampleCount = 40;
     float mu = dot(direction, float3(0,1,0));
-    float nu = dot(direction, sunDirection);
+    float nu = dot(sunDirection, direction);
 
 
     float dg = distanceToGround(height,mu);
     float da = distanceToAtmosphere(height,mu);
     float distance = dg > 0 ? min(dg,da) : da;
     float dt = distance / float(_sampleCount);
-
+    
 
     float t = 0.0f;
 
     float miePhase = Phase::miePhase(nu);
     float rayleighPhase = Phase::rayleighPhase(nu);
-
     float3 throughput = 1.0;
-    float3 result = float3(0);
+    float3 L = float3(0);
+    float3  f = float3(0);
 	const float sampleOffset = 0.3f;
 
     for(uint i = 0; i < _sampleCount; i++)
@@ -111,27 +102,35 @@ internal float3 getScatteredLuminance<
         float muS = dot(sunDirection, up);
 
         MediumSample sample = MediumSample::Get(pHeight);
-
-
 		const float3 T = exp(-sample.extinction * dt);
         
         float3 transmittanceToSun = getTransmittance(transmittanceLUT, pHeight, muS) ;
         float3 phaseScattering = miePhase * sample.scatteringMie + rayleighPhase * sample.scatteringRay;
+
         float3 shadow = Shadow ? 1.0 - saturate(distanceToGround(pHeight, muS)) : 1.0 ;
         float3 MS = multiscatteringProvider.getMultiscattering(pHeight,muS);
+        
         float3 S = sunIlluminance *  transmittanceToSun * shadow * phaseScattering + MS * sample.scattering;
         float3 Sint = (S - S * T) / sample.extinction;
 
+        float3 Sf = sample.scattering;
+		float3 Sfint = (Sf- Sf * T) / sample.extinction;
+		f += throughput * Sfint;
 
-        result += throughput * Sint;
+        if(Ground && dg > 0 && (i == _sampleCount - 1)){
+            float NdL = saturate(dot(up, sunDirection)) ;
 
-
-        if(Ground && dg > 0 && i == _sampleCount - 1){
-            result += sunIlluminance * transmittanceToSun * throughput * saturate(muS) * (sample.scattering / max(0.001, sample.extinction)) / PI;
+            static const float3 groundColor = float3(1);
+            L += sunIlluminance * transmittanceToSun * throughput * NdL * groundColor / PI;
         }
+
+        L += throughput * Sint;
         throughput *= T;
       
     }
 
-    return result;
+    return {
+        L,
+        f
+    };
 }

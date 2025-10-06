@@ -16,18 +16,17 @@ internal void getMultipleScatteringParams(float2 uv, out float muS, out float he
 
 float3 fibonacciSampling(uint i, uint N)
 {
-	static const float _p = (1.0 + sqrt(5.0)) / 2.0;
-
-	float y = 1.0 - (2.0 * i + 1.0) / N;
-	float phi = 2.0 * PI * i / _p;
-
+	
+	float gR = (1.0 + sqrt(5)) / 2.0; 
+	float theta = 2.0f * PI * i / gR;
+	float phi = acos(1.0 - 2.0 * i / N);	
 
 	float3 dir;
 
-	float r = sqrt(1 - y * y);
-	dir.x = r * cos(phi);
-	dir.y = y;
-	dir.z = r * sin(phi);
+	dir.x = cos(theta) * sin(phi);
+	dir.y = sin(theta) * sin(phi);
+	dir.z = cos(phi);
+
 
 	return normalize(dir);
 }
@@ -44,12 +43,16 @@ internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittan
 
 
 	for(int i = 0; i < _samples; i++) {
+
 		float3 dir = fibonacciSampling(i,_samples);
-		luminance2Ord += getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, -sunDirection) ;
-		factor += getScatteredLuminance<NeutralPhase,DummyMultiscatteringProvider,false,false>(transmittanceLUT, height, dir, -sunDirection) ;
+		ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, -sunDirection) ;
+		luminance2Ord += res.luminance;
+		factor += res.luminanceFactor;
+	
 	}
+
 	float3 l = luminance2Ord / _samples;
 	float3 f = 1.0 / (1.0 - factor / _samples);
 	
-	return l * f;
+	return f * l ;
 }

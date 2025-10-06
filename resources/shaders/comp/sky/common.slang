@@ -75,14 +75,11 @@ internal struct MediumSample
 
 };
 
-
-
 internal float distanceToAtmosphere(float height, float mu){
 
     float d = height * height * (mu * mu - 1.0) + Atmosphere.TopRadius * Atmosphere.TopRadius;
 	return -height * mu + sqrt(d);
 }
-
 
 internal float distanceToGround(float height, float mu){
     
@@ -91,8 +88,3 @@ internal float distanceToGround(float height, float mu){
 	if (d < 0.0 || mu >= 0.0) return -1.0;
     return -height * mu - sqrt(d);
 }
-
-
-
-
-

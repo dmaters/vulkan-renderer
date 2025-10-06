@@ -15,7 +15,7 @@ struct Light {
 	glm::mat3 orientation = glm::mat3(orientation);
 
 	glm::vec3 color = glm::vec3(1);
-	float intensity = 1;
+	float intensity = 1.0f;
 	Type type = Type::Directional;
 	bool shadows;
 
