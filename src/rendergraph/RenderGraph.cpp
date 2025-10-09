@@ -455,8 +455,6 @@ void RenderGraph::build(GraphData graphData) {
 	);
 	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
-	uint32_t index = 0;
-
 	int i = 0;
 	for (auto& [index, _] : graphData.images) {
 		if (graphData.swapchainImageRatio.contains(index)) continue;
@@ -466,10 +464,11 @@ void RenderGraph::build(GraphData graphData) {
 		i++;
 	}
 
+	i = 0;
 	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
 	for (auto& [buffer, _] : graphData.buffers) {
-		m_buffers[index] = buffers[i];
-		m_resourceManager.setName(graphData.names[index], buffers[i]);
+		m_buffers[buffer] = buffers[i];
+		m_resourceManager.setName(graphData.names[buffer], buffers[i]);
 
 		i++;
 	}
