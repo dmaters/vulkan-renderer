@@ -1,10 +1,10 @@
 module sky;
-__include common;
+import comp.common.spherical_harmonics;
+import comp.common;
 __include luminance;
 
 
-
-void writeTransmittanceLUT(WTexture2D<float4>transmittanceLUT, uint2 coord) {
+public void writeTransmittanceLUT(WTexture2D<float4>transmittanceLUT, uint2 coord) {
     
     uint3 size;
     transmittanceLUT.GetDimensions(0,size.x,size.y,size.z);
@@ -15,7 +15,7 @@ void writeTransmittanceLUT(WTexture2D<float4>transmittanceLUT, uint2 coord) {
     transmittanceLUT.Store(coord,float4(computeTrasmittance(height,mu),1)); 
 }
 
-float3 readSkyViewLUT(Sampler2D<float4> skyviewLUT, float3 direction) {
+public float3 readSkyViewLUT(Sampler2D<float4> skyviewLUT, float3 direction) {
  
     float lat = asin(direction.y);            
     float lon = atan2(direction.z, direction.x);      
@@ -27,8 +27,12 @@ float3 readSkyViewLUT(Sampler2D<float4> skyviewLUT, float3 direction) {
     return skyviewLUT.Sample(uv).rgb;
 }
 
+public float3 getTransmittanceToSun(Sampler2D<float4> transmittanceLUT, float3 direction) {
 
-void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmittanceLUT, Sampler2D<float4> multitransferLUT, uint2 coord, float3 sunDirection, float sunIntensity){
+    float muS = dot(direction, float3(0,1,0));
+    return getTransmittance(transmittanceLUT,muS,Atmosphere.BottomRadius + 0.1);
+}
+public void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmittanceLUT, Sampler2D<float4> multitransferLUT, uint2 coord, float3 sunDirection, float sunIntensity){
     uint3 dimensions;
     skyviewLUT.GetDimensions(0,dimensions.x,dimensions.y,dimensions.z);
     float2 uv = (float2(coord.xy) / dimensions.xy);
@@ -43,11 +47,12 @@ void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D<float4> transmitta
     );
     
     float height = Atmosphere.BottomRadius + 0.01;
-    float3 luminance = getScatteredLuminance<AnisotropicPhase,LUTMultiscatteringProvider,true,false>(transmittanceLUT,height,direction, -sunDirection, sunIntensity, {multitransferLUT}).luminance;
+    float3 luminance = getScatteredLuminance<AnisotropicPhase,LUTMultiscatteringProvider,true,true>(transmittanceLUT,height,direction, -sunDirection, sunIntensity, {multitransferLUT}).luminance;
+
     skyviewLUT.Store(coord,float4(luminance,1));
 }
 
-void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT, Sampler2D<float4> transmittanceLUT, uint2 coord) {
+public void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT, Sampler2D<float4> transmittanceLUT, uint2 coord) {
 
     uint3 dimensions;
     multiscatteringLUT.GetDimensions(0,dimensions.x,dimensions.y,dimensions.z);

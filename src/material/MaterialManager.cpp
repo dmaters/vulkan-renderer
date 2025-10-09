@@ -80,9 +80,11 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 		registerMaterial<MaterialDefinitions::CompositionPass>();
 	m_names["transmittanceLUT"] =
 		registerMaterial<MaterialDefinitions::TransmittanceLUT>();
-	m_names["skyviewLUT"] = registerMaterial<MaterialDefinitions::SkyViewLUT>();
 	m_names["multiscatteringLUT"] =
 		registerMaterial<MaterialDefinitions::MultiscatteringLUT>();
+	m_names["skyviewLUT"] = registerMaterial<MaterialDefinitions::SkyViewLUT>();
+	m_names["skyLighting"] =
+		registerMaterial<MaterialDefinitions::SkyLighting>();
 	m_names["skybox"] = registerMaterial<MaterialDefinitions::Skybox>();
 
 	createMaterialData();

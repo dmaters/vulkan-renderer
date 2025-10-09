@@ -26,7 +26,7 @@ float4 main(VertexOutput input) : SV_Target{
     float3 sky = readSkyViewLUT(_skyview,direction);
 
     //Arbitrary sky brightening for better visual clarity
-    sky *= 2;
+    sky *= 1.55;
 
     return float4(sky, 1.0);
 }

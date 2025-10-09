@@ -68,5 +68,6 @@ struct SkyViewLUT {};
 struct MultiscatteringLUT {};
 
 struct Skybox {};
+struct SkyLighting {};
 
 }  // namespace MaterialDefinitions

@@ -135,6 +135,28 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 200, 100, 1 }); }
 	);
 
+	ResourceIndex skyLightingSH = builder.createBuffer(
+		"skyLightingSH",
+		{
+			.size = sizeof(glm::vec4) * 9,
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+		}
+	);
+	builder.addTask(
+		"skyLighting",
+		TaskType::Compute,
+		{
+			{ skyviewLUT, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ skyLightingSH, ResourceUsage::Type::StorageBufferWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("skyLighting")](
+			TaskContext& context
+		) { ComputePass(context, material, { 1, 1, 1 }); }
+	);
+
 	ResourceIndex shadowAtlas = builder.createImage(
 		"shadow_atlas",
 		{
@@ -272,11 +294,12 @@ void Renderer::createRenderGraph() {
 		"pbr_lighting",
 		TaskType::Graphic,
 		{
-			{ albedo,            ResourceUsage::Type::SampledRead },
-			{ normal,            ResourceUsage::Type::SampledRead },
-			{ worldPos,          ResourceUsage::Type::SampledRead },
-			{ roughnessMetallic, ResourceUsage::Type::SampledRead },
-			{ shadowAtlas,       ResourceUsage::Type::SampledRead }
+			{ albedo,            ResourceUsage::Type::SampledRead   },
+			{ normal,            ResourceUsage::Type::SampledRead   },
+			{ worldPos,          ResourceUsage::Type::SampledRead   },
+			{ roughnessMetallic, ResourceUsage::Type::SampledRead   },
+			{ shadowAtlas,       ResourceUsage::Type::SampledRead   },
+			{ skyLightingSH,     ResourceUsage::Type::UniformBuffer }
     },
 		{
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
@@ -375,7 +398,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene.lights.push_back({
 		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
-		.intensity = 20.0f,
+		.intensity = 25.0f,
 	});
 
 	const auto& lights = m_currentScene.lights;

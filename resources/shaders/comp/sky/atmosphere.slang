@@ -1,8 +1,7 @@
-#pragma once
-
 implementing sky;
+import comp.common;
 
-internal static const float PI = 3.14159265358979323846f;
+internal static const float3 GroundAlbedo = float3(0.03,0.11,0.33);
 
 internal struct Atmosphere {
 

@@ -174,6 +174,12 @@ MaterialManager::registerMaterial<MaterialDefinitions::DeferredLighting>() {
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eFragment,
 		 },
+		{
+         .binding = 5,
+         .descriptorType = vk::DescriptorType::eUniformBuffer,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eFragment,
+		 },
 	};
 	vk::DescriptorSetLayout transientSetLayout =
 		Instance::Get().device.createDescriptorSetLayout(
@@ -477,6 +483,52 @@ MaterialManager::registerMaterial<MaterialDefinitions::SkyViewLUT>() {
 
 	return index;
 }
+
+#pragma region Sky Lighting
+template <>
+MaterialIndex
+MaterialManager::registerMaterial<MaterialDefinitions::SkyLighting>() {
+	MaterialIndex index = ++m_materialCount;
+	std::vector<vk::DescriptorSetLayoutBinding> transientBindings {
+		{
+         .binding = 0,
+         .descriptorType = vk::DescriptorType::eSampledImage,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+		{
+         .binding = 1,
+         .descriptorType = vk::DescriptorType::eStorageBuffer,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+	};
+	vk::DescriptorSetLayout transientSetLayout =
+		Instance::Get().device.createDescriptorSetLayout(
+			vk::DescriptorSetLayoutCreateInfo {
+				.flags =
+					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)transientBindings.size(),
+				.pBindings = transientBindings.data(),
+			}
+		);
+
+	PipelineIndex pipeline = m_shaderEngine->registerPipeline({
+		.modules = { .compute = "resources/shaders/sky_lighting.slang", },
+		.layouts = { m_globalSetLayout, m_emptySetLayout, transientSetLayout },
+    });
+
+	MaterialMetadata metadata = {
+		.pipeline = pipeline,
+		.materialBindings = {},
+		.materialLayout = m_emptySetLayout,
+	};
+
+	m_materialMetadata[index] = metadata;
+
+	return index;
+}
+
 #pragma region Skybox
 
 template <>

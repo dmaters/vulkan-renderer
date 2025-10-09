@@ -1,6 +1,7 @@
 implementing sky;
-__include common;
+__include atmosphere;
 __include luminance;
+
 
 internal void getMultipleScatteringUV(float muS, float height, out float2 uv) {
 
@@ -13,19 +14,25 @@ internal void getMultipleScatteringParams(float2 uv, out float muS, out float he
 	height = (uv.y * (Atmosphere.TopRadius - Atmosphere.BottomRadius)) + Atmosphere.BottomRadius;
 }
 
-
-float3 fibonacciSampling(uint i, uint N)
+//TODO: Few problems on defining this in a shared module, keep it duplicate until a fix is found
+public float3 fibonacciSampling<let Semisphere : bool>(uint i, uint N)
 {
 	
-	float gR = (1.0 + sqrt(5)) / 2.0; 
-	float theta = 2.0f * PI * i / gR;
-	float phi = acos(1.0 - 2.0 * i / N);	
+	static const float gR = PI * (sqrt(5) + 1.0); 
+	float theta = i * gR;
+    float phi = 0;
+    if(Semisphere)
+	    phi = 1.0 - 1.0 * i / (N - 1);	
+    else
+	    phi = 1.0 - 2.0 * i / (N - 1);	
+
+    phi = acos(clamp(phi,-1.0, 1.0));
 
 	float3 dir;
 
 	dir.x = cos(theta) * sin(phi);
-	dir.y = sin(theta) * sin(phi);
-	dir.z = cos(phi);
+	dir.y = cos(phi); 
+	dir.z = sin(theta) * sin(phi);
 
 
 	return normalize(dir);
@@ -44,7 +51,7 @@ internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittan
 
 	for(int i = 0; i < _samples; i++) {
 
-		float3 dir = fibonacciSampling(i,_samples);
+		float3 dir = fibonacciSampling<false>(i,_samples);
 		ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, -sunDirection) ;
 		luminance2Ord += res.luminance;
 		factor += res.luminanceFactor;

@@ -1,5 +1,6 @@
 implementing sky;
-__include common;
+import comp.common;
+__include atmosphere;
 __include multiscattering;
 __include transmittance;
 
@@ -70,7 +71,7 @@ internal ScatteredLuminanceResult getScatteredLuminance<
                 Multiscattering multiscatteringProvider = {}
     ) {
 
-    static const uint _sampleCount = 40;
+    static const uint _sampleCount = 64;
     float mu = dot(direction, float3(0,1,0));
     float nu = dot(sunDirection, direction);
 
@@ -120,8 +121,7 @@ internal ScatteredLuminanceResult getScatteredLuminance<
         if(Ground && dg > 0 && (i == _sampleCount - 1)){
             float NdL = saturate(dot(up, sunDirection)) ;
 
-            static const float3 groundColor = float3(1);
-            L += sunIlluminance * transmittanceToSun * throughput * NdL * groundColor / PI;
+            L += sunIlluminance * transmittanceToSun * throughput * NdL * GroundAlbedo / PI;
         }
 
         L += throughput * Sint;

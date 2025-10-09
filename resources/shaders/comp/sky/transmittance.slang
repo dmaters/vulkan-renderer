@@ -1,5 +1,5 @@
 implementing sky;
-__include common;
+__include atmosphere;
 
 internal void transmittanceParams(float2 uv, out float height, out float mu)
 {
@@ -40,7 +40,7 @@ float3 getTransmittance(Sampler2D<float4> transmittanceLUT, float height, float 
 
 internal float3 computeTrasmittance(float height, float mu){
 
-    static const uint _sampleCount = 40;
+    static const uint _sampleCount = 64;
 
     float dx = distanceToAtmosphere(height,mu) / _sampleCount;
 
