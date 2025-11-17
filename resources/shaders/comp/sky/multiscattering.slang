@@ -52,7 +52,7 @@ internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittan
 	for(int i = 0; i < _samples; i++) {
 
 		float3 dir = fibonacciSampling<false>(i,_samples);
-		ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, -sunDirection) ;
+		ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, sunDirection) ;
 		luminance2Ord += res.luminance;
 		factor += res.luminanceFactor;
 	

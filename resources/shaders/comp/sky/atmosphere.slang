@@ -37,13 +37,8 @@ internal struct MediumSample
 	float3 ozoneAbsorbtion;
 
 	float3 scatteringRay;
-	float3 absorptionRay;
 	float3 extinctionRay;
 
-
-	float3 albedo;
-
-	
 	static internal MediumSample Get(float height)
 	{
 		float altitude = height - Atmosphere.BottomRadius;
@@ -59,15 +54,13 @@ internal struct MediumSample
 		s.extinctionMie = densityMie * Atmosphere.MieExtinction;
 
 		s.scatteringRay = densityRay * Atmosphere.RayleighScattering;
-		s.absorptionRay = 0.0f;
-		s.extinctionRay = s.scatteringRay + s.absorptionRay;
+		s.extinctionRay = s.scatteringRay ;
 
 		s.ozoneAbsorbtion = densityOzo * Atmosphere.OzoneAbsorbtion;
 		
 		s.scattering = s.scatteringMie + s.scatteringRay;
-		s.absorption = s.absorptionMie + s.absorptionRay + s.ozoneAbsorbtion;
+		s.absorption = s.absorptionMie + s.ozoneAbsorbtion;
 		s.extinction = s.extinctionMie + s.extinctionRay + s.ozoneAbsorbtion;
-		s.albedo = s.scattering / max(0.001, s.extinction);
 
 		return s;
 	}

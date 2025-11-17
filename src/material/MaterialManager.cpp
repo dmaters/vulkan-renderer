@@ -49,9 +49,12 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 		.magFilter = vk::Filter::eLinear,
 		.minFilter = vk::Filter::eLinear,
 		.mipmapMode = vk::SamplerMipmapMode::eLinear,
-		.addressModeU = vk::SamplerAddressMode::eRepeat,
-		.addressModeV = vk::SamplerAddressMode::eRepeat,
-		.addressModeW = vk::SamplerAddressMode::eRepeat,
+		// TODO: Sky atmosphere generation has some problems with repeat sampler
+		// mode, for now a clamp works but it would be better to fix rather than
+		// shortcut it
+		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
+		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
+		.addressModeW = vk::SamplerAddressMode::eClampToEdge,
 		.maxLod = 100,
 	};
 

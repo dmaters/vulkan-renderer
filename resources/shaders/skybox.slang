@@ -1,5 +1,7 @@
 #include "bindings/camera.slang"
+#include "bindings/lighting.slang"
 #include "comp/sky/sky.slang"
+
 
 [vk::binding(0,2)] uniform Sampler2D _skyview;
 
@@ -18,15 +20,15 @@ float4 main(VertexOutput input) : SV_Target{
     
 
     float4 cameraSpaceDir = mul(uCamera.invProj, float4(clipPos,1,1));
-
     cameraSpaceDir /= cameraSpaceDir.w;
     float3 direction = mul(uCamera.invView,cameraSpaceDir).xyz;
     direction = normalize (direction);
 
     float3 sky = readSkyViewLUT(_skyview,direction);
 
-    //Arbitrary sky brightening for better visual clarity
-    sky *= 1.55;
+    float lightMultiplier = 1 - abs(transpose(uLightData.view)[2].y);
+    sky *= (lightMultiplier) * 30.0;
 
-    return float4(sky, 1.0);
+
+    return float4(sky,1.0);
 }
