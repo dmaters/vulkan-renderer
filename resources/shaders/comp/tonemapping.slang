@@ -1,8 +1,6 @@
 // Tonemapping shader 
 // The implementation is taken from the 2025 presentation at Siggraph of the GT7 tonemapping workflow
 // It is stripped of the HDR support since for now it's not supported in the pipeline
-// https://blog.selfshadow.com/publications/s2025-shading-course/pdi/s2025_pbs_pdi_slides.pdf
-// https://blog.selfshadow.com/publications/s2025-shading-course/pdi/supplemental/gt7_tone_mapping.cpp
 
 
 #define WHITE_LEVEL 250.0f //White level for SDR (250 mip)
@@ -149,11 +147,18 @@ float evaluateCurve(float x, float luminanceTarget)
     float weightToe    = 1.0f - weightLinear;
 
     float shoulder = kA_ + kB_ * exp(x * kC_);
-    float curvePeak = x < linearSection * peakIntensity ? 1 : 0;
     float toeMapped = midPoint * pow(x / midPoint, toeStrength);
 
     float mask = x < 0.0f ? 0 : 1; //if x == 0 return 0;
-    return (1 - curvePeak ) * (weightToe * toeMapped + weightLinear * x) + curvePeak * shoulder * mask;
+    if (x < linearSection * peakIntensity)
+    {
+        float toeMapped = midPoint * pow(x / midPoint, toeStrength);
+        return weightToe * toeMapped + weightLinear * x;
+    }
+    else
+    {
+        return shoulder;
+    }
 
 }
 
