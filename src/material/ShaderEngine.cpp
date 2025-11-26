@@ -5,6 +5,7 @@
 #include <slang/slang-cpp-types.h>
 #include <slang/slang.h>
 
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -41,6 +42,7 @@ ShaderEngine::~ShaderEngine() {
 std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	const std::filesystem::path& path, SlangStage stage
 ) {
+	std::cout << "Compiling :" << path.string() << std::endl;
 	assert(!path.empty());
 
 	slang::TargetDesc desc {
@@ -210,16 +212,15 @@ void getDependencies(
 	std::filesystem::path base, std::unordered_set<std::filesystem::path>& paths
 ) {
 	if (paths.contains(base)) return;
+	assert(std::filesystem::exists(base));
 
 	std::ifstream file(base);
-	if (!file) {
-		return;
-	}
+
 	paths.insert(base);
 
 	std::string line;
 	std::regex pattern1(R"(#include\s*\"([^\"]+)\")");
-	std::regex pattern2(R"(__include\s*([A-Za-z0-9.]+);)");
+	std::regex pattern2(R"((__include|import)\s*([A-Za-z0-9._]+;))");
 
 	std::smatch match;
 
@@ -227,21 +228,31 @@ void getDependencies(
 
 	result.insert(base);
 
+	static const std::filesystem::path _rootPath("resources/shaders");
+
 	while (std::getline(file, line)) {
 		if (std::regex_search(line, match, pattern1)) {
-			getDependencies(
-				base.parent_path() / std::filesystem::path(match[1].str()),
-				paths
-			);
+			std::filesystem::path path(match[1].str());
+			if (std::filesystem::exists(base.parent_path() / path))
+				getDependencies(base.parent_path() / path, paths);
+			else if (std::filesystem::exists(_rootPath / path))
+				getDependencies(_rootPath / path, paths);
+			else
+				throw "Module " + path.string() + " not found.";
 		}
 		if (std::regex_search(line, match, pattern2)) {
-			std::string import = match[1].str();
+			std::string import = match[2].str();
 			std::replace(import.begin(), import.end(), '.', '/');
+			import.pop_back();
 			import.append(".slang");
 
-			getDependencies(
-				base.parent_path() / std::filesystem::path(import), paths
-			);
+			std::filesystem::path path = std::filesystem::path(import);
+			if (std::filesystem::exists(base.parent_path() / path))
+				getDependencies(base.parent_path() / path, paths);
+			else if (std::filesystem::exists(_rootPath / path))
+				getDependencies(_rootPath / path, paths);
+			else
+				throw "Module " + path.string() + " not found.";
 		}
 	}
 

@@ -30,6 +30,7 @@ struct MaterialInstance {
 class MaterialManager {
 public:
 	struct MaterialMetadata;
+
 private:
 	struct MaterialData;
 
@@ -113,7 +114,13 @@ struct MaterialManager::MaterialMetadata {
 	vk::DescriptorSetLayout materialLayout;
 	uint32_t materialBufferSize = 0;
 
-	bool depthReadOnly = false;
+	enum class AttachmentOp {
+		ClearWrite,
+		ReadWrite,
+		Read,
+	};
+	AttachmentOp colorOp = AttachmentOp::ClearWrite;
+	AttachmentOp depthOp = AttachmentOp::ClearWrite;
 };
 
 template <typename T, typename F>

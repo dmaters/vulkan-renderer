@@ -72,12 +72,35 @@ TransientResources getTransientResources(
 	return resources;
 }
 
+std::pair<vk::AttachmentLoadOp, vk::AttachmentStoreOp> getAttachmentOps(
+	MaterialManager::MaterialMetadata::AttachmentOp operation
+) {
+	switch (operation) {
+		case MaterialManager::MaterialMetadata::AttachmentOp::ClearWrite:
+			return {
+				vk::AttachmentLoadOp::eClear,
+				vk::AttachmentStoreOp::eStore,
+			};
+		case MaterialManager::MaterialMetadata::AttachmentOp::ReadWrite:
+			return {
+				vk::AttachmentLoadOp::eLoad,
+				vk::AttachmentStoreOp::eStore,
+			};
+		case MaterialManager::MaterialMetadata::AttachmentOp::Read:
+			return {
+				vk::AttachmentLoadOp::eLoad,
+				vk::AttachmentStoreOp::eNone,
+			};
+	}
+}
+
 void setupAttachments(
 	vk::CommandBuffer& commandBuffer,
 	ResourceManager& resourceManager,
 	std::unordered_map<ResourceIndex, ImageHandle>& images,
 	std::vector<ResourceIndex>& outputs,
-	bool depthWrite
+	MaterialManager::MaterialMetadata::AttachmentOp colorOp,
+	MaterialManager::MaterialMetadata::AttachmentOp depthOp
 ) {
 	std::vector<vk::RenderingAttachmentInfo> attachments;
 
@@ -90,18 +113,12 @@ void setupAttachments(
 	for (ResourceIndex image : outputs) {
 		Image& attachment = resourceManager.getImage(images.at(image));
 
-		vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear;
-		vk::AttachmentStoreOp storeOp = vk::AttachmentStoreOp::eStore;
-
 		bool isStencil = attachment.format == vk::Format::eD24UnormS8Uint;
 		if (isStencil) hasStencil = true;
 
 		bool isDepth = attachment.format == vk::Format::eD16Unorm || isStencil;
 		if (isDepth) {
-			if (!depthWrite) {
-				loadOp = vk::AttachmentLoadOp::eLoad;
-				storeOp = vk::AttachmentStoreOp::eDontCare;
-			}
+			auto [loadOp, storeOp] = getAttachmentOps(depthOp);
 
 			depthAttachment = vk::RenderingAttachmentInfo{
 				.imageView = attachment.view,
@@ -116,6 +133,8 @@ void setupAttachments(
 			height = attachment.size.height;
 
 		} else {
+			auto [loadOp, storeOp] = getAttachmentOps(colorOp);
+
 			colorAttachments.push_back({
 			.imageView = attachment.view,
 			.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -196,7 +215,8 @@ void RenderPass(
 		context.resourceManager,
 		context.images,
 		context.outputs,
-		!metadata.depthReadOnly
+		metadata.colorOp,
+		metadata.depthOp
 	);
 
 	const Material& material =

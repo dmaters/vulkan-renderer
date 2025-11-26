@@ -20,7 +20,7 @@ namespace Shadow{
         }
 
         for(int i = 0; i< 8; i++){
-            float4 point = mul(uLightData.lights[uLightData.directIndex].view, float4(frustumPoints[i],1) );           
+            float4 point = mul(uLightData.view, float4(frustumPoints[i],1) );           
 
             right = max(right,point.x);
             left = min(left,point.x);
@@ -51,7 +51,7 @@ namespace Shadow{
     float getValue(Sampler2D shadowMap, float3 worldPos, uint cascade) {
 
         
-        float4 lightSpacePos = mul(mul(shadowProjectionMatrix(cascade), uLightData.lights[uLightData.directIndex].view), float4(worldPos,1));
+        float4 lightSpacePos = mul(mul(shadowProjectionMatrix(cascade), uLightData.view), float4(worldPos,1));
     
         lightSpacePos.y = -lightSpacePos.y;
         
