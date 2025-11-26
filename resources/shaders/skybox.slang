@@ -1,5 +1,4 @@
 #include "bindings/camera.slang"
-#include "bindings/lighting.slang"
 #include "comp/sky/sky.slang"
 
 
@@ -26,8 +25,7 @@ float4 main(VertexOutput input) : SV_Target{
 
     float3 sky = readSkyViewLUT(_skyview,direction);
 
-    float lightMultiplier = 1 - abs(transpose(uLightData.view)[2].y);
-    sky *= (lightMultiplier) * 30.0;
+    sky *=  50.0;
 
 
     return float4(sky,1.0);
