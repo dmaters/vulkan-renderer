@@ -10,7 +10,7 @@
 
 
 
-void main(uint3 dispatch : SV_DispatchThreadID) {
+void main(uint3 dispatch : SV_GroupID) {
 
     float3 sunDirection = -transpose(uLightData.view)[2].xyz;
     sunDirection.y = -sunDirection.y;

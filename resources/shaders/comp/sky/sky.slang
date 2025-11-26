@@ -56,7 +56,7 @@ public void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D transmittan
     skyviewLUT.Store(coord,float4(luminance,1));
 }
 
-public void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT,  Sampler2D transmittanceLUT, uint2 coord, uint3 threadID, RWStructuredBuffer<float> cache) {
+public void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT,  Sampler2D transmittanceLUT, uint2 coord, uint thread, RWStructuredBuffer<float> cache) {
 
     float2 res;
     multiscatteringLUT.GetDimensions(res.x,res.y);
@@ -69,6 +69,11 @@ public void writeMultiscatteringLUT(WTexture2D<float4> multiscatteringLUT,  Samp
     
     float3 sunDir = normalize(float3(0, muS, sqrt(1.0 - muS * muS)));
 
-    float3 multiscattering = computeMultipleScattering(transmittanceLUT,height,sunDir, threadID, cache );
-    if(threadID.x == 0) multiscatteringLUT.Store(coord,float4(multiscattering,1));
+
+    uint _samples = 64;
+
+    uint cacheOffset = (coord.y * uint(res.x) + coord.x) * _samples * 3;
+
+    float3 multiscattering = computeMultipleScattering(transmittanceLUT,height,sunDir, _samples, thread, cacheOffset, cache);
+    if(thread == 0) multiscatteringLUT.Store(coord,float4(multiscattering ,1));
 }

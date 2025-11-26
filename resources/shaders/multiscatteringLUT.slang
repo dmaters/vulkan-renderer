@@ -6,8 +6,10 @@
 
 
 
-[numthreads(64,1,1)]
-void main(uint3 dispatch : SV_DispatchThreadID, uint3 thread : SV_GroupThreadID) {
-    writeMultiscatteringLUT(_multiscatteringLUT,_transmittanceLUT,dispatch.xy, thread, _computeScratchBuffer);
+[NumThreads(64,1,1)]
+void main(uint3 dispatch : SV_GroupID, uint3 thread : SV_GroupThreadID) {
+
+
+    writeMultiscatteringLUT(_multiscatteringLUT,_transmittanceLUT,dispatch.xy, thread.x, _computeScratchBuffer);
         
 }

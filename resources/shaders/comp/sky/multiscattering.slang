@@ -39,49 +39,39 @@ public float3 fibonacciSampling<let Semisphere : bool>(uint i, uint N)
 }
 
 
-internal float3 computeMultipleScattering(Sampler2D transmittanceLUT, float height, float3 sunDirection, uint3 threadID, RWStructuredBuffer<float> cache ){
-
-	static const uint _samples = 64;
-
+internal float3 computeMultipleScattering(Sampler2D transmittanceLUT, float height, float3 sunDirection, uint samples, uint sampleIndex, uint cacheOffset, RWStructuredBuffer<float> cache ){
 	
 	const float angle = 4.0 * PI;
 	const float phase = 1.0 / angle;
 
-	
 
-	float3 dir = fibonacciSampling<false>(threadID.x,_samples);
+
+	float3 dir = -fibonacciSampling<false>(sampleIndex,samples);
 	ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, sunDirection) ;
-	cache[threadID.x * 3 + 0] = res.luminance.r;
-	cache[threadID.x * 3 + 1] = res.luminance.g;
-	cache[threadID.x * 3 + 2] = res.luminance.b;
+	
+	
+	float3 sampleLuminance = (res.luminance / samples) / (1.0 - res.luminanceFactor / samples);
+	cache[cacheOffset + sampleIndex * 3 + 0] = sampleLuminance.r;
+	cache[cacheOffset + sampleIndex * 3 + 1] = sampleLuminance.g;
+	cache[cacheOffset + sampleIndex * 3 + 2] = sampleLuminance.b;
 
 
-	cache[threadID.x * 3 + _samples * 3 + 0] = res.luminanceFactor.r;
-	cache[threadID.x * 3 + _samples * 3 + 1] = res.luminanceFactor.g;
-	cache[threadID.x * 3 + _samples * 3 + 2] = res.luminanceFactor.b;
 	
 	AllMemoryBarrierWithGroupSync();
 
+	
+	if(sampleIndex > 0) return 0;
 
-	if(threadID.x > 0)	return 0;
+	float3 luminance = float3(0);
+	for(int i = 0; i < samples; i++){
+		luminance += float3(
+			cache[cacheOffset + i * 3 + 0],
+			cache[cacheOffset + i * 3 + 1],
+			cache[cacheOffset + i * 3 + 2]
+		);
 
-	float3 luminance2Ord = float3(0);
-	float3 factor = float3(0);
-	for(int i = 0; i < _samples; i++){
-		luminance2Ord += float3(
-			cache[threadID.x * 3 + 0],
-			cache[threadID.x * 3 + 1],
-			cache[threadID.x * 3 + 2]
-		);
-		factor += float3(
-			cache[threadID.x * 3 + _samples * 3 + 0],
-			cache[threadID.x * 3 + _samples * 3 + 1],
-			cache[threadID.x * 3 + _samples * 3 + 2]
-		);
 	}
 
-	float3 l = luminance2Ord / _samples;
-	float3 f = 1.0 / (1.0 - factor / _samples);
 	
-	return f * l ;
+	return luminance;
 }

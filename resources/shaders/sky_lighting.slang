@@ -33,7 +33,7 @@ public float3 fibonacciSampling<let Semisphere : bool>(uint i, uint N)
 
 
 
-void main(uint3 dispatch : SV_DispatchThreadID) {
+void main(uint3 dispatch : SV_GroupID) {
     SphericalHarmonic sh;
 
     static const uint _samples = 32;

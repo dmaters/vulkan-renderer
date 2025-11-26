@@ -5,7 +5,7 @@
 [vk_binding(1,2)] WTexture2D<float4> gOutputTexture;
 
 
-void main(uint3 dispatchThreadID : SV_DispatchThreadID)
+void main(uint3 dispatchThreadID : SV_GroupID)
 {
     uint2 coord = dispatchThreadID.xy;
 

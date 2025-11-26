@@ -55,7 +55,7 @@ void Renderer::createRenderGraph() {
 	ResourceIndex computeScratchBuffer = builder.createBuffer(
 		"compute_scratch_buffer",
 		ResourceManager::BufferDescription {
-			.size = 1 << 20,
+			.size = 1 << 24,  // 16MB
 			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
 		}
 	);

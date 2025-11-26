@@ -5,7 +5,7 @@
 
 
 
-void main(uint3 dispatch : SV_DispatchThreadID) {
+void main(uint3 dispatch : SV_GroupID) {
 
     writeTransmittanceLUT(_transmittanceLUT,dispatch.xy);
         
