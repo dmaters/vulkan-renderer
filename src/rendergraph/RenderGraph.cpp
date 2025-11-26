@@ -57,6 +57,7 @@ void RenderGraph::writeMemoryBarrier(
 	for (auto& [index, barrier] : task.barriers.bufferBarriers) {
 		Buffer& buffer = m_resourceManager.getBuffer(m_buffers.at(index));
 		barrier.buffer = buffer.buffer;
+		barrier.size = buffer.size;
 		bufferBarriers.push_back(barrier);
 	}
 
