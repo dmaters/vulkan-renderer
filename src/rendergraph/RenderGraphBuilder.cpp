@@ -45,13 +45,13 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 		TaskResourceDependency lastAccess;
 
 		TaskResourceDependency currentAccess;
+		uint8_t taskCount = m_dependencies.at(index).size();
 
-		for (int i = 0; i < m_dependencies.at(index).size(); i++) {
+		for (int i = 0; i < taskCount; i++) {
 			if (m_dependencies.at(index)[i].taskIndex != taskIndex) continue;
 
-			lastAccess = m_dependencies.at(index).at(
-				(i - 1) % m_dependencies.at(index).size()
-			);
+			lastAccess =
+				m_dependencies.at(index).at((taskCount + i - 1) % taskCount);
 
 			currentAccess = m_dependencies.at(index).at(i);
 		}
@@ -86,12 +86,12 @@ GraphData::Barriers RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 		TaskResourceDependency lastAccess;
 		TaskResourceDependency currentAccess;
 
-		for (int i = 0; i < m_dependencies.at(index).size(); i++) {
+		uint8_t taskCount = m_dependencies.at(index).size();
+		for (int i = 0; i < taskCount; i++) {
 			if (m_dependencies.at(index)[i].taskIndex != taskIndex) continue;
 
-			lastAccess = m_dependencies.at(index).at(
-				(i - 1) % m_dependencies.at(index).size()
-			);
+			lastAccess =
+				m_dependencies.at(index).at((taskCount + i - 1) % taskCount);
 
 			currentAccess = m_dependencies.at(index).at(i);
 		}
