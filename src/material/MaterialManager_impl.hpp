@@ -377,15 +377,23 @@ MaterialIndex
 MaterialManager::registerMaterial<MaterialDefinitions::MultiscatteringLUT>() {
 	MaterialIndex index = ++m_materialCount;
 	std::vector<vk::DescriptorSetLayoutBinding> transientBindings {
+
 		{
          .binding = 0,
          .descriptorType = vk::DescriptorType::eCombinedImageSampler,
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eCompute,
+
 		 },
 		{
          .binding = 1,
          .descriptorType = vk::DescriptorType::eStorageImage,
+         .descriptorCount = 1,
+         .stageFlags = vk::ShaderStageFlagBits::eCompute,
+		 },
+		{
+         .binding = 2,
+         .descriptorType = vk::DescriptorType::eStorageBuffer,
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eCompute,
 		 },
@@ -492,7 +500,7 @@ MaterialManager::registerMaterial<MaterialDefinitions::SkyLighting>() {
 	std::vector<vk::DescriptorSetLayoutBinding> transientBindings {
 		{
          .binding = 0,
-         .descriptorType = vk::DescriptorType::eSampledImage,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
          .descriptorCount = 1,
          .stageFlags = vk::ShaderStageFlagBits::eCompute,
 		 },

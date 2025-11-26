@@ -52,6 +52,14 @@ Renderer::Renderer(SDL_Window* window) :
 void Renderer::createRenderGraph() {
 	RenderGraphBuilder builder;
 
+	ResourceIndex computeScratchBuffer = builder.createBuffer(
+		"compute_scratch_buffer",
+		ResourceManager::BufferDescription {
+			.size = 1 << 20,
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		}
+	);
+
 	ResourceIndex transmittanceLUT = builder.createImage(
 		"transmittanceLUT",
 		{
@@ -97,10 +105,11 @@ void Renderer::createRenderGraph() {
 		"multiscatteringLUT",
 		TaskType::Compute,
 		{
-			{ transmittanceLUT, ResourceUsage::Type::SampledRead }
+			{ transmittanceLUT, ResourceUsage::Type::SampledRead },
     },
 		{
 			{ multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
+			{ computeScratchBuffer, ResourceUsage::Type::StorageBufferWrite },
 		},
 		[material = m_materialManager.getMaterialIndex("multiscatteringLUT")](
 			TaskContext& context

@@ -3,7 +3,7 @@ import comp.sky.sky;
 import comp.common.spherical_harmonics;
 import comp.common;
 
-[vk_binding(0,2)] Sampler2D<float4>  _skyviewLUT;
+[vk_binding(0,2)] uniform Sampler2D  _skyviewLUT;
 [vk_binding(1,2)] RWStructuredBuffer<SphericalHarmonic> _SH;
 
 

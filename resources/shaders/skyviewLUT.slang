@@ -4,8 +4,8 @@
 #include "bindings/lighting.slang"
 
 
-[vk_binding(0,2)] Sampler2D<float4> _transmittanceLUT;
-[vk_binding(1,2)] Sampler2D<float4> _multiscatteringLUT;
+[vk_binding(0,2)] uniform Sampler2D _transmittanceLUT;
+[vk_binding(1,2)] uniform Sampler2D _multiscatteringLUT;
 [vk_binding(2,2)] WTexture2D<float4> _skyviewLUT;
 
 

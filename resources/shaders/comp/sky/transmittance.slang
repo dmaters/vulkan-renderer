@@ -32,7 +32,7 @@ internal void transmittanceUV(float height, float mu, out float2 uv)
 	uv = float2(x_mu,x_r);
 }
 
-float3 getTransmittance(Sampler2D<float4> transmittanceLUT, float height, float mus) {
+float3 getTransmittance(uniform Sampler2D transmittanceLUT, float height, float mus) {
 	float2 uv;
 	transmittanceUV(height, mus, uv);
  	return transmittanceLUT.Sample(uv).rgb;

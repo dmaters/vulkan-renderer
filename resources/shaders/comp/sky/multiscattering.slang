@@ -39,23 +39,45 @@ public float3 fibonacciSampling<let Semisphere : bool>(uint i, uint N)
 }
 
 
-internal float3 computeMultipleScattering(Sampler2D<vector<float,4>> transmittanceLUT, float height, float3 sunDirection){
+internal float3 computeMultipleScattering(Sampler2D transmittanceLUT, float height, float3 sunDirection, uint3 threadID, RWStructuredBuffer<float> cache ){
 
 	static const uint _samples = 64;
 
-	float3 luminance2Ord = float3(0);
-	float3 factor = float3(0);
+	
 	const float angle = 4.0 * PI;
 	const float phase = 1.0 / angle;
 
-
-	for(int i = 0; i < _samples; i++) {
-
-		float3 dir = fibonacciSampling<false>(i,_samples);
-		ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, sunDirection) ;
-		luminance2Ord += res.luminance;
-		factor += res.luminanceFactor;
 	
+
+	float3 dir = fibonacciSampling<false>(threadID.x,_samples);
+	ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase,DummyMultiscatteringProvider,false,true>(transmittanceLUT, height, dir, sunDirection) ;
+	cache[threadID.x * 3 + 0] = res.luminance.r;
+	cache[threadID.x * 3 + 1] = res.luminance.g;
+	cache[threadID.x * 3 + 2] = res.luminance.b;
+
+
+	cache[threadID.x * 3 + _samples * 3 + 0] = res.luminanceFactor.r;
+	cache[threadID.x * 3 + _samples * 3 + 1] = res.luminanceFactor.g;
+	cache[threadID.x * 3 + _samples * 3 + 2] = res.luminanceFactor.b;
+	
+	AllMemoryBarrierWithGroupSync();
+
+
+	if(threadID.x > 0)	return 0;
+
+	float3 luminance2Ord = float3(0);
+	float3 factor = float3(0);
+	for(int i = 0; i < _samples; i++){
+		luminance2Ord += float3(
+			cache[threadID.x * 3 + 0],
+			cache[threadID.x * 3 + 1],
+			cache[threadID.x * 3 + 2]
+		);
+		factor += float3(
+			cache[threadID.x * 3 + _samples * 3 + 0],
+			cache[threadID.x * 3 + _samples * 3 + 1],
+			cache[threadID.x * 3 + _samples * 3 + 2]
+		);
 	}
 
 	float3 l = luminance2Ord / _samples;

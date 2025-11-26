@@ -43,7 +43,7 @@ struct  DummyMultiscatteringProvider : IMultiscatteringProvider {
     float3 getMultiscattering(float height, float muS) {return float3(0);}
 }
 struct LUTMultiscatteringProvider : IMultiscatteringProvider {
-    Sampler2D<float4> multiscatteringLUT;
+    uniform Sampler2D multiscatteringLUT;
     float3 getMultiscattering(float height, float muS) {
         float2 uv;
         getMultipleScatteringUV(muS,height,uv);
@@ -63,7 +63,7 @@ internal ScatteredLuminanceResult getScatteredLuminance<
                 let Shadow: bool,
                 let Ground : bool
             >(
-                Sampler2D<float4> transmittanceLUT,
+                uniform Sampler2D transmittanceLUT,
                 float height,
                 float3 direction,
                 float3 sunDirection,
