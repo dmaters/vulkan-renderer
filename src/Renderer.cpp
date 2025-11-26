@@ -16,6 +16,8 @@
 
 #include "Instance.hpp"
 #include "Swapchain.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/trigonometric.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
@@ -49,6 +51,120 @@ Renderer::Renderer(SDL_Window* window) :
 
 void Renderer::createRenderGraph() {
 	RenderGraphBuilder builder;
+
+	ResourceIndex computeScratchBuffer = builder.createBuffer(
+		"compute_scratch_buffer",
+		ResourceManager::BufferDescription {
+			.size = 1 << 24,  // 16MB
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		}
+	);
+
+	ResourceIndex transmittanceLUT = builder.createImage(
+		"transmittanceLUT",
+		{
+			.width = 256,
+			.height = 64,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+
+	builder.addTask(
+		"transmittanceLUT",
+		TaskType::Compute,
+		{
+    },
+		{
+			{ transmittanceLUT, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("transmittanceLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 256, 64, 1 }); }
+	);
+
+	ResourceIndex multiscatteringLUT = builder.createImage(
+		"multiscatteringLUT",
+		{
+			.width = 64,
+			.height = 64,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+
+	builder.addTask(
+		"multiscatteringLUT",
+		TaskType::Compute,
+		{
+			{ transmittanceLUT, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
+			{ computeScratchBuffer, ResourceUsage::Type::StorageBufferWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("multiscatteringLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 64, 64, 1 }); }
+	);
+
+	ResourceIndex skyviewLUT = builder.createImage(
+		"skyviewLUT",
+		{
+			.width = 200,
+			.height = 100,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR16G16B16A16Sfloat,
+			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		}
+	);
+	builder.addTask(
+		"skyviewLUT",
+		TaskType::Compute,
+		{
+			{ transmittanceLUT,   ResourceUsage::Type::SampledRead },
+			{ multiscatteringLUT, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ skyviewLUT, ResourceUsage::Type::ShaderWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("skyviewLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 200, 100, 1 }); }
+	);
+
+	ResourceIndex skyLightingSH = builder.createBuffer(
+		"skyLightingSH",
+		{
+			.size = sizeof(glm::vec4) * 9,
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+		}
+	);
+	builder.addTask(
+		"skyLighting",
+		TaskType::Compute,
+		{
+			{ skyviewLUT, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ skyLightingSH, ResourceUsage::Type::StorageBufferWrite },
+		},
+		[material = m_materialManager.getMaterialIndex("skyLighting")](
+			TaskContext& context
+		) { ComputePass(context, material, { 1, 1, 1 }); }
+	);
 
 	ResourceIndex shadowAtlas = builder.createImage(
 		"shadow_atlas",
@@ -187,17 +303,33 @@ void Renderer::createRenderGraph() {
 		"pbr_lighting",
 		TaskType::Graphic,
 		{
-			{ albedo,            ResourceUsage::Type::SampledRead },
-			{ normal,            ResourceUsage::Type::SampledRead },
-			{ worldPos,          ResourceUsage::Type::SampledRead },
-			{ roughnessMetallic, ResourceUsage::Type::SampledRead },
-			{ shadowAtlas,       ResourceUsage::Type::SampledRead }
+			{ albedo,            ResourceUsage::Type::SampledRead   },
+			{ normal,            ResourceUsage::Type::SampledRead   },
+			{ worldPos,          ResourceUsage::Type::SampledRead   },
+			{ roughnessMetallic, ResourceUsage::Type::SampledRead   },
+			{ shadowAtlas,       ResourceUsage::Type::SampledRead   },
+			{ skyLightingSH,     ResourceUsage::Type::UniformBuffer }
     },
 		{
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilRead },
 		},
 		[material = m_materialManager.getMaterialIndex("lighting_deferred"),
+	     &primitives = m_currentScene.primitives](TaskContext& context) {
+			RenderPass(context, material, primitives);
+		}
+	);
+	builder.addTask(
+		"skybox",
+		TaskType::Graphic,
+		{
+			{ skyviewLUT, ResourceUsage::Type::SampledRead }
+    },
+		{
+			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
+			{ depth, ResourceUsage::Type::DepthStencilRead },
+		},
+		[material = m_materialManager.getMaterialIndex("skybox"),
 	     &primitives = m_currentScene.primitives](TaskContext& context) {
 			RenderPass(context, material, primitives);
 		}
@@ -269,10 +401,13 @@ void Renderer::load(const std::filesystem::path& path) {
 	orientation[0] = glm::vec3(1, 0, 0);
 	orientation[1] = glm::vec3(0, 0, 1);
 	orientation[2] = glm::vec3(0, 1, 0);
+	orientation = glm::rotate_slow(
+		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
+	);
 	m_currentScene.lights.push_back({
 		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
-		.intensity = 20,
+		.intensity = 25.0f,
 	});
 
 	const auto& lights = m_currentScene.lights;
@@ -280,11 +415,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_resourceManager.queueBufferUpdate<MaterialDefinitions::Lights>(
 		m_resourceManager.getNamedBufferIndex("light_buffer"),
 		[lights](MaterialDefinitions::Lights& lightUBO) {
-			lightUBO.count = lights.size();
-			lightUBO.directLightIndex = 0;
-			for (int i = 0; i < lights.size(); i++) {
-				lightUBO.lights[i] = lights[i].getShaderObject();
-			}
+			lightUBO.light = lights[0].getShaderObject();
 		}
 	);
 
@@ -308,6 +439,17 @@ void Renderer::load(const std::filesystem::path& path) {
 		.instanceCount = 1,
 		.materials = { {
 			lighting,
+		} },
+	});
+
+	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
+	m_currentScene.primitives.push_back({
+		.baseVertex = 0,
+		.baseIndex = 0,
+		.indexCount = 3,
+		.instanceCount = 1,
+		.materials = { {
+			skybox,
 		} },
 	});
 	createRenderGraph();

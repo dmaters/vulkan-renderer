@@ -14,6 +14,7 @@
 #include "RenderGraph.hpp"
 #include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
+#include "glm/matrix.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/Buffer.hpp"
@@ -332,10 +333,14 @@ void RenderGraph::submit(const Scene& scene) {
 	commandBuffer.begin(vk::CommandBufferBeginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 	});
+	glm::mat4 view = scene.camera.getViewMatrix();
+	glm::mat4 proj = scene.camera.getProjectionMatrix();
 
 	MaterialDefinitions::Camera cameraView {
-		.view = scene.camera.getViewMatrix(),
-		.projection = scene.camera.getProjectionMatrix(),
+		.view = view,
+		.projection = proj,
+		.invView = glm::inverse(view),
+		.invProj = glm::inverse(proj),
 		.frustumPoints = scene.camera.getFrustumPoints(),
 	};
 
@@ -450,8 +455,6 @@ void RenderGraph::build(GraphData graphData) {
 	);
 	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
-	uint32_t index = 0;
-
 	int i = 0;
 	for (auto& [index, _] : graphData.images) {
 		if (graphData.swapchainImageRatio.contains(index)) continue;
@@ -461,10 +464,11 @@ void RenderGraph::build(GraphData graphData) {
 		i++;
 	}
 
+	i = 0;
 	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
 	for (auto& [buffer, _] : graphData.buffers) {
-		m_buffers[index] = buffers[i];
-		m_resourceManager.setName(graphData.names[index], buffers[i]);
+		m_buffers[buffer] = buffers[i];
+		m_resourceManager.setName(graphData.names[buffer], buffers[i]);
 
 		i++;
 	}
