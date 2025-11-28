@@ -64,11 +64,7 @@ Instance& Instance::Create(SDL_Window* window) {
 }
 
 //// Instance
-const std::vector<const char*> instanceValidationLayers = {
-	"VK_LAYER_KHRONOS_validation",
-	"VK_LAYER_LUNARG_crash_diagnostic",
 
-};
 const std::vector<const char*> instanceExtensionLayers {
 	vk::EXTDebugUtilsExtensionName,
 	vk::KHRSurfaceExtensionName,
@@ -86,8 +82,6 @@ vk::Instance createInstance() {
 
 	vk::Instance instance = vk::createInstance(vk::InstanceCreateInfo {
 		.pApplicationInfo = &appInfo,
-		.enabledLayerCount = (uint32_t)instanceValidationLayers.size(),
-		.ppEnabledLayerNames = instanceValidationLayers.data(),
 		.enabledExtensionCount = (uint32_t)instanceExtensionLayers.size(),
 		.ppEnabledExtensionNames = instanceExtensionLayers.data(),
 	});
