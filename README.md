@@ -8,7 +8,7 @@ A Vulkan-based renderer designed for experimenting and testing various graphics 
 ### Requirements
 
 - C++20 or later
-- Vulkan 1.4 SDK 
+- Vulkan 1.4+
 - CMake (version 3.7+)
 
 ### Building
@@ -26,7 +26,7 @@ Run the executable:
 
 This project has been primarily tested with the [Fox](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox) and [Sponza](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Sponza) models from Khronos. 
 
-It's adviced to use those models to avoid unexpected behaviours while testing the build.
+It's advised to use those models to avoid unexpected behaviours while testing the build.
 
 The project is designed to support a wide range of glTF models.
 If you encounter any issues while loading other models, please consider creating an issue to help improve compatibility.

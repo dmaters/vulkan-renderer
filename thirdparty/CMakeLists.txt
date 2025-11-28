@@ -26,23 +26,19 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/nothings/stb
 )
 
-FetchContent_MakeAvailable(glm sdl assimp stb)
+
+FetchContent_Declare(
+        slang
+        GIT_REPOSITORY https://github.com/shader-slang/slang
+        GIT_TAG v2025.23.1
+)
+
+
+FetchContent_MakeAvailable(glm sdl assimp stb slang)
 
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
-
-if(WIN32)
-    configure_file(
-        "$ENV{VULKAN_SDK}/bin/slang-glslang.dll"
-        "${CMAKE_BINARY_DIR}/slang-glslang.dll"
-        COPYONLY
-    )
-endif()
-
-target_link_directories(${PROJECT_NAME} INTERFACE "$ENV{VULKAN_SDK}/lib")
-
-add_library(stb INTERFACE)
-target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+target_include_directories(${PROJECT_NAME} INTERFACE ${slang_INCLUDE_DIR})
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
     glm::glm
