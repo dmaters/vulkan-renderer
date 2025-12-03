@@ -4,6 +4,6 @@ samples
 .cache
 .vscode
 .zed
-
+.idea
 .vs
 CMakeSettings.json
