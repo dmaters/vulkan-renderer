@@ -33,7 +33,7 @@ public float3 readSkyViewLUT(Sampler2D skyviewLUT, float3 direction) {
     uv.x = lon / PI;
     uv.y = (1.0 + sign(lat) *  sqrt(2.0 * abs(lat) / PI)) / 2;
     uv.x = abs(uv.x);
-    return skyviewLUT.Sample(uv).rgb;
+    return skyviewLUT.SampleLevelZero(uv).rgb;
 }
 
 public void writeSkyViewLUT(WTexture2D<float4> skyviewLUT, Sampler2D transmittanceLUT, Sampler2D multitransferLUT, uint2 coord, float3 sunDirection, float sunIntensity){

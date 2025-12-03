@@ -47,7 +47,7 @@ struct LUTMultiscatteringProvider : IMultiscatteringProvider {
     float3 getMultiscattering(float height, float muS) {
         float2 uv;
         getMultipleScatteringUV(muS,height,uv);
-        return multiscatteringLUT.Sample(uv).rgb;
+        return multiscatteringLUT.SampleLevelZero(uv).rgb;
     }
 }
 
