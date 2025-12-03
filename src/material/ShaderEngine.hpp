@@ -1,6 +1,6 @@
 #pragma once
 
-#include <slang/slang.h>
+#include <slang.h>
 
 #include <cassert>
 #include <condition_variable>

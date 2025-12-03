@@ -1,9 +1,9 @@
 #include "ShaderEngine.hpp"
 
-#include <slang/slang-com-ptr.h>
-#include <slang/slang-cpp-types-core.h>
-#include <slang/slang-cpp-types.h>
-#include <slang/slang.h>
+#include <slang-com-ptr.h>
+#include <slang-cpp-types-core.h>
+#include <slang-cpp-types.h>
+#include <slang.h>
 
 #include <cassert>
 #include <chrono>
@@ -144,10 +144,12 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			return std::nullopt;
 	}
 
-	vk::ShaderModule module = Instance::Get().device.createShaderModule({
-		.codeSize = kernelBlob->getBufferSize(),
-		.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
-	});
+	vk::ShaderModule module = Instance::Get().device.createShaderModule(
+		{
+			.codeSize = kernelBlob->getBufferSize(),
+			.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
+		}
+	);
 
 	session->release();
 
@@ -169,10 +171,12 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 			.pName = "main",
 		};
 
-		return PipelineBuilder::BuildComputePipeline({
-			.stage = module,
-			.setLayouts = metadata.layouts,
-		});
+		return PipelineBuilder::BuildComputePipeline(
+			{
+				.stage = module,
+				.setLayouts = metadata.layouts,
+			}
+		);
 	}
 
 	std::vector<vk::PipelineShaderStageCreateInfo> modules;
@@ -182,11 +186,13 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 			loadModule(metadata.modules.vertex, SlangStage::SLANG_STAGE_VERTEX);
 		if (!res.has_value()) return std::nullopt;
 
-		modules.push_back({
-			.stage = vk::ShaderStageFlagBits::eVertex,
-			.module = res.value(),
-			.pName = "main",
-		});
+		modules.push_back(
+			{
+				.stage = vk::ShaderStageFlagBits::eVertex,
+				.module = res.value(),
+				.pName = "main",
+			}
+		);
 	}
 
 	if (!metadata.modules.fragment.empty()) {
@@ -195,18 +201,22 @@ std::optional<Pipeline> ShaderEngine::buildPipeline(
 		);
 		if (!res.has_value()) return std::nullopt;
 
-		modules.push_back({
-			.stage = vk::ShaderStageFlagBits::eFragment,
-			.module = res.value(),
-			.pName = "main",
-		});
+		modules.push_back(
+			{
+				.stage = vk::ShaderStageFlagBits::eFragment,
+				.module = res.value(),
+				.pName = "main",
+			}
+		);
 	}
 
-	return PipelineBuilder::BuildGraphicPipeline({
-		.shaderStages = modules,
-		.setLayouts = metadata.layouts,
-		.configuration = metadata.configuration,
-	});
+	return PipelineBuilder::BuildGraphicPipeline(
+		{
+			.shaderStages = modules,
+			.setLayouts = metadata.layouts,
+			.configuration = metadata.configuration,
+		}
+	);
 }
 void getDependencies(
 	std::filesystem::path base, std::unordered_set<std::filesystem::path>& paths

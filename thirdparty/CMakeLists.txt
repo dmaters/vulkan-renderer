@@ -4,47 +4,77 @@ add_library(${PROJECT_NAME} INTERFACE)
 include(FetchContent)
 
 FetchContent_Declare(
-    glm
-    GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 1.0.1
+        glm
+        GIT_REPOSITORY https://github.com/g-truc/glm.git
+        GIT_TAG 1.0.1
 )
 
 FetchContent_Declare(
-    sdl
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL
-    GIT_TAG release-3.2.20
+        sdl
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL
+        GIT_TAG release-3.2.20
 )
 
 FetchContent_Declare(
-    assimp
-    GIT_REPOSITORY https://github.com/assimp/assimp
-    GIT_TAG v6.0.2
+        assimp
+        GIT_REPOSITORY https://github.com/assimp/assimp
+        GIT_TAG v6.0.2
 )
 
 FetchContent_Declare(
-    stb
-    GIT_REPOSITORY https://github.com/nothings/stb
+        stb
+        GIT_REPOSITORY https://github.com/nothings/stb
 )
 
-
-FetchContent_Declare(
-        slang
-        GIT_REPOSITORY https://github.com/shader-slang/slang
-        GIT_TAG v2025.23.1
-)
+FetchContent_MakeAvailable(glm sdl assimp stb)
 
 
-FetchContent_MakeAvailable(glm sdl assimp stb slang)
+set(SLANG_VERSION "2025.23.2")
+
+if (WIN32)
+    set(SLANG_OS "windows-x86_64")
+elseif (UNIX)
+    set(SLANG_OS "linux-x86_64")
+endif ()
+
+include(FetchContent)
+FetchContent_Populate(slang_zip URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-${SLANG_OS}.zip QUIET)
+
+add_library(slang INTERFACE)
+add_library(slang::slang-compiler SHARED IMPORTED GLOBAL)
+add_library(slang::slang-glslang MODULE IMPORTED GLOBAL)
+
+target_include_directories(slang INTERFACE "${slang_zip_SOURCE_DIR}/include")
+if (WIN32)
+    set_target_properties(slang::slang-compiler PROPERTIES
+            IMPORTED_LOCATION ${slang_zip_SOURCE_DIR}/bin/slang-compiler.dll
+            IMPORTED_IMPLIB ${slang_zip_SOURCE_DIR}/lib/slang-compiler.lib
+    )
+    set_target_properties(slang::slang-glslang PROPERTIES
+            IMPORTED_LOCATION ${slang_zip_SOURCE_DIR}/bin/slang-glslang.dll
+    )
+    target_link_libraries(slang INTERFACE slang::slang-compiler)
+elseif (UNIX)
+    set_target_properties(slang::slang-compiler PROPERTIES
+            IMPORTED_LOCATION "${slang_zip_SOURCE_DIR}/lib/libslang-compiler.so.0.${SLANG_VERSION}"
+    )
+    set_target_properties(slang::slang-glslang PROPERTIES
+            IMPORTED_LOCATION "${slang_zip_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}.so"
+    )
+    target_link_libraries(slang INTERFACE slang::slang-compiler)
+endif ()
+
 
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${slang_INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
+
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
-    glm::glm
-    SDL3::SDL3
-    Vulkan::Vulkan
-    assimp
-    stb
-    slang
+        glm::glm
+        SDL3::SDL3
+        Vulkan::Vulkan
+        assimp
+        slang
 )
