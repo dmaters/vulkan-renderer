@@ -41,33 +41,22 @@ include(FetchContent)
 FetchContent_Populate(slang_zip URL https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-${SLANG_OS}.zip QUIET)
 
 add_library(slang INTERFACE)
-add_library(slang::slang-compiler SHARED IMPORTED GLOBAL)
-add_library(slang::slang-glslang MODULE IMPORTED GLOBAL)
 
 target_include_directories(slang INTERFACE "${slang_zip_SOURCE_DIR}/include")
 if (WIN32)
-    set_target_properties(slang::slang-compiler PROPERTIES
-            IMPORTED_LOCATION ${slang_zip_SOURCE_DIR}/bin/slang-compiler.dll
-            IMPORTED_IMPLIB ${slang_zip_SOURCE_DIR}/lib/slang-compiler.lib
+    target_link_libraries(slang INTERFACE "${slang_zip_SOURCE_DIR}/lib/slang-compiler.lib")
+
+    set_target_properties(slang PROPERTIES
+            INTERFACE_DLL_PATH "${slang_zip_SOURCE_DIR}/bin/slang-compiler.dll;${slang_zip_SOURCE_DIR}/bin/slang-glslang.dll"
     )
-    set_target_properties(slang::slang-glslang PROPERTIES
-            IMPORTED_LOCATION ${slang_zip_SOURCE_DIR}/bin/slang-glslang.dll
-    )
-    target_link_libraries(slang INTERFACE slang::slang-compiler)
 elseif (UNIX)
-    set_target_properties(slang::slang-compiler PROPERTIES
-            IMPORTED_LOCATION "${slang_zip_SOURCE_DIR}/lib/libslang-compiler.so.0.${SLANG_VERSION}"
+    target_link_libraries(slang INTERFACE "${slang_zip_SOURCE_DIR}/lib/libslang-compiler.so.0.${SLANG_VERSION}"
     )
-    set_target_properties(slang::slang-glslang PROPERTIES
-            IMPORTED_LOCATION "${slang_zip_SOURCE_DIR}/lib/libslang-glslang-${SLANG_VERSION}.so"
-    )
-    target_link_libraries(slang INTERFACE slang::slang-compiler)
 endif ()
 
 
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
-target_include_directories(${PROJECT_NAME} INTERFACE ${slang_INCLUDE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
 
 

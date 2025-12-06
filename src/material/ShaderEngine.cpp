@@ -1,8 +1,6 @@
 #include "ShaderEngine.hpp"
 
 #include <slang-com-ptr.h>
-#include <slang-cpp-types-core.h>
-#include <slang-cpp-types.h>
 #include <slang.h>
 
 #include <cassert>

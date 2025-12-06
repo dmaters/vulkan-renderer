@@ -20,8 +20,20 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
 add_subdirectory(thirdparty)
 target_link_libraries(${PROJECT_NAME} PRIVATE thirdparty)
 
-if(MSVC)
+if (MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /DEBUG:FULL /EHsc /W4)
-else()
+else ()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+endif ()
+
+
+if (WIN32)
+    get_target_property(DLL_PATHS slang INTERFACE_DLL_PATH)
+    foreach (DLL ${DLL_PATHS})
+        add_custom_command(
+                TARGET ${PROJECT_NAME}
+                POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL}" ${CMAKE_BINARY_DIR}
+        )
+    endforeach ()
+endif ()
