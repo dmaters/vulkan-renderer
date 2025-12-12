@@ -7,7 +7,9 @@
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Primitive.hpp"
+#include "scene/Scene.hpp"
 using ResourceIndex = uint32_t;
+using FeatureIndex = uint16_t;
 
 struct TaskContext {
 	vk::CommandBuffer& commandBuffer;
@@ -17,6 +19,7 @@ struct TaskContext {
 	std::unordered_map<ResourceIndex, BufferHandle>& buffers;
 	ResourceManager& resourceManager;
 	MaterialManager& materialManager;
+	const Scene& scene;
 };
 
 enum class TaskType {

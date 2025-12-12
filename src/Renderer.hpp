@@ -15,7 +15,6 @@
 #include "scene/Scene.hpp"
 
 class Renderer {
-public:
 private:
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
@@ -26,7 +25,7 @@ private:
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
 	Swapchain m_swapchain;
-	RenderGraph m_renderGraph;
+	RenderGraph m_graph;
 
 	Scene m_currentScene;
 

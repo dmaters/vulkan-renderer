@@ -21,9 +21,10 @@
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
-#include "rendergraph/RenderGraphBuilder.hpp"
 #include "rendergraph/ResourceUsage.hpp"
+#include "rendergraph/tasks/CameraUpdatePass.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
+#include "rendergraph/tasks/OutputPass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
@@ -37,7 +38,7 @@ Renderer::Renderer(SDL_Window* window) :
 	m_resourceManager(),
 	m_materialManager(m_resourceManager),
 	m_swapchain(),
-	m_renderGraph(m_swapchain, m_resourceManager, m_materialManager) {
+	m_graph(m_swapchain, m_resourceManager, m_materialManager) {
 	if (window == nullptr) return;
 
 	m_graphicsQueue = m_instance.device.getQueue(
@@ -50,9 +51,7 @@ Renderer::Renderer(SDL_Window* window) :
 }
 
 void Renderer::createRenderGraph() {
-	RenderGraphBuilder builder;
-
-	ResourceIndex computeScratchBuffer = builder.createBuffer(
+	ResourceIndex computeScratchBuffer = m_graph.createBuffer(
 		"compute_scratch_buffer",
 		ResourceManager::BufferDescription {
 			.size = 1 << 24,  // 16MB
@@ -60,7 +59,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	ResourceIndex transmittanceLUT = builder.createImage(
+	ResourceIndex transmittanceLUT = m_graph.createImage(
 		"transmittanceLUT",
 		{
 			.width = 256,
@@ -74,7 +73,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	builder.addTask(
+	m_graph.addTask(
 		"transmittanceLUT",
 		TaskType::Compute,
 		{
@@ -87,7 +86,7 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 256, 64, 1 }); }
 	);
 
-	ResourceIndex multiscatteringLUT = builder.createImage(
+	ResourceIndex multiscatteringLUT = m_graph.createImage(
 		"multiscatteringLUT",
 		{
 			.width = 64,
@@ -101,7 +100,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	builder.addTask(
+	m_graph.addTask(
 		"multiscatteringLUT",
 		TaskType::Compute,
 		{
@@ -116,7 +115,7 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 64, 64, 1 }); }
 	);
 
-	ResourceIndex skyviewLUT = builder.createImage(
+	ResourceIndex skyviewLUT = m_graph.createImage(
 		"skyviewLUT",
 		{
 			.width = 200,
@@ -129,7 +128,7 @@ void Renderer::createRenderGraph() {
 
 		}
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"skyviewLUT",
 		TaskType::Compute,
 		{
@@ -144,7 +143,7 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 200, 100, 1 }); }
 	);
 
-	ResourceIndex skyLightingSH = builder.createBuffer(
+	ResourceIndex skyLightingSH = m_graph.createBuffer(
 		"skyLightingSH",
 		{
 			.size = sizeof(glm::vec4) * 9,
@@ -152,7 +151,7 @@ void Renderer::createRenderGraph() {
 	                 vk::BufferUsageFlagBits::eUniformBuffer,
 		}
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"skyLighting",
 		TaskType::Compute,
 		{
@@ -166,7 +165,7 @@ void Renderer::createRenderGraph() {
 		) { ComputePass(context, material, { 1, 1, 1 }); }
 	);
 
-	ResourceIndex shadowAtlas = builder.createImage(
+	ResourceIndex shadowAtlas = m_graph.createImage(
 		"shadow_atlas",
 		{
 			.width = 3072,
@@ -179,7 +178,7 @@ void Renderer::createRenderGraph() {
 
 		}
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"shadowmap_near",
 		TaskType::Graphic,
 		{
@@ -194,7 +193,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	ResourceIndex albedo = builder.createImage(
+	ResourceIndex albedo = m_graph.createImage(
 		"gbuffer_albedo",
 		{
 			.width = 1280,
@@ -209,7 +208,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	ResourceIndex normal = builder.createImage(
+	ResourceIndex normal = m_graph.createImage(
 		"gbuffer_normal",
 		{
 			.width = 1280,
@@ -224,7 +223,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	ResourceIndex worldPos = builder.createImage(
+	ResourceIndex worldPos = m_graph.createImage(
 		"gbuffer_worldpos",
 		{
 			.width = 1280,
@@ -239,7 +238,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	ResourceIndex roughnessMetallic = builder.createImage(
+	ResourceIndex roughnessMetallic = m_graph.createImage(
 		"gbuffer_roughnessMetallic",
 		{
 			.width = 1280,
@@ -254,7 +253,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	ResourceIndex depth = builder.createImage(
+	ResourceIndex depth = m_graph.createImage(
 		"depth",
 		{
 			.width = 1280,
@@ -267,7 +266,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"gbuffer",
 		TaskType::Graphic,
 		{
@@ -285,7 +284,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	ResourceIndex hdr_output = builder.createImage(
+	ResourceIndex hdr_output = m_graph.createImage(
 		"hdr_output",
 		{
 			.width = 1280,
@@ -299,7 +298,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"pbr_lighting",
 		TaskType::Graphic,
 		{
@@ -319,7 +318,7 @@ void Renderer::createRenderGraph() {
 			RenderPass(context, material, primitives);
 		}
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"skybox",
 		TaskType::Graphic,
 		{
@@ -335,7 +334,7 @@ void Renderer::createRenderGraph() {
 		}
 	);
 
-	ResourceIndex result = builder.createImage(
+	ResourceIndex result = m_graph.createImage(
 		"result",
 		{
 			.width = 1280,
@@ -349,7 +348,7 @@ void Renderer::createRenderGraph() {
 		},
 		1
 	);
-	builder.addTask(
+	m_graph.addTask(
 		"composition",
 		TaskType::Compute,
 		{
@@ -358,8 +357,9 @@ void Renderer::createRenderGraph() {
 		{
 			{ result, ResourceUsage::Type::ShaderWrite },
 		},
-		[material = m_materialManager.getMaterialIndex("composition"
-	     )](TaskContext& context) {
+		[material = m_materialManager.getMaterialIndex("composition")](
+			TaskContext& context
+		) {
 			ImageHandle input = context.images[context.inputs[0]];
 			auto dispatch = context.resourceManager.getImage(input).size;
 
@@ -370,9 +370,8 @@ void Renderer::createRenderGraph() {
 			);
 		}
 	);
-	builder.setOutputImage(result);
-	GraphData data = builder.build();
-	m_renderGraph.build(data);
+
+	m_graph.setOutputImage(result);
 }
 
 void Renderer::render() {
@@ -383,12 +382,14 @@ void Renderer::render() {
 		m_swapchain.rebuild();
 		return;
 	}
-	m_currentScene.camera.setResolution({
-		resolution.width,
-		resolution.height,
-	});
+	m_currentScene.camera.setResolution(
+		{
+			resolution.width,
+			resolution.height,
+		}
+	);
 
-	m_renderGraph.submit(m_currentScene);
+	m_graph.submit(m_currentScene);
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
 };
@@ -404,11 +405,13 @@ void Renderer::load(const std::filesystem::path& path) {
 	orientation = glm::rotate_slow(
 		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
 	);
-	m_currentScene.lights.push_back({
-		.position = glm::vec3(0, 0, 600),
-		.orientation = orientation,
-		.intensity = 25.0f,
-	});
+	m_currentScene.lights.push_back(
+		{
+			.position = glm::vec3(0, 0, 600),
+			.orientation = orientation,
+			.intensity = 25.0f,
+		}
+	);
 
 	const auto& lights = m_currentScene.lights;
 
@@ -421,9 +424,9 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	m_resourceManager.queueBufferUpdate<MaterialDefinitions::EnvironmentData>(
 		m_resourceManager.getNamedBufferIndex("environment_data"),
-		[size =
-	         m_currentScene.size](MaterialDefinitions::EnvironmentData& envData
-	    ) {
+		[size = m_currentScene.size](
+			MaterialDefinitions::EnvironmentData& envData
+		) {
 			envData.sceneSize = size;
 			envData.environmentColor = glm::vec3(0.04, 0.02, 0.1);
 			// envData.environmentColor = glm::vec3(1);
@@ -432,25 +435,29 @@ void Renderer::load(const std::filesystem::path& path) {
 
 	MaterialIndex lighting =
 		m_materialManager.getMaterialIndex("lighting_deferred");
-	m_currentScene.primitives.push_back({
-		.baseVertex = 0,
-		.baseIndex = 0,
-		.indexCount = 3,
-		.instanceCount = 1,
-		.materials = { {
-			lighting,
-		} },
-	});
+	m_currentScene.primitives.push_back(
+		{
+			.baseVertex = 0,
+			.baseIndex = 0,
+			.indexCount = 3,
+			.instanceCount = 1,
+			.materials = { {
+				lighting,
+			} },
+		}
+	);
 
 	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
-	m_currentScene.primitives.push_back({
-		.baseVertex = 0,
-		.baseIndex = 0,
-		.indexCount = 3,
-		.instanceCount = 1,
-		.materials = { {
-			skybox,
-		} },
-	});
+	m_currentScene.primitives.push_back(
+		{
+			.baseVertex = 0,
+			.baseIndex = 0,
+			.indexCount = 3,
+			.instanceCount = 1,
+			.materials = { {
+				skybox,
+			} },
+		}
+	);
 	createRenderGraph();
 }

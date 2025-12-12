@@ -13,31 +13,18 @@
 using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
 
 struct GraphData {
-	struct Barriers {
-		std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2>
-			imageBarriers;
-		std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2>
-			bufferBarriers;
-	};
-
 	struct TaskData {
 		Task task;
 		TaskType type;
 		std::string_view name;
-		Barriers barriers;
 		std::vector<ResourceDependency> inputs;
 		std::vector<ResourceDependency> outputs;
 	};
-	std::vector<TaskData> tasks;
 
-	ResourceIndex outputImage;
-
-	std::unordered_map<ResourceIndex, vk::ImageLayout> requiredLayouts;
 	std::unordered_map<ResourceIndex, uint8_t> swapchainImageRatio;
 	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
 	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
 		buffers;
-
 	std::unordered_map<ResourceIndex, std::string_view> names;
 };
 
@@ -53,6 +40,7 @@ private:
 		m_buffers;
 
 	std::vector<GraphData::TaskData> m_tasks;
+	std::vector<FeatureIndex> m_taskFeatures;
 
 	struct TaskResourceDependency;
 	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
@@ -60,9 +48,18 @@ private:
 
 	std::unordered_map<ResourceIndex, std::string_view> m_names;
 
-	ResourceIndex m_outputImage;
+	struct ResourceAccess;
+	ResourceAccess getResourceBarrier(
+		uint32_t taskIndex,
+		ResourceIndex resourceIndex,
+		std::unordered_set<FeatureIndex>& enabledFeatures,
+		bool readOnly
+	) const;
 
-	GraphData::Barriers getBarriers(uint32_t task) const;
+	struct Barrier;
+	Barrier getBarrier(
+		uint32_t taskIndex, std::unordered_set<FeatureIndex>& enabledFeatures
+	) const;
 
 public:
 	ResourceIndex createImage(
@@ -79,11 +76,15 @@ public:
 		TaskType type,
 		std::vector<ResourceDependency> inputResources,
 		std::vector<ResourceDependency> outputResources,
-		Task task
+		Task task,
+		FeatureIndex feature
 	);
 
-	void setOutputImage(ResourceIndex index) { m_outputImage = index; }
-	GraphData build();
+	GraphData getData() const;
+	std::vector<GraphData::TaskData> getTasks(
+		ResourceIndex outputImage,
+		std::unordered_set<FeatureIndex>& enabledFeatures
+	) const;
 };
 
 struct RenderGraphBuilder::TaskResourceDependency {
@@ -94,4 +95,9 @@ struct RenderGraphBuilder::TaskResourceDependency {
 		Output,
 	};
 	UsageType usageType;
+};
+
+struct RenderGraphBuilder::Barrier {
+	std::optional<GraphData::TaskData> barrierTask;
+	std::unordered_set<uint32_t> previousTasks;
 };
