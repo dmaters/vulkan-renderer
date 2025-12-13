@@ -29,13 +29,13 @@ static Access GetAccess(Type type) {
 			return {
 				.stage = vk::PipelineStageFlagBits2::eFragmentShader,
 				.access = vk::AccessFlagBits2::eShaderSampledRead,
-				.layout =  vk::ImageLayout::eShaderReadOnlyOptimal,
+				.layout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 		case Type::ShaderRead:
 			return {
 				.stage = vk::PipelineStageFlagBits2::eComputeShader,
 				.access = vk::AccessFlagBits2::eShaderRead,
-				.layout =  vk::ImageLayout::eShaderReadOnlyOptimal,
+				.layout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 		case Type::ShaderWrite:
 			return {
@@ -56,7 +56,7 @@ static Access GetAccess(Type type) {
 				         vk::PipelineStageFlagBits2::eLateFragmentTests,
 				.access = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
 				          vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-				.layout =  vk::ImageLayout::eDepthStencilAttachmentOptimal,
+				.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 			};
 		case Type::VertexBuffer:
 			return {

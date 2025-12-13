@@ -1,5 +1,8 @@
 #include "RenderGraph.hpp"
 
+#include "rendergraph/RenderGraphBuilder.hpp"
+#include "rendergraph/tasks/Task.hpp"
+
 RenderGraph::RenderGraph(
 	Swapchain& swapchain,
 	ResourceManager& resourceManager,
@@ -7,10 +10,77 @@ RenderGraph::RenderGraph(
 ) :
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
-	m_materialManager(materialManager) {
-
+	m_materialManager(materialManager),
+	m_builder(m_data) {
 	addFeatureFlag("baseline");
+}
 
+ResourceIndex RenderGraph::createImage(
+	std::string_view name,
+	ResourceManager::ImageDescription desc,
+	uint8_t swapchainRatio
+) {
+	ResourceIndex index = m_data.resourceNames.size();
+	m_data.images[index] = desc;
+
+	if (swapchainRatio != 0) m_data.swapchainImageRatio[index] = swapchainRatio;
+
+	m_data.resourceNames.push_back(name);
+
+	return index;
+}
+
+ResourceIndex RenderGraph::createBuffer(
+	std::string_view name, ResourceManager::BufferDescription desc
+) {
+	ResourceIndex index = m_data.resourceNames.size();
+	m_data.buffers[index] = desc;
+	m_data.resourceNames.push_back(name);
+	return index;
+}
+
+void RenderGraph::addTask(
+	std::string_view name,
+	TaskType type,
+	std::vector<ResourceDependency> inputResources,
+	std::vector<ResourceDependency> outputResources,
+	Task task,
+	FeatureIndex feature
+) {
+	TaskIndex index = m_data.tasks.size();
+
+	m_data.resourceNames.push_back(name);
+	uint32_t offset = m_data.taskDependencies.size();
+	uint8_t inputSize = inputResources.size();
+	m_data.taskData.push_back(
+		{
+			.type = type,
+			.name = name,
+			.inputs = {
+		        .offset = offset,
+				.count = inputSize,
+			},
+			.outputs = {
+    			.offset = offset + inputSize,
+    		    .count = static_cast<uint8_t>(outputResources.size())
+			},
+			.feature = feature
+		}
+	);
+	m_data.tasks.push_back(std::move(task));
+
+	m_data.taskDependencies.insert(
+		m_data.taskDependencies.end(),
+		inputResources.begin(),
+		inputResources.end()
+	);
+	m_data.taskDependencies.insert(
+		m_data.taskDependencies.end(),
+		outputResources.begin(),
+		outputResources.end()
+	);
+
+	m_builder.addTask(index, inputResources, outputResources, feature);
 }
 
 FeatureIndex RenderGraph::addFeatureFlag(
@@ -44,16 +114,13 @@ void RenderGraph::submit(const Scene& scene) {
 
 	if (!m_runner.has_value()) {
 		m_runner.emplace(
-			m_swapchain,
-			m_resourceManager,
-			m_materialManager,
-			m_builder.getData()
+			m_data, m_swapchain, m_resourceManager, m_materialManager
 		);
 	}
 	if (m_graphUpdated) {
 		m_graphUpdated = false;
-		m_tasks = m_builder.getTasks(m_outputImage, m_enabledFeatures);
+		m_executionInfo = m_builder.getTasks(m_outputImage, m_enabledFeatures);
 	}
 
-	m_runner->submit(scene, m_outputImage, m_tasks);
+	m_runner->submit(scene, m_outputImage, m_executionInfo);
 }

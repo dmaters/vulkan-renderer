@@ -1,3 +1,5 @@
+#include "RenderGraphRunner.hpp"
+
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -8,23 +10,23 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
-#include "RenderGraph.hpp"
-#include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
+#include "rendergraph/GraphData.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
+using namespace rendergraph::internal;
 
 RenderGraphRunner::RenderGraphRunner(
+	const GraphData& data,
 	Swapchain& swapchain,
 	ResourceManager& resourceManager,
-	MaterialManager& materialManager,
-	GraphData data
+	MaterialManager& materialManager
 ) :
+	m_data(data),
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
-	m_materialManager(materialManager),
-	m_data(std::move(data)) {
+	m_materialManager(materialManager) {
 	vk::Device& device = Instance::Get().device;
 	m_renderSemaphores = {
 		device.createSemaphore({}),
@@ -67,7 +69,7 @@ void RenderGraphRunner::buildSwapchainResources() {
 	int i = 0;
 	for (auto& [index, _] : m_data.swapchainImageRatio) {
 		m_images[index] = images[i];
-		m_resourceManager.setName(m_data.names[index], images[i]);
+		m_resourceManager.setName(m_data.resourceNames[index], images[i]);
 		i++;
 	}
 }
@@ -237,9 +239,7 @@ void updateCameraBuffer(
 }
 
 void RenderGraphRunner::submit(
-	const Scene& scene,
-	ResourceIndex output,
-	std::vector<GraphData::TaskData>& tasks
+	const Scene& scene, ResourceIndex output, ExecutionInfo& execInfo
 ) {
 	clearUnusedResources();
 
@@ -284,12 +284,28 @@ void RenderGraphRunner::submit(
 	);
 
 	updateCameraBuffer(commandBuffer, scene, m_resourceManager);
+	std::vector<ResourceIndex> inputs;
+	std::vector<ResourceIndex> outputs;
 
-	for (auto& node : tasks) {
-		std::vector<ResourceIndex> inputs;
-		std::vector<ResourceIndex> outputs;
-		for (auto& [resource, _] : node.inputs) inputs.push_back(resource);
-		for (auto& [resource, _] : node.outputs) outputs.push_back(resource);
+	uint32_t taskCount = m_data.tasks.size();
+	for (auto taskIndex : execInfo.tasks) {
+		inputs.clear();
+
+		auto taskData = taskIndex < taskCount
+		                    ? m_data.taskData[taskIndex]
+		                    : execInfo.data[taskIndex - taskCount];
+
+		for (int i = 0; i < taskData.inputs.count; i++) {
+			inputs.push_back(
+				m_data.taskDependencies[taskData.inputs.offset + i].first
+			);
+		}
+		outputs.clear();
+		for (int i = 0; i < taskData.outputs.count; i++) {
+			outputs.push_back(
+				m_data.taskDependencies[taskData.outputs.offset + i].first
+			);
+		}
 
 		TaskContext context {
 			.commandBuffer = commandBuffer,
@@ -301,7 +317,11 @@ void RenderGraphRunner::submit(
 			.materialManager = m_materialManager,
 			.scene = scene,
 		};
-		node.task(context);
+
+		if (taskIndex < taskCount)
+			m_data.tasks[taskIndex](context);
+		else
+			execInfo.barriers[taskIndex - taskCount](context);
 	}
 	outputToSwapchain(commandBuffer, output, imageIndex);
 
@@ -373,7 +393,7 @@ void RenderGraphRunner::build() {
 	for (auto& [index, _] : m_data.images) {
 		if (m_data.swapchainImageRatio.contains(index)) continue;
 		m_images[index] = images[i];
-		m_resourceManager.setName(m_data.names[index], images[i]);
+		m_resourceManager.setName(m_data.resourceNames[index], images[i]);
 
 		i++;
 	}
@@ -382,7 +402,7 @@ void RenderGraphRunner::build() {
 	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
 	for (auto& [buffer, _] : m_data.buffers) {
 		m_buffers[buffer] = buffers[i];
-		m_resourceManager.setName(m_data.names[buffer], buffers[i]);
+		m_resourceManager.setName(m_data.resourceNames[buffer], buffers[i]);
 
 		i++;
 	}
