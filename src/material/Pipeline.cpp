@@ -175,7 +175,7 @@ struct PipelineStateCreateInfo {
 	}
 
 	vk::PipelineDepthStencilStateCreateInfo depthStencil(
-		const PipelineConfiguration& configuration
+		const GraphicPipelineConfiguration& configuration
 	) {
 		return vk::PipelineDepthStencilStateCreateInfo {
 			.depthTestEnable = configuration.depthOp != vk::CompareOp::eAlways,

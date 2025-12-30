@@ -3,19 +3,16 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 
+#include <bit>
 #include <cassert>
-#include <chrono>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
 #include <regex>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -153,66 +150,65 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 
 	return module;
 }
-
-std::optional<Pipeline> ShaderEngine::buildPipeline(
-	const PipelineMetadata& metadata
+std::optional<Pipeline> ShaderEngine::buildComputePipeline(
+	ComputePipelineModule module, std::vector<vk::DescriptorSetLayout>& layouts
 ) {
-	if (!metadata.modules.compute.empty()) {
-		auto res = loadModule(
-			metadata.modules.compute, SlangStage::SLANG_STAGE_COMPUTE
-		);
-		if (!res.has_value()) return std::nullopt;
+	assert(!module.empty());
+	auto res = loadModule(module, SlangStage::SLANG_STAGE_COMPUTE);
+	if (!res.has_value()) return std::nullopt;
 
-		vk::PipelineShaderStageCreateInfo module = {
-			.stage = vk::ShaderStageFlagBits::eCompute,
-			.module = res.value(),
+	vk::PipelineShaderStageCreateInfo shaderModule = {
+		.stage = vk::ShaderStageFlagBits::eCompute,
+		.module = res.value(),
+		.pName = "main",
+	};
+
+	return PipelineBuilder::BuildComputePipeline(
+		{
+			.stage = shaderModule,
+			.setLayouts = layouts,
+		}
+	);
+}
+
+std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
+	GraphicPipelineModules& modules,
+	std::vector<vk::DescriptorSetLayout>& layouts,
+	GraphicPipelineConfiguration& configuration
+) {
+	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+	assert(!modules.vertex.empty());
+	assert(!modules.fragment.empty());
+
+	auto vertexModule =
+		loadModule(modules.vertex, SlangStage::SLANG_STAGE_VERTEX);
+	if (!vertexModule.has_value()) return std::nullopt;
+
+	shaderStages.push_back(
+		{
+			.stage = vk::ShaderStageFlagBits::eVertex,
+			.module = vertexModule.value(),
 			.pName = "main",
-		};
+		}
+	);
 
-		return PipelineBuilder::BuildComputePipeline(
-			{
-				.stage = module,
-				.setLayouts = metadata.layouts,
-			}
-		);
-	}
+	auto fragmentModule =
+		loadModule(modules.fragment, SlangStage::SLANG_STAGE_FRAGMENT);
+	if (!fragmentModule.has_value()) return std::nullopt;
 
-	std::vector<vk::PipelineShaderStageCreateInfo> modules;
-
-	if (!metadata.modules.vertex.empty()) {
-		auto res =
-			loadModule(metadata.modules.vertex, SlangStage::SLANG_STAGE_VERTEX);
-		if (!res.has_value()) return std::nullopt;
-
-		modules.push_back(
-			{
-				.stage = vk::ShaderStageFlagBits::eVertex,
-				.module = res.value(),
-				.pName = "main",
-			}
-		);
-	}
-
-	if (!metadata.modules.fragment.empty()) {
-		auto res = loadModule(
-			metadata.modules.fragment, SlangStage::SLANG_STAGE_FRAGMENT
-		);
-		if (!res.has_value()) return std::nullopt;
-
-		modules.push_back(
-			{
-				.stage = vk::ShaderStageFlagBits::eFragment,
-				.module = res.value(),
-				.pName = "main",
-			}
-		);
-	}
+	shaderStages.push_back(
+		{
+			.stage = vk::ShaderStageFlagBits::eFragment,
+			.module = fragmentModule.value(),
+			.pName = "main",
+		}
+	);
 
 	return PipelineBuilder::BuildGraphicPipeline(
 		{
-			.shaderStages = modules,
-			.setLayouts = metadata.layouts,
-			.configuration = metadata.configuration,
+			.shaderStages = shaderStages,
+			.setLayouts = layouts,
+			.configuration = configuration,
 		}
 	);
 }
@@ -267,42 +263,70 @@ void getDependencies(
 	file.close();
 }
 
-PipelineIndex ShaderEngine::registerPipeline(const PipelineMetadata metadata) {
-	PipelineIndex index = m_pipelineCount;
-	m_pipelineCount++;
+PipelineIndex ShaderEngine::registerComputePipeline(
+	ComputePipelineModule module, std::vector<vk::DescriptorSetLayout> layouts
+) {
+	PipelineIndexFields fields {
+		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Compute),
+		.index = static_cast<uint32_t>(m_pipelines.size()),
+	};
+	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
 
-	auto pipeline = buildPipeline(metadata);
+	auto pipeline = buildComputePipeline(module, layouts);
 
 	assert(pipeline.has_value());
 
 	m_pipelines[index] = pipeline.value();
-	m_pipelineMetadatas[index] = metadata;
+	m_layouts[index] = layouts;
+	m_computeModules[index] = module;
 
 	std::unordered_set<std::filesystem::path> dependencies;
 
-	if (!metadata.modules.vertex.empty()) {
-		m_modules[metadata.modules.vertex].insert(index);
-		m_lastEdited[metadata.modules.vertex] =
-			std::filesystem::last_write_time(metadata.modules.vertex);
+	m_modules[module].insert(index);
+	m_lastEdited[module] = std::filesystem::last_write_time(module);
 
-		getDependencies(metadata.modules.vertex, dependencies);
+	getDependencies(module, dependencies);
+
+	for (auto module : dependencies) {
+		m_modules[module].insert(index);
+		m_lastEdited[module] = std::filesystem::last_write_time(module);
 	}
 
-	if (!metadata.modules.fragment.empty()) {
-		m_modules[metadata.modules.fragment].insert(index);
-		m_lastEdited[metadata.modules.fragment] =
-			std::filesystem::last_write_time(metadata.modules.fragment);
+	return index;
+}
 
-		getDependencies(metadata.modules.fragment, dependencies);
-	}
+PipelineIndex ShaderEngine::registerGraphicPipeline(
+	GraphicPipelineModules modules,
+	std::vector<vk::DescriptorSetLayout> layouts,
+	GraphicPipelineConfiguration renderPassConfig
+) {
+	PipelineIndexFields fields {
+		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Graphic),
+		.index = static_cast<uint32_t>(m_pipelines.size()),
+	};
+	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
 
-	if (!metadata.modules.compute.empty()) {
-		m_modules[metadata.modules.compute].insert(index);
-		m_lastEdited[metadata.modules.compute] =
-			std::filesystem::last_write_time(metadata.modules.compute);
+	auto pipeline = buildGraphicPipeline(modules, layouts, renderPassConfig);
 
-		getDependencies(metadata.modules.compute, dependencies);
-	}
+	assert(pipeline.has_value());
+
+	m_pipelines[index] = pipeline.value();
+	m_layouts[index] = layouts;
+	m_graphicModules[index] = modules;
+
+	std::unordered_set<std::filesystem::path> dependencies;
+
+	m_modules[modules.vertex].insert(index);
+	m_lastEdited[modules.vertex] =
+		std::filesystem::last_write_time(modules.vertex);
+
+	getDependencies(modules.vertex, dependencies);
+
+	m_modules[modules.fragment].insert(index);
+	m_lastEdited[modules.fragment] =
+		std::filesystem::last_write_time(modules.fragment);
+
+	getDependencies(modules.fragment, dependencies);
 
 	for (auto module : dependencies) {
 		m_modules[module].insert(index);
@@ -350,8 +374,24 @@ void ShaderEngine::_monitor() {
 			std::lock_guard<std::mutex> lock(m_mutex);
 
 			for (PipelineIndex index : m_modules.at(module)) {
-				PipelineMetadata& metadata = m_pipelineMetadatas.at(index);
-				auto pipeline = buildPipeline(metadata);
+				PipelineIndexFields::Type type =
+					static_cast<PipelineIndexFields::Type>(
+						std::bit_cast<PipelineIndexFields>(index).type
+					);
+
+				std::optional<Pipeline> pipeline;
+
+				if (type == PipelineIndexFields::Type::Graphic) {
+					auto& modules = m_graphicModules[index];
+					auto& layouts = m_layouts[index];
+					auto& renderPass = m_renderPassConfigurations[index];
+					pipeline =
+						buildGraphicPipeline(modules, layouts, renderPass);
+				} else if (type == PipelineIndexFields::Type::Compute) {
+					auto& module = m_computeModules[index];
+					auto& layouts = m_layouts[index];
+					pipeline = buildComputePipeline(module, layouts);
+				}
 
 				if (pipeline.has_value()) {
 					m_retiredPipelines.push_back({ m_pipelines[index], 4 });

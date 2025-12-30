@@ -35,7 +35,7 @@ static Access GetAccess(Type type) {
 			return {
 				.stage = vk::PipelineStageFlagBits2::eComputeShader,
 				.access = vk::AccessFlagBits2::eShaderRead,
-				.layout = vk::ImageLayout::eShaderReadOnlyOptimal,
+				.layout = vk::ImageLayout::eGeneral,
 			};
 		case Type::ShaderWrite:
 			return {
@@ -104,5 +104,7 @@ static Access GetAccess(Type type) {
 			};
 	}
 }
-
+std::optional<vk::DescriptorType> getDescriptorType(
+	ResourceUsage::Type usage, bool isBuffer
+);
 };  // namespace ResourceUsage

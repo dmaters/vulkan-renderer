@@ -12,12 +12,8 @@
 #include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
-#include "Material.hpp"
-#include "MaterialDefinitions.hpp"
-#include "MaterialManager_impl.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
-#include "rendergraph/RenderGraphBuilder.hpp"
 #include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -26,147 +22,103 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	vk::Device& device = Instance::Get().device;
 
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
+
 		vk::DescriptorPoolSize {
-								.type = vk::DescriptorType::eUniformBuffer,
-								.descriptorCount = 200,
+								.type = vk::DescriptorType::eSampledImage,
+								.descriptorCount = 256,
 								},
+
 		vk::DescriptorPoolSize {
-								.type = vk::DescriptorType::eCombinedImageSampler,
-								.descriptorCount = 600,
+								.type = vk::DescriptorType::eSampler,
+								.descriptorCount = 4,
 								}
 	};
 
 	vk::DescriptorPoolCreateInfo info {
 		.flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
-		.maxSets = 128,
+		.maxSets = 5,
 		.poolSizeCount = sizes.size(),
 		.pPoolSizes = sizes.data()
 	};
 
 	m_pool = device.createDescriptorPool(info);
 
-	vk::SamplerCreateInfo samplerInfo {
-		.magFilter = vk::Filter::eLinear,
-		.minFilter = vk::Filter::eLinear,
-		.mipmapMode = vk::SamplerMipmapMode::eLinear,
-		// TODO: Sky atmosphere generation has some problems with repeat sampler
-		// mode, for now a clamp works but it would be better to fix rather than
-		// shortcut it
-		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
-		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
-		.addressModeW = vk::SamplerAddressMode::eClampToEdge,
-		.maxLod = 100,
-	};
-
-	m_linearSampler = device.createSampler(samplerInfo);
-
-	m_emptySetLayout = device.createDescriptorSetLayout({});
-	m_emptySet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo {
-		.descriptorPool = m_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &m_emptySetLayout,
-	})[0];
-
-	createGlobalBuffers();
-	createGlobalDescriptorSet();
+	createTextureDescriptorSet();
+	m_emptySetLayout = Instance::Get().device.createDescriptorSetLayout({});
 
 	m_shaderEngine = std::make_unique<ShaderEngine>();
-
-	// m_names["pbr_forward"]
-	// = registerMaterial<MaterialDefinitions::PBRMaterial>();
-	m_names["pbr_deferred"] =
-		registerMaterial<MaterialDefinitions::GBufferBase>();
-	m_names["lighting_deferred"] =
-		registerMaterial<MaterialDefinitions::DeferredLighting>();
-	m_names["shadow_map"] = registerMaterial<MaterialDefinitions::ShadowMap>();
-	m_names["composition"] =
-		registerMaterial<MaterialDefinitions::CompositionPass>();
-	m_names["transmittanceLUT"] =
-		registerMaterial<MaterialDefinitions::TransmittanceLUT>();
-	m_names["multiscatteringLUT"] =
-		registerMaterial<MaterialDefinitions::MultiscatteringLUT>();
-	m_names["skyviewLUT"] = registerMaterial<MaterialDefinitions::SkyViewLUT>();
-	m_names["skyLighting"] =
-		registerMaterial<MaterialDefinitions::SkyLighting>();
-	m_names["skybox"] = registerMaterial<MaterialDefinitions::Skybox>();
-
-	createMaterialData();
 }
 
-void MaterialManager::createGlobalBuffers() {
-	ResourceManager::AllocationIndex index = m_resourceManager.createResources(
-		{
-    },
-		{
-			{
-				.size = sizeof(MaterialDefinitions::Camera),
-				.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                     vk::BufferUsageFlagBits::eUniformBuffer,
-			},
-			{
-				.size = sizeof(MaterialDefinitions::Lights),
-				.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                     vk::BufferUsageFlagBits::eUniformBuffer,
+void MaterialManager::createTextureDescriptorSet() {
+	vk::Device& device = Instance::Get().device;
 
-			},
-			{
-				.size = sizeof(MaterialDefinitions::EnvironmentData),
-				.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                     vk::BufferUsageFlagBits::eUniformBuffer,
-			},
+	vk::Sampler linearClamp = device.createSampler(
+		{
+			.magFilter = vk::Filter::eLinear,
+			.minFilter = vk::Filter::eLinear,
+			.mipmapMode = vk::SamplerMipmapMode::eLinear,
+			.addressModeU = vk::SamplerAddressMode::eClampToEdge,
+			.addressModeV = vk::SamplerAddressMode::eClampToEdge,
+			.addressModeW = vk::SamplerAddressMode::eClampToEdge,
+			.maxLod = 100,
+		}
+	);
+	vk::Sampler linearRepeat = device.createSampler(
+		{
+			.magFilter = vk::Filter::eLinear,
+			.minFilter = vk::Filter::eLinear,
+			.mipmapMode = vk::SamplerMipmapMode::eLinear,
+			.addressModeU = vk::SamplerAddressMode::eRepeat,
+			.addressModeV = vk::SamplerAddressMode::eRepeat,
+			.addressModeW = vk::SamplerAddressMode::eRepeat,
+			.maxLod = 100,
 		}
 	);
 
-	auto& buffers = m_resourceManager.getBuffers(index);
-	m_resourceManager.setName("camera_data", buffers.at(0));
-	m_resourceManager.setName("light_buffer", buffers.at(1));
-	m_resourceManager.setName("environment_data", buffers.at(2));
-}
+	vk::Sampler nearestClamp = device.createSampler(
+		{
+			.magFilter = vk::Filter::eNearest,
+			.minFilter = vk::Filter::eNearest,
+			.mipmapMode = vk::SamplerMipmapMode::eNearest,
+			.addressModeU = vk::SamplerAddressMode::eClampToEdge,
+			.addressModeV = vk::SamplerAddressMode::eClampToEdge,
+			.addressModeW = vk::SamplerAddressMode::eClampToEdge,
+			.maxLod = 100,
+		}
+	);
 
-void MaterialManager::createGlobalDescriptorSet() {
-	vk::Device& device = Instance::Get().device;
+	vk::Sampler nearestRepeat = device.createSampler(
+		{
+			.magFilter = vk::Filter::eLinear,
+			.minFilter = vk::Filter::eLinear,
+			.mipmapMode = vk::SamplerMipmapMode::eLinear,
+			.addressModeU = vk::SamplerAddressMode::eRepeat,
+			.addressModeV = vk::SamplerAddressMode::eRepeat,
+			.addressModeW = vk::SamplerAddressMode::eRepeat,
+			.maxLod = 100,
+		}
+	);
 
-	std::array<vk::DescriptorSetLayoutBinding, 4> bindings {
+	std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
-										.descriptorType = vk::DescriptorType::eUniformBuffer,
-										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
-		                  vk::ShaderStageFlagBits::eCompute,
-										.pImmutableSamplers = {},
+										.descriptorType = vk::DescriptorType::eSampledImage,
+										.descriptorCount = 256,
+										.stageFlags = vk::ShaderStageFlagBits::eAll,
 										},
 		vk::DescriptorSetLayoutBinding {
 										.binding = 1,
-										.descriptorType = vk::DescriptorType::eUniformBuffer,
-										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
-		                  vk::ShaderStageFlagBits::eCompute,
-										.pImmutableSamplers = {},
+										.descriptorType = vk::DescriptorType::eSampler,
+										.descriptorCount = 4,
+										.stageFlags = vk::ShaderStageFlagBits::eAll,
 										},
-		vk::DescriptorSetLayoutBinding {
-										.binding = 2,
-										.descriptorType = vk::DescriptorType::eUniformBuffer,
-										.descriptorCount = 1,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
-		                  vk::ShaderStageFlagBits::eCompute,
-										.pImmutableSamplers = {},
-										},
-		vk::DescriptorSetLayoutBinding {
-										.binding = 3,
-										.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-										.descriptorCount = 512,
-										.stageFlags = vk::ShaderStageFlagBits::eAllGraphics |
-		                  vk::ShaderStageFlagBits::eCompute,
-										.pImmutableSamplers = {},
-										}
 	};
 
-	std::array<vk::DescriptorBindingFlags, 4> bindingFlags = {
-		vk::DescriptorBindingFlags {},
-		vk::DescriptorBindingFlags {},
-		vk::DescriptorBindingFlags {},
+	std::array<vk::DescriptorBindingFlags, 2> bindingFlags = {
 		vk::DescriptorBindingFlagBits::ePartiallyBound |
-			vk::DescriptorBindingFlagBits::eUpdateAfterBind
+			vk::DescriptorBindingFlagBits::eUpdateAfterBind,
+		vk::DescriptorBindingFlags {},
+
 	};
 
 	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
@@ -192,180 +144,81 @@ void MaterialManager::createGlobalDescriptorSet() {
 
 	auto set = device.allocateDescriptorSets(allocateInfo)[0];
 
-	Buffer& cameraBuffer = m_resourceManager.getNamedBuffer("camera_data");
-
-	vk::DescriptorBufferInfo cameraDescriptorInfo {
-		.buffer = cameraBuffer.buffer,
-		.range = cameraBuffer.size,
+	std::array<vk::DescriptorImageInfo, 4> samplerInfos {
+		vk::DescriptorImageInfo { .sampler = linearClamp },
+		vk::DescriptorImageInfo { .sampler = linearRepeat },
+		vk::DescriptorImageInfo { .sampler = nearestClamp },
+		vk::DescriptorImageInfo { .sampler = nearestRepeat },
 	};
 
-	vk::WriteDescriptorSet cameraWriteDescriptor {
-		.dstSet = set,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = vk::DescriptorType::eUniformBuffer,
-		.pImageInfo = {},
-		.pBufferInfo = &cameraDescriptorInfo,
-		.pTexelBufferView = {},
-	};
-
-	Buffer& environmentdataBuffer =
-		m_resourceManager.getNamedBuffer("environment_data");
-
-	vk::DescriptorBufferInfo environmentDataInfo {
-		.buffer = environmentdataBuffer.buffer,
-		.range = environmentdataBuffer.size,
-	};
-
-	vk::WriteDescriptorSet environemntWriteDescriptor {
+	vk::WriteDescriptorSet writeInfo {
 		.dstSet = set,
 		.dstBinding = 1,
-		.descriptorCount = 1,
-		.descriptorType = vk::DescriptorType::eUniformBuffer,
-		.pImageInfo = {},
-		.pBufferInfo = &environmentDataInfo,
-		.pTexelBufferView = {},
+		.dstArrayElement = 0,
+		.descriptorCount = 4,
+		.descriptorType = vk::DescriptorType::eSampler,
+		.pImageInfo = samplerInfos.data(),
 	};
+	device.updateDescriptorSets({ writeInfo }, {});
 
-	Buffer& lightBuffer = m_resourceManager.getNamedBuffer("light_buffer");
-
-	vk::DescriptorBufferInfo lightBufferDescriptorInfo {
-		.buffer = lightBuffer.buffer,
-		.range = lightBuffer.size,
-	};
-	vk::WriteDescriptorSet lightBufferWriteDescriptor {
-		.dstSet = set,
-		.dstBinding = 2,
-		.descriptorCount = 1,
-		.descriptorType = vk::DescriptorType::eUniformBuffer,
-		.pImageInfo = {},
-		.pBufferInfo = &lightBufferDescriptorInfo,
-		.pTexelBufferView = {},
-	};
-	device.updateDescriptorSets(
-		{ cameraWriteDescriptor,
-	      environemntWriteDescriptor,
-	      lightBufferWriteDescriptor },
-		{}
-	);
-	m_globalSet = set;
-	m_globalSetLayout = layout;
+	m_textureSet = set;
+	m_textureSetLayout = layout;
 }
-void MaterialManager::update(uint8_t currentFrame) {
-	m_shaderEngine->flushRetiredPipelines();
-}
-
-void writeToDescriptorSet(
-	vk::Device& device,
-	ResourceManager& resourceManager,
-	vk::DescriptorSet set,
-	std::vector<vk::DescriptorSetLayoutBinding> layoutBindings,
-	std::unordered_map<uint32_t, BufferHandle>& buffers,
-	std::unordered_map<uint32_t, ImageHandle>& images,
-	vk::Sampler linearSampler
+MaterialIndex MaterialManager::registerComputeMaterial(
+	std::string_view name,
+	ComputePipelineModule module,
+	std::vector<vk::DescriptorSetLayoutBinding> bindings
 ) {
-	std::vector<vk::WriteDescriptorSet> writeInfos;
-
-	for (const auto& resource : layoutBindings) {
-		if (buffers.contains(resource.binding)) {
-			Buffer& buffer =
-				resourceManager.getBuffer(buffers[resource.binding]);
-
-			vk::DescriptorBufferInfo bufferInfo {
-				.buffer = buffer.buffer,
-				.offset = 0,
-				.range = buffer.size,
-			};
-
-			writeInfos.push_back(vk::WriteDescriptorSet {
-				.dstSet = set,
-				.dstBinding = (uint32_t)(resource.binding),
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &bufferInfo,
-			});
-			continue;
-		}
-		if (images.contains(resource.binding)) {
-			Image& image = resourceManager.getImage(images[resource.binding]);
-			vk::DescriptorImageInfo imageInfo {
-				.sampler = linearSampler,
-				.imageView = image.view,
-				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-			};
-
-			writeInfos.push_back({
-				.dstSet = set,
-				.dstBinding = (uint32_t)(resource.binding),
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.pImageInfo = &imageInfo,
-
-			});
-			continue;
-		}
-		assert(false);
+	vk::DescriptorSetLayout layout = m_emptySetLayout;
+	if (bindings.size() > 0) {
+		layout = Instance::Get().device.createDescriptorSetLayout(
+			{
+				.flags =
+					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)bindings.size(),
+				.pBindings = bindings.data(),
+			}
+		);
 	}
 
-	device.updateDescriptorSets(
-		writeInfos.size(), writeInfos.data(), 0, nullptr
+	PipelineIndex pipeline = m_shaderEngine->registerComputePipeline(
+		module, { layout, m_textureSetLayout }
 	);
-}
 
-vk::DescriptorSet MaterialManager::createSet(
-	const std::vector<vk::DescriptorSetLayoutBinding>& bindings,
-	const vk::DescriptorSetLayout layout,
-	const std::vector<BufferHandle>& materialBuffersHandles
+	MaterialIndex index = m_pipelines.size();
+	m_pipelines.push_back(pipeline);
+	m_names[name] = index;
+	return index;
+}
+MaterialIndex MaterialManager::registerGraphicMaterial(
+	std::string_view name,
+	GraphicPipelineModules modules,
+	std::vector<vk::DescriptorSetLayoutBinding> bindings,
+	GraphicPipelineConfiguration renderpassConfig
 ) {
-	vk::Device& device = Instance::Get().device;
-
-	vk::DescriptorSetAllocateInfo allocateInfo {
-		.descriptorPool = m_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &layout,
-	};
-
-	auto set = device.allocateDescriptorSets(allocateInfo)[0];
-
-	std::vector<vk::DescriptorBufferInfo> buffersDescriptors;
-
-	for (BufferHandle handle : materialBuffersHandles) {
-		Buffer& buffer = m_resourceManager.getBuffer(handle);
-		buffersDescriptors.push_back({
-			.buffer = buffer.buffer,
-			.range = buffer.size,
-		});
+	vk::DescriptorSetLayout layout = m_emptySetLayout;
+	if (bindings.size() > 0) {
+		layout = Instance::Get().device.createDescriptorSetLayout(
+			{
+				.flags =
+					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)bindings.size(),
+				.pBindings = bindings.data(),
+			}
+		);
 	}
 
-	std::vector<vk::WriteDescriptorSet> writeInfos;
-	for (int i = 0; i < bindings.size(); i++) {
-		vk::DescriptorSetLayoutBinding binding = bindings[i];
+	PipelineIndex pipeline = m_shaderEngine->registerGraphicPipeline(
+		modules, { layout, m_textureSetLayout }, renderpassConfig
+	);
 
-		writeInfos.push_back({
-			.dstSet = set,
-			.dstBinding = (uint32_t)i,
-			.dstArrayElement = 0,
-			.descriptorCount = binding.descriptorCount,
-			.descriptorType = binding.descriptorType,
-			.pImageInfo = nullptr,
-			.pBufferInfo = &buffersDescriptors.at(i),
-		});
-	}
-
-	device.updateDescriptorSets(writeInfos, {});
-	return set;
+	MaterialIndex index = m_pipelines.size();
+	m_pipelines.push_back(pipeline);
+	m_names[name] = index;
+	return index;
 }
 
-Material MaterialManager::getMaterial(MaterialIndex index) {
-	MaterialData& data = m_materialData.at(index);
-	Material material {
-		.pipeline = m_shaderEngine->getPipeline(data.pipeline),
-		.materialSet = data.materialSet,
-
-	};
-
-	return material;
-}
+void MaterialManager::update() { m_shaderEngine->flushRetiredPipelines(); }
 
 uint32_t MaterialManager::registerTextureGroup(
 	ResourceManager::AllocationIndex index
@@ -376,79 +229,23 @@ uint32_t MaterialManager::registerTextureGroup(
 	for (auto& handle : textures) {
 		Image& image = m_resourceManager.getImage(handle);
 
-		info.push_back({
-			.sampler = m_linearSampler,
-			.imageView = image.view,
-			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		});
+		info.push_back(
+			{
+				.imageView = image.view,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+			}
+		);
 	}
 
 	vk::WriteDescriptorSet writeInfo = {
-		.dstSet = m_globalSet,
-		.dstBinding = 3,
+		.dstSet = m_textureSet,
+		.dstBinding = 0,
 		.dstArrayElement = 0,
 		.descriptorCount = (uint32_t)textures.size(),
-		.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+		.descriptorType = vk::DescriptorType::eSampledImage,
 		.pImageInfo = info.data(),
 	};
 
 	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
 	return 0;
 }
-
-void MaterialManager::createMaterialData() {
-	std::vector<ResourceManager::BufferDescription> ownedBufferDescriptions;
-	std::vector<ResourceManager::BufferDescription> sharedBufferDescriptions;
-	std::unordered_map<std::string_view, uint32_t> sharedBuffersIndices;
-
-	for (const auto& [index, metadata] : m_materialMetadata) {
-		if (metadata.materialBufferSize > 0)
-			ownedBufferDescriptions.push_back(
-				ResourceManager::BufferDescription {
-					.size = metadata.materialBufferSize,
-					.usage = vk::BufferUsageFlagBits::eUniformBuffer |
-			                 vk::BufferUsageFlagBits::eTransferDst,
-				}
-			);
-	}
-	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
-
-	if (sharedBufferDescriptions.size() > 0)
-		bufferDescriptions.insert(
-			bufferDescriptions.end(),
-			sharedBufferDescriptions.begin(),
-			sharedBufferDescriptions.end()
-		);
-	if (ownedBufferDescriptions.size() > 0)
-		bufferDescriptions.insert(
-			bufferDescriptions.end(),
-			ownedBufferDescriptions.begin(),
-			ownedBufferDescriptions.end()
-		);
-
-	m_materialDataAllocation =
-		m_resourceManager.createResources({}, bufferDescriptions);
-
-	std::vector<BufferHandle> handles =
-		m_resourceManager.getBuffers(m_materialDataAllocation);
-
-	uint32_t offset = sharedBufferDescriptions.size();
-	for (const auto& [index, metadata] : m_materialMetadata) {
-		std::vector<BufferHandle> materialHandles;
-
-		if (metadata.materialBufferSize > 0) {
-			materialHandles.push_back(handles.at(offset));
-			offset++;
-		}
-
-		vk::DescriptorSet materialSet = createSet(
-			metadata.materialBindings, metadata.materialLayout, materialHandles
-		);
-
-		m_materialData[index] = {
-			.pipeline = metadata.pipeline,
-			.materialBuffers = materialHandles,
-			.materialSet = materialSet,
-		};
-	}
-};

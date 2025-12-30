@@ -1,6 +1,7 @@
 #include "MemoryBarrier.hpp"
 
 #include "Task.hpp"
+#include "TaskContext.hpp"
 void MemoryBarrier(
 	TaskContext& context,
 	std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2>

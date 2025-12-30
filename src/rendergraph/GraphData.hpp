@@ -1,8 +1,10 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 #include "ResourceUsage.hpp"
+#include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 
 namespace rendergraph::internal {
@@ -29,6 +31,9 @@ struct GraphData {
 	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
 	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
 		buffers;
+
+	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
+	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
 
 	std::vector<std::string_view> resourceNames;
 	std::vector<Task> tasks;

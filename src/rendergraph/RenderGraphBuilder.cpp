@@ -188,9 +188,6 @@ void RenderGraphBuilder::addTask(
 		if (!m_dependencies.contains(index))
 			m_dependencies[index] = std::vector<TaskResourceDependency>();
 
-		assert(!m_dependencies.empty()
-		);  // We don't read uninitialized resource
-
 		m_dependencies[index].push_back(
 			TaskResourceDependency {
 				.usage = dependency,
@@ -203,13 +200,6 @@ void RenderGraphBuilder::addTask(
 	for (auto& [index, dependency] : outputResources) {
 		if (!m_dependencies.contains(index))
 			m_dependencies[index] = std::vector<TaskResourceDependency>();
-
-		assert(
-			m_dependencies[index].empty() ||
-			(!m_dependencies[index].empty() &&
-		     m_dependencies[index].back().usageType !=
-		         TaskResourceDependency::UsageType::Input)
-		);  // We don't read uninitialized resource;
 
 		m_dependencies[index].push_back(
 			TaskResourceDependency {

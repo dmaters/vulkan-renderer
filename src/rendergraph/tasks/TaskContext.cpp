@@ -1,0 +1,109 @@
+#include "TaskContext.hpp"
+
+#include "rendergraph/ResourceUsage.hpp"
+#include "vulkan/vulkan.hpp"
+
+TaskContext::Descriptors TaskContext::getDescriptors(bool isRenderPass) const {
+	uint32_t bindingCount = 0;
+	TaskContext::Descriptors resources;
+
+	uint32_t maxPossibleSize = inputs.size() + outputs.size();
+	resources._imageInfo.reserve(maxPossibleSize);
+	resources._bufferInfo.reserve(maxPossibleSize);
+
+	for (auto [index, usage] : inputs) {
+		if (images.contains(index)) {
+			Image& image = resourceManager.getImage(images[index]);
+
+			resources._imageInfo.push_back(
+				{
+					.imageView = image.view,
+					.imageLayout = ResourceUsage::GetAccess(usage).layout,
+				}
+			);
+
+			resources.descriptors.push_back(
+				vk::WriteDescriptorSet {
+					.dstSet = nullptr,
+					.dstBinding = bindingCount,
+					.descriptorCount = 1,
+					.descriptorType =
+						ResourceUsage::getDescriptorType(usage, false).value(),
+					.pImageInfo = &resources._imageInfo.back(),
+				}
+			);
+		} else if (buffers.contains(index)) {
+			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
+
+			resources._bufferInfo.push_back(
+				{
+					.buffer = buffer.buffer,
+					.range = buffer.size,
+				}
+			);
+
+			resources.descriptors.push_back(
+				vk::WriteDescriptorSet {
+					.dstSet = nullptr,
+					.dstBinding = bindingCount,
+					.descriptorCount = 1,
+					.descriptorType =
+						ResourceUsage::getDescriptorType(usage, true).value(),
+					.pBufferInfo = &resources._bufferInfo.back(),
+				}
+			);
+		}
+		bindingCount++;
+	}
+	if (isRenderPass)
+		return resources;  // TODO: Better resource definition, we need to avoid
+		                   // adding rendertargets to descriptors
+
+	for (auto [index, usage] : outputs) {
+		if (images.contains(index)) {
+			Image& image = resourceManager.getImage(images[index]);
+
+			resources._imageInfo.push_back(
+				{
+					//	.sampler = sampler,
+					.imageView = image.view,
+					.imageLayout = ResourceUsage::GetAccess(usage).layout,
+				}
+			);
+
+			resources.descriptors.push_back(
+				vk::WriteDescriptorSet {
+					.dstSet = nullptr,
+					.dstBinding = bindingCount,
+					.descriptorCount = 1,
+					.descriptorType =
+						ResourceUsage::getDescriptorType(usage, false).value(),
+					.pImageInfo = &resources._imageInfo.back(),
+				}
+			);
+		} else if (buffers.contains(index)) {
+			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
+
+			resources._bufferInfo.push_back(
+				{
+					.buffer = buffer.buffer,
+					.range = buffer.size,
+				}
+			);
+
+			resources.descriptors.push_back(
+				vk::WriteDescriptorSet {
+					.dstSet = nullptr,
+					.dstBinding = bindingCount,
+					.descriptorCount = 1,
+					.descriptorType =
+						ResourceUsage::getDescriptorType(usage, true).value(),
+					.pBufferInfo = &resources._bufferInfo.back(),
+				}
+			);
+		}
+		bindingCount++;
+	}
+
+	return resources;
+}

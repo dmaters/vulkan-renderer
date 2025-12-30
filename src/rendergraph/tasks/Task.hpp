@@ -1,28 +1,19 @@
 #pragma once
+#include <cstdint>
 #include <functional>
-#include <unordered_map>
-#include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "../ResourceUsage.hpp"
-#include "material/MaterialManager.hpp"
-#include "resources/ResourceManager.hpp"
-#include "scene/Scene.hpp"
+#include "resources/Buffer.hpp"
+#include "resources/Image.hpp"
 
 using ResourceIndex = uint32_t;
 using FeatureIndex = uint16_t;
 using TaskIndex = uint32_t;
 
-struct TaskContext {
-	vk::CommandBuffer& commandBuffer;
-	std::vector<ResourceIndex>& inputs;
-	std::vector<ResourceIndex>& outputs;
-	std::unordered_map<ResourceIndex, ImageHandle>& images;
-	std::unordered_map<ResourceIndex, BufferHandle>& buffers;
-	ResourceManager& resourceManager;
-	MaterialManager& materialManager;
-	const Scene& scene;
-};
+template <typename T>
+concept ContextResourceRef =
+	std::same_as<T, Buffer&> || std::same_as<T, Image&>;
 
 enum class TaskType {
 	CPU,
@@ -30,5 +21,7 @@ enum class TaskType {
 	Compute,
 	Transfer,
 };
+
+struct TaskContext;
 using Task = std::function<void(TaskContext&)>;
 using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;

@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -15,6 +16,8 @@
 #include "rendergraph/GraphData.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
+#include "tasks/TaskContext.hpp"
+
 using namespace rendergraph::internal;
 
 RenderGraphRunner::RenderGraphRunner(
@@ -197,46 +200,6 @@ void RenderGraphRunner::outputToSwapchain(
     }
 	);
 }
-void updateCameraBuffer(
-	vk::CommandBuffer& commandBuffer,
-	const Scene& scene,
-	ResourceManager& resourceManager
-) {
-	glm::mat4 view = scene.camera.getViewMatrix();
-	glm::mat4 proj = scene.camera.getProjectionMatrix();
-
-	MaterialDefinitions::Camera cameraView {
-		.view = view,
-		.projection = proj,
-		.invView = glm::inverse(view),
-		.invProj = glm::inverse(proj),
-		.frustumPoints = scene.camera.getFrustumPoints(),
-	};
-
-	Buffer& projViewBuffer = resourceManager.getNamedBuffer("camera_data");
-
-	commandBuffer.updateBuffer(
-		projViewBuffer.buffer, 0, sizeof(cameraView), &cameraView
-	);
-
-	vk::BufferMemoryBarrier2 projViewUpdate {
-		.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
-		.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
-		.dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-		.buffer = projViewBuffer.buffer,
-		.offset = 0,
-		.size = projViewBuffer.size,
-
-	};
-
-	commandBuffer.pipelineBarrier2(
-		vk::DependencyInfo {
-			.bufferMemoryBarrierCount = 1,
-			.pBufferMemoryBarriers = &projViewUpdate,
-		}
-	);
-}
 
 void RenderGraphRunner::submit(
 	const Scene& scene, ResourceIndex output, ExecutionInfo& execInfo
@@ -283,29 +246,22 @@ void RenderGraphRunner::submit(
 		}
 	);
 
-	updateCameraBuffer(commandBuffer, scene, m_resourceManager);
-	std::vector<ResourceIndex> inputs;
-	std::vector<ResourceIndex> outputs;
-
 	uint32_t taskCount = m_data.tasks.size();
 	for (auto taskIndex : execInfo.tasks) {
-		inputs.clear();
-
 		auto taskData = taskIndex < taskCount
 		                    ? m_data.taskData[taskIndex]
 		                    : execInfo.data[taskIndex - taskCount];
+		auto inputs = std::span<const ResourceDependency>(
+			m_data.taskDependencies.data() + taskData.inputs.offset,
+			m_data.taskDependencies.data() + taskData.inputs.offset +
+				taskData.inputs.count
+		);
 
-		for (int i = 0; i < taskData.inputs.count; i++) {
-			inputs.push_back(
-				m_data.taskDependencies[taskData.inputs.offset + i].first
-			);
-		}
-		outputs.clear();
-		for (int i = 0; i < taskData.outputs.count; i++) {
-			outputs.push_back(
-				m_data.taskDependencies[taskData.outputs.offset + i].first
-			);
-		}
+		auto outputs = std::span<const ResourceDependency>(
+			m_data.taskDependencies.data() + taskData.outputs.offset,
+			m_data.taskDependencies.data() + taskData.outputs.offset +
+				taskData.outputs.count
+		);
 
 		TaskContext context {
 			.commandBuffer = commandBuffer,
@@ -378,9 +334,12 @@ void RenderGraphRunner::build() {
 	std::vector<ResourceManager::BufferDescription> buffersDescription;
 	for (auto& [index, description] : m_data.images) {
 		if (m_data.swapchainImageRatio.contains(index)) continue;
+		if (m_data.externalImages.contains(index)) continue;
+
 		staticImagesDescriptions.push_back(description);
 	}
 	for (auto& [index, description] : m_data.buffers) {
+		if (m_data.externalBuffers.contains(index)) continue;
 		buffersDescription.push_back(description);
 	}
 
@@ -406,6 +365,9 @@ void RenderGraphRunner::build() {
 
 		i++;
 	}
+
+	for (auto entry : m_data.externalImages) m_images.insert(entry);
+	for (auto entry : m_data.externalBuffers) m_buffers.insert(entry);
 
 	buildSwapchainResources();
 }

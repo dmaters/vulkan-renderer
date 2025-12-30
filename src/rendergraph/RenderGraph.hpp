@@ -12,6 +12,8 @@
 #include "RenderGraphRunner.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
+#include "material/Pipeline.hpp"
+#include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 
@@ -46,8 +48,31 @@ public:
 		uint8_t swapchainRatio = 0
 	);
 
+	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
+
 	ResourceIndex createBuffer(
 		std::string_view name, ResourceManager::BufferDescription desc
+	);
+
+	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);
+
+	void addGraphicPass(
+		std::string_view name,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		GraphicPipelineModules modules,
+		GraphicPipelineConfiguration configuration,
+		Task task,
+		FeatureIndex feature = 0
+	);
+
+	void addComputePass(
+		std::string_view name,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		ComputePipelineModule module,
+		Task task,
+		FeatureIndex feature = 0
 	);
 
 	void addTask(

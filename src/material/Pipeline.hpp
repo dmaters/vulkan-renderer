@@ -7,7 +7,13 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-struct PipelineConfiguration {
+struct GraphicPipelineModules {
+	std::string_view vertex;
+	std::string_view fragment;
+};
+using ComputePipelineModule = std::string_view;
+
+struct GraphicPipelineConfiguration {
 	std::vector<vk::Format> attachmentFormats = {};
 
 	bool depthWrite = false;
@@ -17,16 +23,6 @@ struct PipelineConfiguration {
 
 	bool stencilEnabled = false;
 	vk::StencilOpState stencilOp = vk::StencilOpState {};
-};
-struct PipelineMetadata {
-	struct Modules {
-		std::string_view vertex = "";
-		std::string_view fragment = "";
-		std::string_view compute = "";
-	};
-	Modules modules;
-	std::vector<vk::DescriptorSetLayout> layouts;
-	PipelineConfiguration configuration;
 };
 
 struct Pipeline {
@@ -38,16 +34,16 @@ class PipelineBuilder {
 public:
 	struct ComputePipelineBuildInfo {
 		vk::PipelineShaderStageCreateInfo stage;
-		std::vector<vk::DescriptorSetLayout> setLayouts;
+		std::vector<vk::DescriptorSetLayout>& setLayouts;
 	};
 	static std::optional<Pipeline> BuildComputePipeline(
 		const ComputePipelineBuildInfo& info
 	);
 
 	struct GraphicPipelineBuildInfo {
-		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-		std::vector<vk::DescriptorSetLayout> setLayouts;
-		PipelineConfiguration configuration;
+		std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
+		std::vector<vk::DescriptorSetLayout>& setLayouts;
+		GraphicPipelineConfiguration& configuration;
 	};
 	static std::optional<Pipeline> BuildGraphicPipeline(
 		const GraphicPipelineBuildInfo& info

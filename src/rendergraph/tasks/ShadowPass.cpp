@@ -2,30 +2,32 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "TaskContext.hpp"
+#include "resources/Buffer.hpp"
+#include "vulkan/vulkan.hpp"
+
 constexpr int32_t CASCADE_SIZE = 1024;
 
-void ShadowPass(
-	TaskContext& context, uint8_t cascade, std::vector<Primitive>& primitives
-) {
+void ShadowPass(TaskContext& context, uint8_t cascade) {
 	MaterialIndex materialIndex =
-		context.materialManager.getMaterialIndex("shadow_map");
-	const Material& material =
-		context.materialManager.getMaterial(materialIndex);
+		context.materialManager.getMaterialIndex("shadowmap");
+	const Pipeline material =
+		context.materialManager.getPipeline(materialIndex);
 
 	context.commandBuffer.bindPipeline(
-		vk::PipelineBindPoint::eGraphics, material.pipeline.pipeline
+		vk::PipelineBindPoint::eGraphics, material.pipeline
 	);
 
-	vk::DescriptorSet globalSet = context.materialManager.getGlobalSet();
+	vk::DescriptorSet textureSet = context.materialManager.getTextureSet();
 
 	context.commandBuffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
-		material.pipeline.pipelineLayout,
-		0,
-		{ globalSet, material.materialSet },
+		material.pipelineLayout,
+		1,
+		{ textureSet },
 		{}
 	);
-	ImageHandle handle = context.images[context.outputs[0]];
+	ImageHandle handle = context.images[context.outputs[0].first];
 	Image& image = context.resourceManager.getImage(handle);
 
 	vk::RenderingAttachmentInfo attachment {
@@ -35,7 +37,7 @@ void ShadowPass(
 		.loadOp = vk::AttachmentLoadOp::eClear,
 		.storeOp = vk::AttachmentStoreOp::eStore,
 		.clearValue = { .depthStencil = { .depth = 1, .stencil = 0 }, },
-	
+
 	};
 
 	vk::Rect2D renderArea = {
@@ -45,11 +47,13 @@ void ShadowPass(
 		{ CASCADE_SIZE, CASCADE_SIZE }
 	};
 
-	context.commandBuffer.beginRendering(vk::RenderingInfo {
-		.renderArea = renderArea,
-		.layerCount = 1,
-		.pDepthAttachment = &attachment,
-	});
+	context.commandBuffer.beginRendering(
+		vk::RenderingInfo {
+			.renderArea = renderArea,
+			.layerCount = 1,
+			.pDepthAttachment = &attachment,
+		}
+	);
 	context.commandBuffer.setScissor(0, { renderArea });
 	context.commandBuffer.setViewport(
 		0,
@@ -64,7 +68,7 @@ void ShadowPass(
 	);
 	uint32_t pcascade = cascade;
 	context.commandBuffer.pushConstants(
-		material.pipeline.pipelineLayout,
+		material.pipelineLayout,
 		vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 		0,
 		sizeof(uint32_t),
@@ -72,9 +76,9 @@ void ShadowPass(
 	);
 
 	Buffer& positionBuffer =
-		context.resourceManager.getNamedBuffer("vertex_buffer_positions");
+		context.resourceManager.getNamedBuffer("vertex_positions_buffer");
 	Buffer& attributeBuffer =
-		context.resourceManager.getNamedBuffer("vertex_buffer_attributes");
+		context.resourceManager.getNamedBuffer("vertex_attributes_buffer");
 	Buffer& instanceBuffer =
 		context.resourceManager.getNamedBuffer("instance_buffer");
 	Buffer& indexBuffer =
@@ -93,16 +97,16 @@ void ShadowPass(
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
 	);
 
-	for (const Primitive& primitive : primitives) {
-		if (!std::any_of(
-				primitive.materials.begin(),
-				primitive.materials.end(),
-				[&passMaterial =
-		             materialIndex](MaterialInstance primitiveMaterial) {
-					return primitiveMaterial.index == passMaterial;
-				}
-			))
-			continue;
+	auto descriptors = context.getDescriptors(true);
+	context.commandBuffer.pushDescriptorSet(
+		vk::PipelineBindPoint::eGraphics,
+		material.pipelineLayout,
+		0,
+		descriptors.descriptors
+	);
+
+	for (uint32_t primitiveIndex : context.scene.buckets.at(materialIndex)) {
+		const Primitive& primitive = context.scene.primitives[primitiveIndex];
 
 		context.commandBuffer.drawIndexed(
 			primitive.indexCount,

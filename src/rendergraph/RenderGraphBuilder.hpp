@@ -2,9 +2,9 @@
 
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
 
 #include "GraphData.hpp"
 #include "ResourceUsage.hpp"

@@ -1,16 +1,14 @@
 implementing sky;
 import comp.common;
 
-internal static const float3 GroundAlbedo = float3(0.03,0.11,0.33);
+const internal static float3 GroundAlbedo = float3(0.03, 0.11, 0.33);
 
 internal struct Atmosphere {
-
-    static const float BottomRadius = 6360;
+	static const float BottomRadius = 6360;
 	static const float TopRadius = 6460;
 
-
 	static const float RayleighDensityExpScale = -1 / 8.0f;
-	static const float3 RayleighScattering = float3(0.005802,0.013558,0.0331);
+	static const float3 RayleighScattering = float3(0.005802, 0.013558, 0.0331);
 
 	static const float MieDensityExpScale = -1 / 1.2f;
 	static const float3 MieScattering = float3(0.003996);
@@ -19,14 +17,10 @@ internal struct Atmosphere {
 
 	static const float OzoneLayerHeight = 25;
 	static const float OzoneLayerWidth = 30;
-	static const float3 OzoneAbsorbtion = float3(0.000650,0.001881,0.000085);
-
+	static const float3 OzoneAbsorbtion = float3(0.000650, 0.001881, 0.000085);
 };
 
-
-
-internal struct MediumSample
-{
+internal struct MediumSample {
 	float3 scattering;
 	float3 absorption;
 	float3 extinction;
@@ -39,13 +33,14 @@ internal struct MediumSample
 	float3 scatteringRay;
 	float3 extinctionRay;
 
-	static internal MediumSample Get(float height)
-	{
+	static internal MediumSample Get(float height) {
 		float altitude = height - Atmosphere.BottomRadius;
 		float densityMie = exp(Atmosphere.MieDensityExpScale * altitude);
 		float densityRay = exp(Atmosphere.RayleighDensityExpScale * altitude);
-		float densityOzo = max(0.0, 1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) / (Atmosphere.OzoneLayerWidth / 2.0));
-	
+		float densityOzo =
+			max(0.0,
+		        1.0 - abs(altitude - Atmosphere.OzoneLayerHeight) /
+		                  (Atmosphere.OzoneLayerWidth / 2.0));
 
 		MediumSample s;
 
@@ -54,29 +49,28 @@ internal struct MediumSample
 		s.extinctionMie = densityMie * Atmosphere.MieExtinction;
 
 		s.scatteringRay = densityRay * Atmosphere.RayleighScattering;
-		s.extinctionRay = s.scatteringRay ;
+		s.extinctionRay = s.scatteringRay;
 
 		s.ozoneAbsorbtion = densityOzo * Atmosphere.OzoneAbsorbtion;
-		
+
 		s.scattering = s.scatteringMie + s.scatteringRay;
 		s.absorption = s.absorptionMie + s.ozoneAbsorbtion;
 		s.extinction = s.extinctionMie + s.extinctionRay + s.ozoneAbsorbtion;
 
 		return s;
 	}
-
 };
 
-internal float distanceToAtmosphere(float height, float mu){
-
-    float d = height * height * (mu * mu - 1.0) + Atmosphere.TopRadius * Atmosphere.TopRadius;
+internal float distanceToAtmosphere(float height, float mu) {
+	float d = height * height * (mu * mu - 1.0) +
+	          Atmosphere.TopRadius * Atmosphere.TopRadius;
 	return -height * mu + sqrt(d);
 }
 
-internal float distanceToGround(float height, float mu){
-    
-	float d = height * height * (mu * mu - 1.0) + Atmosphere.BottomRadius * Atmosphere.BottomRadius;
-	
+internal float distanceToGround(float height, float mu) {
+	float d = height * height * (mu * mu - 1.0) +
+	          Atmosphere.BottomRadius * Atmosphere.BottomRadius;
+
 	if (d < 0.0 || mu >= 0.0) return -1.0;
-    return -height * mu - sqrt(d);
+	return -height * mu - sqrt(d);
 }
