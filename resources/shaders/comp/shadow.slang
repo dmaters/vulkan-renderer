@@ -61,7 +61,7 @@ float getValue(
 	uv.x += (1.0 / 3.0) * cascade;
 
 	return (lightSpacePos.z - 0.005) <
-	               shadowMap.Sample(_samplers[SamplerType::NearestClamp], uv).r
+	               shadowMap.Sample(_samplers[SamplerType::LinearClamp], uv).r
 	           ? 0
 	           : 1;
 }
@@ -80,7 +80,6 @@ float shadowPercentage(
 	);
 
 	weight = weight * weight * (3 - 2 * weight);
-
 	float depth = lerp(
 		getValue(shadowmap, worldPos, cascade, camera, light),
 		getValue(shadowmap, worldPos, cascade + 1, camera, light),
