@@ -287,9 +287,9 @@ PipelineIndex ShaderEngine::registerComputePipeline(
 
 	getDependencies(module, dependencies);
 
-	for (auto module : dependencies) {
-		m_modules[module].insert(index);
-		m_lastEdited[module] = std::filesystem::last_write_time(module);
+	for (auto dependecy : dependencies) {
+		m_modules[dependecy].insert(index);
+		m_lastEdited[dependecy] = std::filesystem::last_write_time(dependecy);
 	}
 
 	return index;
@@ -328,9 +328,9 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 
 	getDependencies(modules.fragment, dependencies);
 
-	for (auto module : dependencies) {
-		m_modules[module].insert(index);
-		m_lastEdited[module] = std::filesystem::last_write_time(module);
+	for (auto dependency : dependencies) {
+		m_modules[dependency].insert(index);
+		m_lastEdited[dependency] = std::filesystem::last_write_time(dependency);
 	}
 
 	return index;

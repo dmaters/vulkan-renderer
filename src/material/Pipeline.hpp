@@ -14,7 +14,8 @@ struct GraphicPipelineModules {
 using ComputePipelineModule = std::string_view;
 
 struct GraphicPipelineConfiguration {
-	std::vector<vk::Format> attachmentFormats = {};
+	std::vector<vk::Format> colorAttachmentFormats = {};
+	vk::Format depthFormat = vk::Format::eUndefined;
 
 	bool depthWrite = false;
 	vk::CompareOp depthOp = vk::CompareOp::eAlways;

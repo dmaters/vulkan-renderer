@@ -210,6 +210,7 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 			.fragment = "resources/shaders/dummy_frag.slang",
 		},
 		{
+			.depthFormat = vk::Format::eD16Unorm,
 			.depthWrite = true,
 			.depthOp = vk::CompareOp::eLessOrEqual,
 		},
@@ -312,13 +313,14 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 			.fragment = "resources/shaders/gbuffer_frag.slang",
 		},
 		{
-			.attachmentFormats = {
+			.colorAttachmentFormats = {
 				vk::Format::eR16G16B16A16Sfloat,
 				vk::Format::eR16G16B16A16Sfloat,
 				vk::Format::eR16G16B16A16Sfloat,
 				vk::Format::eR16G16B16A16Sfloat,
 
 			},
+			.depthFormat = vk::Format::eD24UnormS8Uint,
 			.depthWrite = true,
 			.depthOp = vk::CompareOp::eLessOrEqual,
 			.stencilEnabled = true,
@@ -376,7 +378,8 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 			.fragment = "resources/shaders/lighting_deferred.slang",
 		},
 		{
-			.attachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
+			.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
+			.depthFormat = vk::Format::eD24UnormS8Uint,
 			.cullMode = vk::CullModeFlagBits::eNone,
 			.stencilEnabled = true,
 			.stencilOp = { .failOp = vk::StencilOp::eKeep,
@@ -411,9 +414,10 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 			.fragment = "resources/shaders/skybox.slang",
 		},
 		{
-			.attachmentFormats = {
+			.colorAttachmentFormats = {
 			    vk::Format::eR16G16B16A16Sfloat
 			},
+			.depthFormat = vk::Format::eD24UnormS8Uint,
 			.depthWrite = false,
 			.stencilEnabled = true,
 			.stencilOp =

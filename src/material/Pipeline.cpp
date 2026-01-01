@@ -218,7 +218,7 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 	pipelineInfo.pDepthStencilState = &depthStencilState;
 
 	std::vector<vk::PipelineColorBlendAttachmentState> colorblendStates(
-		info.configuration.attachmentFormats.size(),
+		info.configuration.colorAttachmentFormats.size(),
 		vk::PipelineColorBlendAttachmentState {
 			.blendEnable = false,
 			.srcColorBlendFactor = vk::BlendFactor::eOne,
@@ -243,13 +243,12 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
 		.colorAttachmentCount =
-			(uint8_t)info.configuration.attachmentFormats.size(),
-		.pColorAttachmentFormats = info.configuration.attachmentFormats.data(),
-		.depthAttachmentFormat = info.configuration.stencilEnabled
-		                             ? vk::Format::eD24UnormS8Uint
-		                             : vk::Format::eD16Unorm,
+			(uint8_t)info.configuration.colorAttachmentFormats.size(),
+		.pColorAttachmentFormats =
+			info.configuration.colorAttachmentFormats.data(),
+		.depthAttachmentFormat = info.configuration.depthFormat,
 		.stencilAttachmentFormat = info.configuration.stencilEnabled
-		                               ? vk::Format::eD24UnormS8Uint
+		                               ? info.configuration.depthFormat
 		                               : vk::Format::eUndefined,
 
 	};
