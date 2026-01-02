@@ -10,9 +10,12 @@ struct FragmentOutput {
 };
 
 struct PrimitiveInstance {
-	uint32_t albedo;
-	uint32_t normal;
-	uint32_t metallic_roughness;
+	uint32_t albedo_texture;
+	uint32_t normal_texture;
+	uint32_t metallic_roughness_texture;
+	float3 albedo_value;
+	float metallic_value;
+	float roughness_value;
 };
 
 [vk_binding(1)] StructuredBuffer<PrimitiveInstance> _instances;
@@ -27,13 +30,14 @@ float3 reconstructNormal(float2 xy) {
 
 	PrimitiveInstance instance = _instances[uPrimitive.index];
 
-	output.color = _staticTextures[instance.albedo].Sample(
-		_samplers[SamplerType::LinearClamp], input.texcoord
-	);
+	output.color = _staticTextures[instance.albedo_texture].Sample(
+					   _samplers[SamplerType::LinearClamp], input.texcoord
+				   ) *
+	               float4(instance.albedo_value, 1);
 	output.world_space = input.frag_position;
 
 	float3 normal = reconstructNormal(
-		_staticTextures[instance.normal]
+		_staticTextures[instance.normal_texture]
 			.Sample(_samplers[SamplerType::LinearClamp], input.texcoord)
 			.rg
 	);
@@ -42,9 +46,10 @@ float3 reconstructNormal(float2 xy) {
 	float3 transformedNormal = mul(localNormal, TBN);
 	output.normal = float4(transformedNormal, 1);
 	output.metallic_roughness =
-		_staticTextures[instance.metallic_roughness]
+		_staticTextures[instance.metallic_roughness_texture]
 			.Sample(_samplers[SamplerType::LinearClamp], input.texcoord)
-			.gb;
+			.gb *
+		float2(instance.roughness_value, instance.metallic_value);
 
 	return output;
 };

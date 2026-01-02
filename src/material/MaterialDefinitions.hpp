@@ -30,10 +30,12 @@ struct Lights {
 struct LightingMaterial {};
 
 struct PBRInstance {
-	uint32_t albedo;
-	uint32_t normal;
-	uint32_t roughness_metallic;
-	int32_t _padding;
+	uint32_t albedoTexture = 0;
+	uint32_t normalTexture = 1;
+	uint32_t roughnessMetallicTexture = 2;
+	glm::vec3 albedoValue = { 1, 1, 1 };
+	float roughnessValue = 1;
+	float metallicValue = 0;
 };
 
 struct SimpleMaterial {};

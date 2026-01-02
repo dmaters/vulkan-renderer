@@ -162,11 +162,7 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
 		aiString path;
-		MaterialDefinitions::PBRInstance instance {
-			.albedo = 0,
-			.normal = 1,
-			.roughness_metallic = 2,
-		};
+		MaterialDefinitions::PBRInstance instance;
 
 		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
 		        aiReturn_SUCCESS &&
@@ -177,8 +173,14 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 					vk::Format::eR8G8B8A8Srgb,
 				}
 			);
-			instance.albedo = imageCount++;
+			instance.albedoTexture = imageCount++;
 		}
+		aiColor4D diffuseColor;
+		if (materialInstance->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) ==
+		    AI_SUCCESS)
+			instance.albedoValue =
+				glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b);
+
 		if (materialInstance->GetTexture(aiTextureType_NORMALS, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
@@ -188,7 +190,7 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 					vk::Format::eR8G8Unorm,
 				}
 			);
-			instance.normal = imageCount++;
+			instance.normalTexture = imageCount++;
 		} else {
 			imageIndices.push_back(1);
 		}
@@ -202,8 +204,17 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 					vk::Format::eR8G8B8A8Unorm,
 				}
 			);
-			instance.roughness_metallic = imageCount++;
+			instance.roughnessMetallicTexture = imageCount++;
 		}
+		float metallicValue;
+		if (materialInstance->Get(AI_MATKEY_METALLIC_FACTOR, metallicValue) ==
+		    AI_SUCCESS)
+			instance.metallicValue = metallicValue;
+
+		float roughnessValue;
+		if (materialInstance->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessValue) ==
+		    AI_SUCCESS)
+			instance.roughnessValue = roughnessValue;
 
 		instances.push_back(instance);
 	}
