@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <unordered_map>
+#include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
@@ -13,9 +15,9 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
+#include "scene/SceneLoader.hpp"
 
 class Renderer {
-public:
 private:
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
@@ -26,13 +28,13 @@ private:
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
 	Swapchain m_swapchain;
-	RenderGraph m_renderGraph;
+	RenderGraph m_graph;
 
 	Scene m_currentScene;
 
 	uint32_t m_currentFrame = 0;
 
-	void createRenderGraph();
+	void createRenderGraph(ResourceManager::AllocationIndex sceneAllocation);
 
 public:
 	Renderer(SDL_Window* window);

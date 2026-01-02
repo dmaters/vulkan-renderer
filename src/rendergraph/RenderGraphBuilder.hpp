@@ -2,69 +2,42 @@
 
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
 
+#include "GraphData.hpp"
 #include "ResourceUsage.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 
-using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
-
-struct GraphData {
-	struct Barriers {
-		std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2>
-			imageBarriers;
-		std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2>
-			bufferBarriers;
-	};
-
-	struct TaskData {
-		Task task;
-		TaskType type;
-		std::string_view name;
-		Barriers barriers;
-		std::vector<ResourceDependency> inputs;
-		std::vector<ResourceDependency> outputs;
-	};
-	std::vector<TaskData> tasks;
-
-	ResourceIndex outputImage;
-
-	std::unordered_map<ResourceIndex, vk::ImageLayout> requiredLayouts;
-	std::unordered_map<ResourceIndex, uint8_t> swapchainImageRatio;
-	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
-	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
-		buffers;
-
-	std::unordered_map<ResourceIndex, std::string_view> names;
-};
+namespace rendergraph::internal {
 
 class RenderGraphBuilder {
 private:
-	uint32_t m_resourceCount = 0;
+	const GraphData& m_data;
 
-	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription>
-		m_images;
-	std::unordered_map<ResourceIndex, uint8_t> m_swapchainImageRatio;
-
-	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
-		m_buffers;
-
-	std::vector<GraphData::TaskData> m_tasks;
-
+	std::vector<FeatureIndex> m_taskFeatures;
 	struct TaskResourceDependency;
 	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
 		m_dependencies;
 
-	std::unordered_map<ResourceIndex, std::string_view> m_names;
+	struct ResourceAccess;
+	ResourceAccess getResourceBarrier(
+		uint32_t taskIndex,
+		ResourceIndex resourceIndex,
+		std::unordered_set<FeatureIndex>& enabledFeatures,
+		bool readOnly
+	) const;
 
-	ResourceIndex m_outputImage;
-
-	GraphData::Barriers getBarriers(uint32_t task) const;
+	struct Barrier;
+	Barrier getBarrier(
+		uint32_t taskIndex, std::unordered_set<FeatureIndex>& enabledFeatures
+	) const;
 
 public:
+	RenderGraphBuilder(const GraphData& data) : m_data(data) {}
+
 	ResourceIndex createImage(
 		std::string_view name,
 		ResourceManager::ImageDescription desc,
@@ -75,17 +48,17 @@ public:
 	);
 
 	void addTask(
-		std::string_view name,
-		TaskType type,
-		std::vector<ResourceDependency> inputResources,
-		std::vector<ResourceDependency> outputResources,
-		Task task
+		TaskIndex task,
+		std::vector<ResourceDependency>& inputResources,
+		std::vector<ResourceDependency>& outputResources,
+		FeatureIndex feature
 	);
 
-	void setOutputImage(ResourceIndex index) { m_outputImage = index; }
-	GraphData build();
+	rendergraph::internal::ExecutionInfo getTasks(
+		ResourceIndex outputImage,
+		std::unordered_set<FeatureIndex>& enabledFeatures
+	) const;
 };
-
 struct RenderGraphBuilder::TaskResourceDependency {
 	ResourceUsage::Type usage;
 	uint32_t taskIndex;
@@ -95,3 +68,5 @@ struct RenderGraphBuilder::TaskResourceDependency {
 	};
 	UsageType usageType;
 };
+
+}  // namespace rendergraph::internal

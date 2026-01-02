@@ -7,47 +7,33 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "GraphData.hpp"
 #include "RenderGraphBuilder.hpp"
+#include "RenderGraphRunner.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
-#include "resources/Image.hpp"
+#include "material/Pipeline.hpp"
+#include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 
 class RenderGraph {
-public:
 private:
-	struct Node;
-
 	Swapchain& m_swapchain;
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
-	bool m_baseImagesInitialized = false;
-	bool m_swapchainImagesInitialized = false;
+	rendergraph::internal::GraphData m_data;
+	rendergraph::internal::RenderGraphBuilder m_builder;
+	std::optional<rendergraph::internal::RenderGraphRunner> m_runner;
 
-	ResourceManager::AllocationIndex m_frameDataAllocation;
-	ResourceManager::AllocationIndex m_resolutionDependentAllocation = 0;
-	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation = 0;
-	uint8_t m_swapchainFlushCounter = 0;
+	ResourceIndex m_outputImage = UINT32_MAX;
 
-	GraphData m_data;
-	std::unordered_map<ResourceIndex, ImageHandle> m_images;
-	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
+	std::unordered_map<std::string_view, FeatureIndex> m_features;
+	std::unordered_set<FeatureIndex> m_enabledFeatures;
+	bool m_graphUpdated = true;
 
-	uint8_t m_currentFrame = 0;
-	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
-
-	void writeMemoryBarrier(
-		vk::CommandBuffer& commandBuffer, GraphData::TaskData& task
-	) const;
-
-	void initializeImages(vk::CommandBuffer& commandBuffer);
-
-	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t index);
-	void clearUnusedResources();
-	void buildSwapchainResources();
-	void rebuildSwapchain();
+	rendergraph::internal::ExecutionInfo m_executionInfo;
 
 public:
 	RenderGraph(
@@ -56,6 +42,59 @@ public:
 		MaterialManager& materialManager
 	);
 
+	ResourceIndex createImage(
+		std::string_view name,
+		ResourceManager::ImageDescription desc,
+		uint8_t swapchainRatio = 0
+	);
+
+	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
+
+	ResourceIndex createBuffer(
+		std::string_view name, ResourceManager::BufferDescription desc
+	);
+
+	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);
+
+	void addGraphicPass(
+		std::string_view name,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		GraphicPipelineModules modules,
+		GraphicPipelineConfiguration configuration,
+		Task task,
+		FeatureIndex feature = 0
+	);
+
+	void addComputePass(
+		std::string_view name,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		ComputePipelineModule module,
+		Task task,
+		FeatureIndex feature = 0
+	);
+
+	void addTask(
+		std::string_view name,
+		TaskType type,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		Task task,
+		FeatureIndex feature = 0
+	);
+
+	void setOutputImage(ResourceIndex image) {
+		m_outputImage = image;
+		m_graphUpdated = true;
+	}
+
+	FeatureIndex addFeatureFlag(
+		std::string_view name, bool defaultValue = true
+	);
+
+	void setFeatureFlag(std::string_view name, bool value);
+	void setFeatureFlag(FeatureIndex index, bool value);
+
 	void submit(const Scene& scene);
-	void build(GraphData buildData);
 };

@@ -13,7 +13,6 @@
 #include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 
 #include "Pipeline.hpp"
@@ -23,17 +22,32 @@ typedef uint32_t PipelineIndex;
 
 class ShaderEngine {
 private:
+	struct PipelineIndexFields {
+		enum class Type : uint8_t {
+			Graphic,
+			Compute,
+		};
+
+		uint8_t type : 1;
+		uint32_t index : 31;
+	};
+
 	slang::IGlobalSession* m_session;
 
 	std::unordered_map<PipelineIndex, Pipeline> m_pipelines;
-	std::unordered_map<PipelineIndex, PipelineMetadata> m_pipelineMetadatas;
+
+	std::unordered_map<PipelineIndex, std::vector<vk::DescriptorSetLayout>>
+		m_layouts;
+
+	std::unordered_map<PipelineIndex, GraphicPipelineConfiguration>
+		m_renderPassConfigurations;
+	std::unordered_map<PipelineIndex, GraphicPipelineModules> m_graphicModules;
+
+	std::unordered_map<PipelineIndex, ComputePipelineModule> m_computeModules;
 
 	std::vector<std::pair<Pipeline, uint8_t>> m_retiredPipelines;
-
 	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>>
 		m_modules;
-
-	uint32_t m_pipelineCount = 1;
 
 	std::mutex m_mutex;
 	std::condition_variable m_cv;
@@ -49,18 +63,30 @@ private:
 		const std::filesystem::path& path, SlangStage stage
 	);
 
-	std::optional<Pipeline> buildPipeline(const PipelineMetadata& metadata);
-
+	std::optional<Pipeline> buildGraphicPipeline(
+		GraphicPipelineModules& modules,
+		std::vector<vk::DescriptorSetLayout>& layouts,
+		GraphicPipelineConfiguration& configuration
+	);
+	std::optional<Pipeline> buildComputePipeline(
+		ComputePipelineModule computeModule,
+		std::vector<vk::DescriptorSetLayout>& layouts
+	);
 	void reloadPipeline(PipelineIndex index);
-
-	static std::unordered_map<std::string_view, PipelineMetadata>
-	_get_defined_pipelines();
 
 public:
 	ShaderEngine();
 	~ShaderEngine();
 
-	PipelineIndex registerPipeline(const PipelineMetadata metadata);
+	PipelineIndex registerGraphicPipeline(
+		GraphicPipelineModules modules,
+		std::vector<vk::DescriptorSetLayout> layouts,
+		GraphicPipelineConfiguration configuration
+	);
+	PipelineIndex registerComputePipeline(
+		ComputePipelineModule computeModule,
+		std::vector<vk::DescriptorSetLayout> layouts
+	);
 
 	Pipeline getPipeline(PipelineIndex index) {
 		assert(m_pipelines.contains(index));

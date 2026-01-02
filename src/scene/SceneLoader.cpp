@@ -10,18 +10,14 @@
 
 #include <assimp/Importer.hpp>
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <glm/glm.hpp>
 #include <iostream>
-#include <optional>
-#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 
 #include "Primitive.hpp"
-#include "assimp/DefaultLogger.hpp"
-#include "material/Material.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
@@ -90,15 +86,17 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 
 		auto texcoord = mesh.mTextureCoords[0][i];
 		size = fmax(size, vertex.Length());
-		vertices.push_back(Vertex {
-			{ vertex.x, vertex.y, vertex.z },
-			{
-             { normal.x, normal.y, normal.z },
-             { tangent.x, tangent.y, tangent.z },
-             { bitangent.x, bitangent.y, bitangent.z },
-             { texcoord.x, texcoord.y },
-			 }
-        });
+		vertices.push_back(
+			Vertex {
+				{ vertex.x,                        vertex.y, vertex.z },
+				{
+                 { normal.x, normal.y, normal.z },
+                 { tangent.x, tangent.y, tangent.z },
+                 { bitangent.x, bitangent.y, bitangent.z },
+                 { texcoord.x, texcoord.y },
+				 }
+        }
+		);
 	};
 
 	uint32_t vertexOffset;
@@ -131,53 +129,66 @@ void SceneLoader::loadNode(aiNode& root, const aiScene& importedScene) {
 
 void loadPrimitives() {}
 
-void SceneLoader::loadMaterials(
+std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 	const aiScene& scene, std::filesystem::path& texturePath
 ) {
-	MaterialIndex material = m_materialManager.getMaterialIndex("pbr_deferred");
-
 	uint32_t imageCount = 3;
 	std::vector<uint32_t> imageIndices;
 
 	std::vector<ResourceManager::TextureInfo> textures;
-	textures.push_back({
-		"resources/textures/default_albedo.png",
-		vk::Format::eR8G8B8A8Unorm,
-	});
+	std::vector<MaterialDefinitions::PBRInstance> instances;
 
-	textures.push_back({
-		"resources/textures/default_normal.png",
-		vk::Format::eR8G8B8A8Unorm,
-	});
+	textures.push_back(
+		{
+			"resources/textures/default_albedo.png",
+			vk::Format::eR8G8B8A8Unorm,
+		}
+	);
 
-	textures.push_back({
-		"resources/textures/default_metallicRoughness.png",
-		vk::Format::eR8G8B8A8Unorm,
-	});
+	textures.push_back(
+		{
+			"resources/textures/default_normal.png",
+			vk::Format::eR8G8B8A8Unorm,
+		}
+	);
+
+	textures.push_back(
+		{
+			"resources/textures/default_metallicRoughness.png",
+			vk::Format::eR8G8B8A8Unorm,
+		}
+	);
 
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
 		aiString path;
+		MaterialDefinitions::PBRInstance instance {
+			.albedo = 0,
+			.normal = 1,
+			.roughness_metallic = 2,
+		};
 
 		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			textures.push_back({
-				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eR8G8B8A8Unorm,
-			});
-			imageIndices.push_back(imageCount++);
-		} else {
-			imageIndices.push_back(0);
+			textures.push_back(
+				{
+					texturePath / std::filesystem::path(path.C_Str()),
+					vk::Format::eR8G8B8A8Unorm,
+				}
+			);
+			instance.albedo = imageCount++;
 		}
 		if (materialInstance->GetTexture(aiTextureType_NORMALS, 0, &path) ==
 		        aiReturn_SUCCESS &&
 		    path.length > 0) {
-			textures.push_back({
-				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eR8G8Unorm,
-			});
-			imageIndices.push_back(imageCount++);
+			textures.push_back(
+				{
+					texturePath / std::filesystem::path(path.C_Str()),
+					vk::Format::eR8G8Unorm,
+				}
+			);
+			instance.normal = imageCount++;
 		} else {
 			imageIndices.push_back(1);
 		}
@@ -185,34 +196,21 @@ void SceneLoader::loadMaterials(
 				aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &path
 			) == aiReturn_SUCCESS &&
 		    path.length > 0) {
-			textures.push_back({
-				texturePath / std::filesystem::path(path.C_Str()),
-				vk::Format::eR8G8B8A8Unorm,
-			});
-			imageIndices.push_back(imageCount++);
-		} else {
-			imageIndices.push_back(2);
+			textures.push_back(
+				{
+					texturePath / std::filesystem::path(path.C_Str()),
+					vk::Format::eR8G8B8A8Unorm,
+				}
+			);
+			instance.roughness_metallic = imageCount++;
 		}
+
+		instances.push_back(instance);
 	}
 	auto allocation = m_resourceManager.loadSceneTextures(textures);
 	m_materialManager.registerTextureGroup(allocation);
-	uint32_t instanceCount = scene.mNumMaterials;
 
-	auto materialData = m_materialManager.getMaterial(
-		m_materialManager.getMaterialIndex("pbr_deferred")
-	);
-
-	m_materialManager.updateMaterialData<MaterialDefinitions::PBRUniforms>(
-		material,
-		[instanceCount,
-	     imageIndices](MaterialDefinitions::PBRUniforms& instances) {
-			for (int i = 0; i < instanceCount; i++) {
-				instances[i].albedo = imageIndices.at(i * 3);
-				instances[i].normal = imageIndices.at(i * 3 + 1);
-				instances[i].roughness_metallic = imageIndices.at(i * 3 + 2);
-			}
-		}
-	);
+	return instances;
 }
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
@@ -227,7 +225,8 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	assert(import != nullptr);
 
 	auto folderPath = path.parent_path();
-	loadMaterials(*import, folderPath);
+	std::vector<MaterialDefinitions::PBRInstance> materialInstances =
+		loadMaterials(*import, folderPath);
 
 	std::vector<glm::mat4> instances;
 	m_instanceCache = std::vector<std::vector<glm::mat4>>(import->mNumMeshes);
@@ -245,7 +244,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		uint32_t firstInstance = instances.size();
 
 		for (auto instance : m_instanceCache[i]) {
-			sceneSize = fmax(
+			sceneSize = std::max(
 				sceneSize, glm::vec3(instance[3]).length() + primitive.size
 			);
 			instances.push_back(instance);
@@ -256,26 +255,108 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		primitive.baseInstance = firstInstance;
 		primitive.instanceCount = instanceCount;
 
-		primitive.materials.push_back({
-			m_materialManager.getMaterialIndex("pbr_deferred"),
-			mesh->mMaterialIndex,
-		});
-		primitive.materials.push_back({
-			m_materialManager.getMaterialIndex("shadow_map"),
-			mesh->mMaterialIndex,
-		});
-
 		primitives.push_back(primitive);
 	}
 
 	m_primitiveManager.addInstances(instances);
 
-	Scene scene {
-		.primitives = primitives,
-		.size = sceneSize,
-	};
+	ResourceManager::AllocationIndex buffersAllocation =
+		m_resourceManager.createResources(
+			{
+    },
+			{
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						m_primitiveManager.m_positions.size() *
+						sizeof(glm::vec3)
+					),
+					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						m_primitiveManager.m_attributes.size() *
+						sizeof(Vertex::Attributes)
+					),
+					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						m_primitiveManager.m_indexBuffer.size() *
+						sizeof(uint32_t)
+					),
+					.usage = vk::BufferUsageFlagBits::eIndexBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						instances.size() * sizeof(glm::mat4)
+					),
+					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						materialInstances.size() *
+						sizeof(MaterialDefinitions::PBRInstance)
+					),
+					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+			}
+		);
 
-	m_primitiveManager.buildBuffers(m_resourceManager);
+	auto& buffers = m_resourceManager.getBuffers(buffersAllocation);
+
+	m_resourceManager.queueBufferUpdate(
+		buffers[0],
+		[positions = std::move(m_primitiveManager.m_positions)](void* ptr) {
+			std::memcpy(
+				ptr, positions.data(), positions.size() * sizeof(glm::vec3)
+			);
+		}
+	);
+	m_resourceManager.queueBufferUpdate(
+		buffers[1],
+		[attributes = std::move(m_primitiveManager.m_attributes)](void* ptr) {
+			std::memcpy(
+				ptr,
+				attributes.data(),
+				attributes.size() * sizeof(Vertex::Attributes)
+			);
+		}
+	);
+	m_resourceManager.queueBufferUpdate(
+		buffers[2],
+		[indices = std::move(m_primitiveManager.m_indexBuffer)](void* ptr) {
+			std::memcpy(ptr, indices.data(), indices.size() * sizeof(uint32_t));
+		}
+	);
+	m_resourceManager.queueBufferUpdate(
+		buffers[3],
+		[instances = std::move(m_primitiveManager.m_instances)](void* ptr) {
+			std::memcpy(
+				ptr, instances.data(), instances.size() * sizeof(glm::mat4)
+			);
+		}
+	);
+	m_resourceManager.queueBufferUpdate(
+		buffers[4], [instances = std::move(materialInstances)](void* ptr) {
+			std::memcpy(
+				ptr,
+				instances.data(),
+				instances.size() * sizeof(MaterialDefinitions::PBRInstance)
+			);
+		}
+	);
+
+	m_resourceManager.sync();
+	Scene scene {
+		.primitives = std::move(primitives),
+		.size = sceneSize,
+		.allocation = buffersAllocation,
+	};
 
 	return scene;
 }

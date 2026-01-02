@@ -1,22 +1,12 @@
 #include "ResourceManager.hpp"
 
-#include <vulkan/vulkan_core.h>
-
 #include <cassert>
-#include <climits>
-#include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <iostream>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "Buffer.hpp"
 #include "Image.hpp"
@@ -35,42 +25,53 @@ ResourceManager::ResourceManager() :
 	m_stagingAllocation(vk::MemoryPropertyFlagBits::eHostVisible, 1 << 28) {
 	Instance &instance = Instance::Get();
 
-	m_transferPool = instance.device.createCommandPool({
-		.flags = vk::CommandPoolCreateFlagBits::eTransient,
-		.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
-	});
-	m_graphicPool = instance.device.createCommandPool({
-		.flags = vk::CommandPoolCreateFlagBits::eTransient,
-		.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
-	});
+	m_transferPool = instance.device.createCommandPool(
+		{
+			.flags = vk::CommandPoolCreateFlagBits::eTransient,
+			.queueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
+		}
+	);
+	m_graphicPool = instance.device.createCommandPool(
+		{
+			.flags = vk::CommandPoolCreateFlagBits::eTransient,
+			.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
+		}
+	);
 
 	vk::SemaphoreTypeCreateInfo type {
 		.semaphoreType = vk::SemaphoreType::eTimeline,
 		.initialValue = 0,
 	};
 
-	m_semaphore = instance.device.createSemaphore({
-		.pNext = &type,
-	});
+	m_semaphore = instance.device.createSemaphore(
+		{
+			.pNext = &type,
+		}
+	);
 
-	m_stagingBuffer = instance.device.createBuffer(vk::BufferCreateInfo {
-		.size = 1 << 28,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-	});
+	m_stagingBuffer = instance.device.createBuffer(
+		vk::BufferCreateInfo {
+			.size = 1 << 28,
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		}
+	);
 	instance.device.bindBufferMemory(
 		m_stagingBuffer, m_stagingAllocation.getAllocation().memory, 0
 	);
 
-	m_stagingCommandBuffer =
-		instance.device.allocateCommandBuffers(vk::CommandBufferAllocateInfo {
+	m_stagingCommandBuffer = instance.device.allocateCommandBuffers(
+		vk::CommandBufferAllocateInfo {
 			.commandPool = m_transferPool,
 			.level = vk::CommandBufferLevel::ePrimary,
 			.commandBufferCount = 1,
-		})[0];
+		}
+	)[0];
 
-	m_stagingCommandBuffer.begin({
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-	});
+	m_stagingCommandBuffer.begin(
+		{
+			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		}
+	);
 }
 
 void ResourceManager::setName(std::string_view name, ImageHandle handle) {
@@ -137,23 +138,29 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 			copyInfo.origin, copyInfo.destination, copyInfo.copy
 		);
 
-		barriers.push_back({
-			.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
-			.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-			.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-			.dstAccessMask = vk::AccessFlagBits2::eNone,
-			.srcQueueFamilyIndex = instance.queueFamiliesIndices.transferIndex,
-			.dstQueueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
-			.buffer = copyInfo.destination,
-			.offset = 0,
-			.size = copyInfo.copy.size,
-		});
+		barriers.push_back(
+			{
+				.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+				.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+				.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+				.dstAccessMask = vk::AccessFlagBits2::eNone,
+				.srcQueueFamilyIndex =
+					instance.queueFamiliesIndices.transferIndex,
+				.dstQueueFamilyIndex =
+					instance.queueFamiliesIndices.graphicsIndex,
+				.buffer = copyInfo.destination,
+				.offset = 0,
+				.size = copyInfo.copy.size,
+			}
+		);
 	}
 
-	commandBuffer.pipelineBarrier2(vk::DependencyInfo {
-		.bufferMemoryBarrierCount = (uint32_t)barriers.size(),
-		.pBufferMemoryBarriers = barriers.data(),
-	});
+	commandBuffer.pipelineBarrier2(
+		vk::DependencyInfo {
+			.bufferMemoryBarrierCount = (uint32_t)barriers.size(),
+			.pBufferMemoryBarriers = barriers.data(),
+		}
+	);
 
 	commandBuffer.end();
 
@@ -180,10 +187,12 @@ void copyToImage(
             .layerCount = 1,
         }
     };
-	commandBuffer.pipelineBarrier2({
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &barrier,
-	});
+	commandBuffer.pipelineBarrier2(
+		{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &barrier,
+		}
+	);
 	commandBuffer.copyBufferToImage(
 		origin,
 		destination,
@@ -258,10 +267,12 @@ void writeMipMaps(
 			sourceBarrier,
 			destinationBarrier,
 		};
-		commandBuffer.pipelineBarrier2(vk::DependencyInfo {
-			.imageMemoryBarrierCount = 2,
-			.pImageMemoryBarriers = barriers.data(),
-		});
+		commandBuffer.pipelineBarrier2(
+			vk::DependencyInfo {
+				.imageMemoryBarrierCount = 2,
+				.pImageMemoryBarriers = barriers.data(),
+			}
+		);
 
 		vk::ImageBlit blit {
 			.srcSubresource = {
@@ -297,10 +308,12 @@ void writeMipMaps(
 		sourceBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
 		sourceBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-		commandBuffer.pipelineBarrier2(vk::DependencyInfo {
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = &sourceBarrier,
-		});
+		commandBuffer.pipelineBarrier2(
+			vk::DependencyInfo {
+				.imageMemoryBarrierCount = 1,
+				.pImageMemoryBarriers = &sourceBarrier,
+			}
+		);
 
 		res.width /= 2;
 		res.height /= 2;
@@ -366,16 +379,19 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 		int32_t x, y, channels;
 		stbi_info(info.path.string().c_str(), &x, &y, &channels);
 
-		textureDesc.push_back({
-			.width = (uint32_t)x,
-			.height = (uint32_t)y,
-			.depth = 1,
-			.miplevels = (uint32_t)(std::floor(std::log2(std::max(x, y))) + 1),
-			.format = info.expectedFormat,
-			.usage = vk::ImageUsageFlagBits::eSampled |
-		             vk::ImageUsageFlagBits::eTransferSrc |
-		             vk::ImageUsageFlagBits::eTransferDst,
-		});
+		textureDesc.push_back(
+			{
+				.width = (uint32_t)x,
+				.height = (uint32_t)y,
+				.depth = 1,
+				.miplevels =
+					(uint32_t)(std::floor(std::log2(std::max(x, y))) + 1),
+				.format = info.expectedFormat,
+				.usage = vk::ImageUsageFlagBits::eSampled |
+		                 vk::ImageUsageFlagBits::eTransferSrc |
+		                 vk::ImageUsageFlagBits::eTransferDst,
+			}
+		);
 	}
 
 	AllocationIndex allocationIndex = createResources(textureDesc, {});
@@ -388,25 +404,31 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 		size
 	);
 
-	vk::Buffer stagingBuffer = device.createBuffer({
-		.size = size,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc,
-	});
+	vk::Buffer stagingBuffer = device.createBuffer(
+		{
+			.size = size,
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		}
+	);
 	device.bindBufferMemory(
 		stagingBuffer, stagingAllocator.getAllocation().memory, 0
 	);
 
-	vk::CommandBuffer transferBuffer = device.allocateCommandBuffers({
-		.commandPool = m_transferPool,
-		.level = vk::CommandBufferLevel::eSecondary,
-		.commandBufferCount = 1,
+	vk::CommandBuffer transferBuffer = device.allocateCommandBuffers(
+		{
+			.commandPool = m_transferPool,
+			.level = vk::CommandBufferLevel::eSecondary,
+			.commandBufferCount = 1,
 
-	})[0];
-	vk::CommandBuffer mipmapBuffer = device.allocateCommandBuffers({
-		.commandPool = m_graphicPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1,
-	})[0];
+		}
+	)[0];
+	vk::CommandBuffer mipmapBuffer = device.allocateCommandBuffers(
+		{
+			.commandPool = m_graphicPool,
+			.level = vk::CommandBufferLevel::ePrimary,
+			.commandBufferCount = 1,
+		}
+	)[0];
 	vk::CommandBufferInheritanceInfo inheritanceInfo {};
 	vk::CommandBufferBeginInfo beginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
@@ -430,10 +452,12 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 				? (ChannelsValues::R | ChannelsValues::G)
 				: (0xff);
 
-		SubAllocation stagingAllocation = stagingAllocator.subAllocate({
-			.size = requirements.size,
-			.alignment = requirements.alignment,
-		});
+		SubAllocation stagingAllocation = stagingAllocator.subAllocate(
+			{
+				.size = requirements.size,
+				.alignment = requirements.alignment,
+			}
+		);
 
 		std::byte *address =
 			stagingAllocator.getAllocation().address + stagingAllocation.offset;
@@ -495,10 +519,18 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	std::vector<ImageDescription> imagesDescriptions,
 	std::vector<BufferDescription> buffersDescriptions
 ) {
-	if (imagesDescriptions.size() == 0 && buffersDescriptions.size() == 0) {
+	if (imagesDescriptions.empty() && buffersDescriptions.empty()) {
 		std::cerr << "Tried to allocate with no resources" << std::endl;
 		return 0;
 	}
+
+	assert(
+		std::find_if(
+			buffersDescriptions.begin(),
+			buffersDescriptions.end(),
+			[](BufferDescription &desc) { return desc.size == 0; }
+		) == buffersDescriptions.end()
+	);
 
 	vk::Device &device = Instance::Get().device;
 
@@ -544,7 +576,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			.format = description.format,
 			.size = { description.width,
                      description.height,
-                     description.depth, 
+                     description.depth,
 					},
 		};
 
@@ -554,10 +586,12 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	for (int i = 0; i < buffersDescriptions.size(); i++) {
 		auto &description = buffersDescriptions[i];
 
-		vk::Buffer buffer = device.createBuffer(vk::BufferCreateInfo {
-			.size = description.size,
-			.usage = description.usage,
-		});
+		vk::Buffer buffer = device.createBuffer(
+			vk::BufferCreateInfo {
+				.size = description.size,
+				.usage = description.usage,
+			}
+		);
 
 		vk::MemoryRequirements requirements =
 			device.getBufferMemoryRequirements(buffer);
@@ -678,15 +712,19 @@ uint64_t ResourceManager::sync() {
 
 	m_stagingAdditionalAllocators.clear();
 
-	m_stagingCommandBuffer = device.allocateCommandBuffers({
-		.commandPool = m_transferPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1,
-	})[0];
+	m_stagingCommandBuffer = device.allocateCommandBuffers(
+		{
+			.commandPool = m_transferPool,
+			.level = vk::CommandBufferLevel::ePrimary,
+			.commandBufferCount = 1,
+		}
+	)[0];
 
-	m_stagingCommandBuffer.begin({
-		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-	});
+	m_stagingCommandBuffer.begin(
+		{
+			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		}
+	);
 
 	return m_transferCount;
 }

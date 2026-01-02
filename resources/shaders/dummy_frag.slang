@@ -1,4 +1,2 @@
 
-[shader("fragment")]
-void main(){
-}
+[shader("fragment")] void main() {}

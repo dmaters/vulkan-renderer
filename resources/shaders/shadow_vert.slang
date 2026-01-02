@@ -1,16 +1,23 @@
-#include "bindings/lighting.slang"
-#include "bindings/geometry.slang"
-#include "comp/utils.slang"
-#include "bindings/environment.slang"
+#include "common/geometry.slang"
+#include "common/lighting.slang"
 #include "comp/shadow.slang"
+#include "comp/utils.slang"
 
-[vk::push_constant] cbuffer ShadowData {
+[vk_binding(0)] ConstantBuffer<LightData> _lightData;
+[vk_binding(1)] ConstantBuffer<Camera> _camera;
+
+struct ShadowData {
 	uint32_t cascade;
-} uShadowData;
+};
+[vk::push_constant] ConstantBuffer<ShadowData> _shadowData;
 
-[shader("vertex")]
-float4  main(VertexInput input) : SV_Position {
-	
-
-	return 	mul(mul(mul(Shadow::shadowProjectionMatrix(uShadowData.cascade),uLightData.view),input.transformation), float4(input.position, 1.0));
+[shader("vertex")] float4 main(VertexInput input) : SV_Position {
+	return mul(
+		mul(mul(Shadow::shadowProjectionMatrix(
+					_shadowData.cascade, _camera, _lightData
+				),
+	            _lightData.view),
+	        input.transformation),
+		float4(input.position, 1.0)
+	);
 }

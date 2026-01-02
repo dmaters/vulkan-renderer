@@ -10,6 +10,7 @@
 #include "PrimitiveManager.hpp"
 #include "Scene.hpp"
 #include "material/Material.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -18,7 +19,8 @@ class SceneLoader {
 	MaterialManager& m_materialManager;
 	PrimitiveManager m_primitiveManager;
 
-	std::unordered_map<uint16_t, MaterialInstance> m_materialCache;
+	std::unordered_map<uint16_t, MaterialDefinitions::PBRInstance>
+		m_materialCache;
 	std::vector<std::vector<glm::mat4>> m_instanceCache;
 
 	Primitive loadMesh(aiMesh& mesh);
@@ -28,7 +30,7 @@ class SceneLoader {
 		aiTextureType type,
 		std::filesystem::path& folderPath
 	);
-	void loadMaterials(
+	std::vector<MaterialDefinitions::PBRInstance> loadMaterials(
 		const aiScene& scene, std::filesystem::path& texturePath
 	);
 
@@ -36,5 +38,6 @@ public:
 	SceneLoader(
 		ResourceManager& resourceManager, MaterialManager& materialManager
 	);
+
 	Scene load(const std::filesystem::path& path);
 };

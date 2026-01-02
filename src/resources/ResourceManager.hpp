@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -75,11 +74,11 @@ public:
 		return m_buffers.at(handle.value);
 	}
 
-	const std::vector<ImageHandle> getImages(AllocationIndex index) const {
+	const std::vector<ImageHandle>& getImages(AllocationIndex index) const {
 		if (index == 0) return {};
 		return m_allocationResources.at(index).first;
 	}
-	const std::vector<BufferHandle> getBuffers(AllocationIndex index) const {
+	const std::vector<BufferHandle>& getBuffers(AllocationIndex index) const {
 		if (index == 0) return {};
 		return m_allocationResources.at(index).second;
 	}

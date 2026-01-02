@@ -1,5 +1,7 @@
 #include "Instance.hpp"
 
+#include <vulkan/vulkan_core.h>
+
 #include <cstdint>
 #include <iostream>
 #include <string_view>
@@ -80,11 +82,13 @@ vk::Instance createInstance() {
 		.apiVersion = vk::ApiVersion13,
 	};
 
-	vk::Instance instance = vk::createInstance(vk::InstanceCreateInfo {
-		.pApplicationInfo = &appInfo,
-		.enabledExtensionCount = (uint32_t)instanceExtensionLayers.size(),
-		.ppEnabledExtensionNames = instanceExtensionLayers.data(),
-	});
+	vk::Instance instance = vk::createInstance(
+		vk::InstanceCreateInfo {
+			.pApplicationInfo = &appInfo,
+			.enabledExtensionCount = (uint32_t)instanceExtensionLayers.size(),
+			.ppEnabledExtensionNames = instanceExtensionLayers.data(),
+		}
+	);
 
 	return instance;
 }
@@ -121,10 +125,17 @@ std::string_view to_string_message_type(VkDebugUtilsMessageTypeFlagsEXT s) {
 	return "Unknown";
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL
-debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void*) {
-	auto ms = to_string_message_severity(messageSeverity);
-	auto mt = to_string_message_type(messageType);
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+	vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	vk::DebugUtilsMessageTypeFlagsEXT messageType,
+	const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void*
+) {
+	auto ms = to_string_message_severity(
+		(VkDebugUtilsMessageSeverityFlagBitsEXT)messageSeverity
+	);
+	auto mt =
+		to_string_message_type((VkDebugUtilsMessageTypeFlagsEXT)messageType);
 	printf("[%s: %s]\n%s\n", ms.data(), mt.data(), pCallbackData->pMessage);
 
 	return VK_FALSE;  // Applications must return false here
@@ -133,10 +144,7 @@ void setupDebug(vk::Instance instance) {
 	vk::DebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {
 		.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
 		.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
-		.pfnUserCallback =
-			reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(
-				debug_callback
-			),
+		.pfnUserCallback = debug_callback,
 
 	};
 
@@ -219,11 +227,13 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	};
 
 	if (queueFamilies.graphicsIndex != queueFamilies.transferIndex)
-		queueInfo.push_back({
-			.queueFamilyIndex = (uint32_t)queueFamilies.transferIndex,
-			.queueCount = 1,
-			.pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }
-                .data()
+		queueInfo.push_back(
+			{
+				.queueFamilyIndex = (uint32_t)queueFamilies.transferIndex,
+				.queueCount = 1,
+				.pQueuePriorities =
+					std::array<float, 3> { 1.f, 1.f, 1.f }
+                      .data()
         }
 		);
 

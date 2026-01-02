@@ -6,7 +6,6 @@
 namespace MaterialDefinitions {
 
 struct EnvironmentData {
-	glm::vec3 environmentColor;
 	float sceneSize;
 };
 
@@ -30,36 +29,21 @@ struct Lights {
 
 struct LightingMaterial {};
 
-struct PBRUniform {
+struct PBRInstance {
 	uint32_t albedo;
 	uint32_t normal;
 	uint32_t roughness_metallic;
 	int32_t _padding;
 };
 
-typedef std::array<PBRUniform, 512> PBRUniforms;
-
-struct PBRMaterial {
-	PBRUniforms* instances;
-	// const Lights* light_data;
-	// const ViewProjection* view_projection;
-};
-
 struct SimpleMaterial {};
 struct ErrorFallback {};
 
-struct GBufferBase {
-	PBRUniforms* instances;
-	// const ViewProjection* view_projection;
-};
+struct GBufferBase {};
 
-struct DeferredLighting {
-	//	const Lights* light_data;
-};
+struct DeferredLighting {};
 
-struct ShadowMap {
-	//	const Lights* light_data;
-};
+struct ShadowMap {};
 
 struct CompositionPass {};
 
