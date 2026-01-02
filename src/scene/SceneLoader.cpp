@@ -155,7 +155,7 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 	textures.push_back(
 		{
 			"resources/textures/default_metallicRoughness.png",
-			vk::Format::eR8G8B8A8Srgb,
+			vk::Format::eR8G8B8A8Unorm,
 		}
 	);
 
