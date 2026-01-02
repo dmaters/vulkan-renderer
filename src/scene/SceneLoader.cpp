@@ -141,21 +141,21 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 	textures.push_back(
 		{
 			"resources/textures/default_albedo.png",
-			vk::Format::eR8G8B8A8Unorm,
+			vk::Format::eR8G8B8A8Srgb,
 		}
 	);
 
 	textures.push_back(
 		{
 			"resources/textures/default_normal.png",
-			vk::Format::eR8G8B8A8Unorm,
+			vk::Format::eR8G8Unorm,
 		}
 	);
 
 	textures.push_back(
 		{
 			"resources/textures/default_metallicRoughness.png",
-			vk::Format::eR8G8B8A8Unorm,
+			vk::Format::eR8G8B8A8Srgb,
 		}
 	);
 
@@ -174,7 +174,7 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 			textures.push_back(
 				{
 					texturePath / std::filesystem::path(path.C_Str()),
-					vk::Format::eR8G8B8A8Unorm,
+					vk::Format::eR8G8B8A8Srgb,
 				}
 			);
 			instance.albedo = imageCount++;
