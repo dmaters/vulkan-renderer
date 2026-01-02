@@ -28,8 +28,8 @@ private:
 			Compute,
 		};
 
-		uint8_t type : 1;
-		uint32_t index : 31;
+		unsigned int type : 1;
+		unsigned int index : 31;
 	};
 
 	slang::IGlobalSession* m_session;
