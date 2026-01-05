@@ -57,8 +57,8 @@ std::pair<glm::mat4, float> shadowProjectionMatrix(
 		left = fmin(left, lightSpaceBounds[i].x);
 		top = fmax(top, lightSpaceBounds[i].y);
 		bottom = fmin(bottom, lightSpaceBounds[i].y);
-		far = fmax(far, lightSpaceBounds[i].z);
-		near = fmin(near, lightSpaceBounds[i].z);
+		far = fmax(far, -lightSpaceBounds[i].z);
+		near = fmin(near, -lightSpaceBounds[i].z);
 	}
 	left -= 50;
 	bottom -= 50;
@@ -102,8 +102,8 @@ std::pair<glm::mat4, float> shadowProjectionMatrix(
 	far = vCenter + boundsVSize * 0.5;
 
 	return {
-		glm::ortho(left, right, bottom, top, near, far),
-		boundsVSize * 0.5 - maxVSize,
+		glm::orthoRH_ZO(left, right, bottom, top, near, far),
+		(boundsVSize - maxVSize) * 0.5,
 	};
 }
 
