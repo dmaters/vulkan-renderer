@@ -41,8 +41,9 @@ struct VertexOutput {
 			.Sample(_samplers[SamplerType::LinearClamp], input.frag_position)
 			.gb;
 
-	float shadowPercentage =
-		Shadow::shadowPercentage(_shadow_map, fragPos.xyz, _camera, _lightData);
+	float shadowPercentage = Shadow::shadowPercentage(
+		_shadow_map, fragPos.xyz, normal.xyz, _camera, _lightData
+	);
 	float3 light_dir = -transpose(_lightData.view)[2].xyz;
 	float3 skylight = _envSH.getValue(normal * float3(1, -1, 1));
 	float3 brdf = PBR::microfacetBRDF(

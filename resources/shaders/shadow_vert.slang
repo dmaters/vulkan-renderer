@@ -13,9 +13,7 @@ struct ShadowData {
 
 [shader("vertex")] float4 main(VertexInput input) : SV_Position {
 	return mul(
-		mul(mul(Shadow::shadowProjectionMatrix(
-					_shadowData.cascade, _camera, _lightData
-				),
+		mul(mul(_lightData.cascadeProjections[_shadowData.cascade],
 	            _lightData.view),
 	        input.transformation),
 		float4(input.position, 1.0)

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cstdint>
 #include <glm/glm.hpp>
 
 #include "material/MaterialDefinitions.hpp"
+#include "scene/Camera.hpp"
 
 struct Light {
 	enum class Type {
@@ -19,5 +19,5 @@ struct Light {
 	Type type = Type::Directional;
 	bool shadows;
 
-	MaterialDefinitions::Light getShaderObject() const;
+	MaterialDefinitions::Light getShaderObject(const Camera& camera) const;
 };
