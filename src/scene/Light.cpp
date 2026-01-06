@@ -3,11 +3,13 @@
 #include <cmath>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
-#include <glm/ext/vector_float3.hpp>
 #include <glm/glm.hpp>
 #include <glm/matrix.hpp>
 
 #include "scene/Camera.hpp"
+
+static const uint16_t SHADOWMAP_RES = 2048;
+
 using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
 FrustumPoints getFrustumPoints(const Camera& camera) {
 	Camera::Fov fov = camera.getFov();
@@ -70,26 +72,24 @@ std::pair<glm::mat4, float> shadowProjectionMatrix(
 	far = fmax(far, -worldCenter.z + sceneSize);
 	near = fmin(near, -worldCenter.z - sceneSize);
 
-	float worldUnitsPerTexelX = (right - left) / 2048.0;
-	float worldUnitsPerTexelY = (top - bottom) / 2048.0;
+	float worldUnitsPerTexelX = (right - left) / SHADOWMAP_RES;
+	float worldUnitsPerTexelY = (top - bottom) / SHADOWMAP_RES;
 
-	// Snap to texel grid
 	left = floor(left / worldUnitsPerTexelX) * worldUnitsPerTexelX;
 	right = floor(right / worldUnitsPerTexelX) * worldUnitsPerTexelX;
 	bottom = floor(bottom / worldUnitsPerTexelY) * worldUnitsPerTexelY;
 	top = floor(top / worldUnitsPerTexelY) * worldUnitsPerTexelY;
 
-	// Optional: Make square and round to power of 2 for maximum stability
 	float sizeX = right - left;
 	float sizeY = top - bottom;
 	float maxHSize = fmax(sizeX, sizeY);
-	float boundsHSize = pow(2.0, ceil(log2(maxHSize)));  // Round to power of 2
+	float boundsHSize = pow(2.0, ceil(log2(maxHSize)));
 
 	float maxVSize = far - near;
 	float boundsVSize = pow(2.0, ceil(log2(maxVSize)));
 
 	// Re-snap after making square
-	float worldUnitsPerTexel = boundsHSize / 2048.0;
+	float worldUnitsPerTexel = boundsHSize / SHADOWMAP_RES;
 	glm::vec2 center = glm::vec2((left + right) * 0.5, (bottom + top) * 0.5);
 	center.x = floor(center.x / worldUnitsPerTexel) * worldUnitsPerTexel;
 	center.y = floor(center.y / worldUnitsPerTexel) * worldUnitsPerTexel;
@@ -126,10 +126,6 @@ MaterialDefinitions::Light Light::getShaderObject(
 		shadowProjections[i] = proj;
 		shadowPaddings[i] = padding;
 	}
-
-	glm::vec4 pos0 = shadowProjections[0] * view * glm::vec4(0, 0, 0, 1);
-	glm::vec4 pos1 = shadowProjections[1] * view * glm::vec4(0, 0, 0, 1);
-	glm::vec4 pos2 = shadowProjections[2] * view * glm::vec4(0, 0, 0, 1);
 
 	return MaterialDefinitions::Light {
 		.view = view,

@@ -28,7 +28,7 @@ float getValue(
 	float bias = 1e-4;
 	float costheta = dot(normal, -transpose(light.view)[2].xyz);
 	bias *= tan(acos(costheta));
-	bias = clamp(bias, 0.002, 0.05);
+	bias = clamp(bias, 0.001, 0.05);
 
 	return (lightSpacePos.z) <
 	               shadowMap.Sample(_samplers[SamplerType::LinearClamp], uv).r +
