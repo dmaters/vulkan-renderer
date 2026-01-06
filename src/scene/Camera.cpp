@@ -2,7 +2,6 @@
 
 #include "Camera.hpp"
 
-#include <array>
 #include <glm/common.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
@@ -13,8 +12,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
-#include <iostream>
-#include <numbers>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -47,38 +44,14 @@ glm::mat4 Camera::getProjectionMatrix() const {
 		glm::radians(m_vfov),
 		(float)m_resolution.x / m_resolution.y,
 		0.1f,
-		m_frustumPlanes.back()
+		m_frustumPlanes[3]
 	);
 	return proj;
 }
 
-glm::vec2 Camera::getFov() const {
+Camera::Fov Camera::getFov() const {
 	return {
-		m_resolution.x * m_vfov / m_resolution.y,
-		m_vfov,
+		.horizontal = m_resolution.x * m_vfov / m_resolution.y,
+		.vertical = m_vfov,
 	};
-}
-
-Camera::FrustumPoints Camera::getFrustumPoints() const {
-	float tanV = tan(glm::radians(m_vfov / 2.0));
-	float tanH = (float)m_resolution.x / m_resolution.y * tanV;
-
-	glm::vec3 frustumVectors[4];
-
-	frustumVectors[0] = glm::vec3(tanH, tanV, -1.0f);
-	frustumVectors[1] = glm::vec3(-tanH, tanV, -1.0f);
-	frustumVectors[2] = glm::vec3(tanH, -tanV, -1.0f);
-	frustumVectors[3] = glm::vec3(-tanH, -tanV, -1.0f);
-
-	FrustumPoints points;
-	glm::mat4 invView = glm::inverse(getViewMatrix());
-	for (int pl = 0; pl < 4; pl++) {
-		for (int pi = 0; pi < 4; pi++) {
-			float distance = m_frustumPlanes[pl];
-			points[pl][pi] =
-				invView * glm::vec4(frustumVectors[pi] * distance, 1.0);
-		}
-	}
-
-	return points;
 }

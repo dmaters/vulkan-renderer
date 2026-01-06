@@ -13,7 +13,6 @@ void SceneUpdatePass(TaskContext& context) {
 		.projection = proj,
 		.invView = glm::inverse(view),
 		.invProj = glm::inverse(proj),
-		.frustumPoints = context.scene.camera.getFrustumPoints(),
 	};
 
 	Buffer& cameraBuffer = context.getOutput<Buffer&>(0);
@@ -22,8 +21,9 @@ void SceneUpdatePass(TaskContext& context) {
 		cameraBuffer.buffer, 0, sizeof(cameraView), &cameraView
 	);
 
-	MaterialDefinitions::Light light =
-		context.scene.lights[0].getShaderObject();
+	MaterialDefinitions::Light light = context.scene.lights[0].getShaderObject(
+		context.scene.camera, context.scene.size
+	);
 	Buffer& lightBuffer = context.getOutput<Buffer&>(1);
 
 	context.commandBuffer.updateBuffer(

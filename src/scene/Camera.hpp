@@ -9,7 +9,6 @@ public:
 		Orbital,
 		FreeLook
 	};
-	using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
 
 private:
 	glm::vec3 m_position = glm::vec3(0, 0, 150);
@@ -18,6 +17,7 @@ private:
 	float m_vfov = 70;
 
 	std::array<float, 4> m_frustumPlanes { 0.1, 125, 700, 2500 };
+	glm::vec3 m_cascadeSizes;
 	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
 
 public:
@@ -29,7 +29,11 @@ public:
 
 	glm::mat4 getViewMatrix() const;
 	glm::mat4 getProjectionMatrix() const;
-	glm::vec2 getFov() const;
+	struct Fov {
+		float horizontal;
+		float vertical;
+	};
+	Fov getFov() const;
 
-	FrustumPoints getFrustumPoints() const;
+	std::array<float, 4> getFrustumPlanes() const { return m_frustumPlanes; }
 };

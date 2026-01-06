@@ -6,7 +6,7 @@
 #include "resources/Buffer.hpp"
 #include "vulkan/vulkan.hpp"
 
-constexpr int32_t CASCADE_SIZE = 1024;
+constexpr int32_t CASCADE_SIZE = 2048;
 
 void ShadowPass(TaskContext& context, uint8_t cascade) {
 	MaterialIndex materialIndex =

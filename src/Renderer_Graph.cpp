@@ -186,8 +186,8 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 	ResourceIndex shadowAtlas = m_graph.createImage(
 		"shadow_atlas",
 		{
-			.width = 3072,
-			.height = 1024,
+			.width = 6144,
+			.height = 2048,
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eD16Unorm,
