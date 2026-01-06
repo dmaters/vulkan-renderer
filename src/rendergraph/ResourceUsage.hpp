@@ -5,6 +5,7 @@
 
 namespace ResourceUsage {
 enum class Type {
+	Undefined,
 	SampledRead,
 	ShaderWrite,
 	ShaderRead,
@@ -103,6 +104,8 @@ static Access GetAccess(Type type) {
 				.layout = vk::ImageLayout::eTransferDstOptimal,
 
 			};
+		case Type::Undefined:
+			return {};
 	}
 }
 std::optional<vk::DescriptorType> getDescriptorType(

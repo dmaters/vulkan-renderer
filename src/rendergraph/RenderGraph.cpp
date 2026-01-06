@@ -38,6 +38,7 @@ ResourceIndex RenderGraph::createImage(
 	if (swapchainRatio != 0) m_data.swapchainImageRatio[index] = swapchainRatio;
 
 	m_data.resourceNames.push_back(name);
+	m_data.finalUsages[index] = ResourceUsage::Type::Undefined;
 
 	return index;
 }
@@ -50,6 +51,7 @@ ResourceIndex RenderGraph::registerImage(
 	m_data.resourceNames.push_back(name);
 	m_data.externalImages[index] = image;
 	m_resourceManager.setName(name, image);
+	m_data.finalUsages[index] = ResourceUsage::Type::Undefined;
 
 	return index;
 }
@@ -270,8 +272,13 @@ void RenderGraph::submit(const Scene& scene) {
 	}
 	if (m_graphUpdated) {
 		m_graphUpdated = false;
-		m_executionInfo = m_builder.getTasks(m_outputImage, m_enabledFeatures);
+		rendergraph::internal::ExecutionInfo executionInfo =
+			m_builder.getTasks(m_outputImage, m_enabledFeatures);
+
+		m_data.finalUsages = std::move(executionInfo.finalUsages);
+
+		m_runner->update(m_outputImage, executionInfo);
 	}
 
-	m_runner->submit(scene, m_outputImage, m_executionInfo);
+	m_runner->submit(scene);
 }

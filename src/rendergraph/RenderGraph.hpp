@@ -33,8 +33,6 @@ private:
 	std::unordered_set<FeatureIndex> m_enabledFeatures;
 	bool m_graphUpdated = true;
 
-	rendergraph::internal::ExecutionInfo m_executionInfo;
-
 public:
 	RenderGraph(
 		Swapchain& swapchain,

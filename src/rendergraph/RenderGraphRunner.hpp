@@ -17,6 +17,9 @@ namespace rendergraph::internal {
 class RenderGraphRunner {
 private:
 	const GraphData& m_data;
+	ExecutionInfo m_execInfo;
+	ResourceIndex m_output;
+	bool m_initialized = false;
 
 	Swapchain& m_swapchain;
 	ResourceManager& m_resourceManager;
@@ -59,9 +62,7 @@ public:
 		ResourceManager& resourceManager,
 		MaterialManager& materialManager
 	);
-
-	void submit(
-		const Scene& scene, ResourceIndex output, ExecutionInfo& execInfo
-	);
+	void update(ResourceIndex output, ExecutionInfo execInfo);
+	void submit(const Scene& scene);
 };
 }  // namespace rendergraph::internal

@@ -5,6 +5,7 @@
 #include <optional>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
@@ -13,6 +14,7 @@
 #include "ResourceUsage.hpp"
 #include "tasks/MemoryBarrier.hpp"
 #include "tasks/Task.hpp"
+#include "tasks/TaskContext.hpp"
 
 using namespace rendergraph::internal;
 
@@ -221,6 +223,8 @@ ExecutionInfo RenderGraphBuilder::getTasks(
 	std::queue<uint32_t> taskQueue;
 	std::unordered_set<uint32_t> visitedTasks;
 
+	std::unordered_set<ResourceIndex> referencedImages;
+
 	std::vector<TaskIndex> tasks;
 	std::vector<GraphData::TaskData> barriersData;
 	std::vector<Task> barrierTasks;
@@ -239,24 +243,71 @@ ExecutionInfo RenderGraphBuilder::getTasks(
 
 		tasks.push_back(taskIndex);
 
-		auto [taskData, task, referencedTasks] =
+		auto [barrierData, barrierTask, referencedTasks] =
 			getBarrier(taskIndex, enabledFeatures);
-		if (taskData.has_value()) {
+		if (barrierData.has_value()) {
 			tasks.push_back(baseTaskOffset + barrierTasks.size());
-			barrierTasks.push_back(std::move(task.value()));
-			barriersData.push_back(taskData.value());
+			barrierTasks.push_back(std::move(barrierTask.value()));
+			barriersData.push_back(barrierData.value());
 		}
 
 		for (uint32_t index : referencedTasks) {
 			taskQueue.push(index);
 		}
 		visitedTasks.insert(taskIndex);
+
+		auto& taskData = m_data.taskData[taskIndex];
+		for (int i = taskData.inputs.offset;
+		     i < taskData.inputs.offset + taskData.inputs.count;
+		     i++) {
+			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			if (m_data.images.contains(resourceIndex))
+				referencedImages.insert(resourceIndex);
+		}
+		for (int i = taskData.outputs.offset;
+		     i < taskData.outputs.offset + taskData.outputs.count;
+		     i++) {
+			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			if (m_data.images.contains(resourceIndex))
+				referencedImages.insert(resourceIndex);
+		}
 	}
 
 	std::ranges::reverse(tasks.begin(), tasks.end());
+
+	std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2> imageBarriers;
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
+	for (ResourceIndex image : referencedImages) {
+		// Start from the last image reference, we go backward until we have an
+		// active task, if the layout is different from the last build we
+		// syncronize with a new initialization barrier
+		for (int i = m_dependencies.at(image).size() - 1; i >= 0; i--) {
+			const TaskResourceDependency& dep = m_dependencies.at(image)[i];
+
+			if (!visitedTasks.contains(dep.taskIndex)) continue;
+
+			ResourceUsage::Type pastLastUsage = m_data.finalUsages.at(image);
+
+			finalUsages[image] = dep.usage;
+			if (dep.usage == pastLastUsage) break;
+
+			imageBarriers[image] = {
+				.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
+				.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+				.oldLayout = ResourceUsage::GetAccess(pastLastUsage).layout,
+				.newLayout = ResourceUsage::GetAccess(dep.usage).layout,
+			};
+			break;
+		}
+	}
+
 	return {
-		.tasks = std::move(tasks),
-		.data = std::move(barriersData),
-		.barriers = std::move(barrierTasks),
+		.tasks = tasks,
+		.data = barriersData,
+		.barriers = barrierTasks,
+		.initializationTask = [imageBarriers = std::move(imageBarriers)](
+								  TaskContext& context
+							  ) { MemoryBarrier(context, {}, imageBarriers); },
+		.finalUsages = finalUsages,
 	};
 }

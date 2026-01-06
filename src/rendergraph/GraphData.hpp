@@ -31,6 +31,7 @@ struct GraphData {
 	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
 	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
 		buffers;
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
 
 	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
 	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
@@ -45,6 +46,8 @@ struct ExecutionInfo {
 	std::vector<TaskIndex> tasks;
 	std::vector<GraphData::TaskData> data;
 	std::vector<Task> barriers;
+	Task initializationTask;
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
 };
 
 }  // namespace rendergraph::internal

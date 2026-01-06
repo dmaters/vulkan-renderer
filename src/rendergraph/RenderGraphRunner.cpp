@@ -200,10 +200,13 @@ void RenderGraphRunner::outputToSwapchain(
     }
 	);
 }
+void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
+	m_output = output;
+	m_execInfo = execInfo;
+	m_initialized = false;
+}
 
-void RenderGraphRunner::submit(
-	const Scene& scene, ResourceIndex output, ExecutionInfo& execInfo
-) {
+void RenderGraphRunner::submit(const Scene& scene) {
 	clearUnusedResources();
 
 	vk::Device& device = Instance::Get().device;
@@ -245,12 +248,26 @@ void RenderGraphRunner::submit(
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 		}
 	);
-
+	if (!m_initialized) {
+		m_initialized = true;
+		auto _ = std::span<const ResourceDependency>();
+		TaskContext context {
+			.commandBuffer = commandBuffer,
+			.inputs = _,
+			.outputs = _,
+			.images = m_images,
+			.buffers = m_buffers,
+			.resourceManager = m_resourceManager,
+			.materialManager = m_materialManager,
+			.scene = scene,
+		};
+		m_execInfo.initializationTask(context);
+	}
 	uint32_t taskCount = m_data.tasks.size();
-	for (auto taskIndex : execInfo.tasks) {
+	for (auto taskIndex : m_execInfo.tasks) {
 		auto taskData = taskIndex < taskCount
 		                    ? m_data.taskData[taskIndex]
-		                    : execInfo.data[taskIndex - taskCount];
+		                    : m_execInfo.data[taskIndex - taskCount];
 		auto inputs = std::span<const ResourceDependency>(
 			m_data.taskDependencies.data() + taskData.inputs.offset,
 			m_data.taskDependencies.data() + taskData.inputs.offset +
@@ -277,9 +294,9 @@ void RenderGraphRunner::submit(
 		if (taskIndex < taskCount)
 			m_data.tasks[taskIndex](context);
 		else
-			execInfo.barriers[taskIndex - taskCount](context);
+			m_execInfo.barriers[taskIndex - taskCount](context);
 	}
-	outputToSwapchain(commandBuffer, output, imageIndex);
+	outputToSwapchain(commandBuffer, m_output, imageIndex);
 
 	commandBuffer.end();
 
