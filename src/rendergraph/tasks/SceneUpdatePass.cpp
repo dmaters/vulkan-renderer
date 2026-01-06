@@ -21,8 +21,9 @@ void SceneUpdatePass(TaskContext& context) {
 		cameraBuffer.buffer, 0, sizeof(cameraView), &cameraView
 	);
 
-	MaterialDefinitions::Light light =
-		context.scene.lights[0].getShaderObject(context.scene.camera);
+	MaterialDefinitions::Light light = context.scene.lights[0].getShaderObject(
+		context.scene.camera, context.scene.size
+	);
 	Buffer& lightBuffer = context.getOutput<Buffer&>(1);
 
 	context.commandBuffer.updateBuffer(

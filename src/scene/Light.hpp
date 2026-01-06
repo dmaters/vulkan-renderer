@@ -19,5 +19,7 @@ struct Light {
 	Type type = Type::Directional;
 	bool shadows;
 
-	MaterialDefinitions::Light getShaderObject(const Camera& camera) const;
+	MaterialDefinitions::Light getShaderObject(
+		const Camera& camera, float sceneSize
+	) const;
 };
