@@ -21,8 +21,10 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 	m_graph.registerBuffer("index_buffer", buffers[2]);
 	m_graph.registerBuffer("instance_buffer", buffers[3]);
 
-	ResourceIndex pbrInstances =
-		m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
+	ResourceIndex pbrMaterialData =
+		m_graph.registerBuffer("pbr_data_buffer", buffers[4]);
+	ResourceIndex pbrMaterialInstances =
+		m_graph.registerBuffer("pbr_instances_buffer", buffers[5]);
 
 	ResourceIndex cameraBuffer = m_graph.createBuffer(
 		"camera_buffer",
@@ -299,7 +301,9 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 		"gbuffer",
 		{
 		    { cameraBuffer,ResourceUsage::Type::UniformBuffer },
-			{ pbrInstances , ResourceUsage::Type::StorageBufferRead	},
+			{ pbrMaterialData , ResourceUsage::Type::StorageBufferRead	},
+			{ pbrMaterialInstances , ResourceUsage::Type::StorageBufferRead	},
+
 		},
 		{
 			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },

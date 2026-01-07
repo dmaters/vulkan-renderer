@@ -236,7 +236,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	assert(import != nullptr);
 
 	auto folderPath = path.parent_path();
-	std::vector<MaterialDefinitions::PBRInstance> materialInstances =
+	std::vector<MaterialDefinitions::PBRInstance> materialData =
 		loadMaterials(*import, folderPath);
 
 	std::vector<glm::mat4> instances;
@@ -245,6 +245,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	loadNode(*import->mRootNode, *import);
 
 	std::vector<Primitive> primitives;
+	std::vector<uint32_t> materialInstances;
 	primitives.reserve(import->mNumMeshes);
 
 	float sceneSize = 0;
@@ -267,6 +268,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		primitive.instanceCount = instanceCount;
 
 		primitives.push_back(primitive);
+		materialInstances.push_back(mesh->mMaterialIndex);
 	}
 
 	m_primitiveManager.addInstances(instances);
@@ -309,8 +311,15 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 				},
 				ResourceManager::BufferDescription {
 					.size = static_cast<uint32_t>(
-						materialInstances.size() *
+						materialData.size() *
 						sizeof(MaterialDefinitions::PBRInstance)
+					),
+					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+	                         vk::BufferUsageFlagBits::eTransferDst,
+				},
+				ResourceManager::BufferDescription {
+					.size = static_cast<uint32_t>(
+						materialInstances.size() * sizeof(uint32_t)
 					),
 					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
 	                         vk::BufferUsageFlagBits::eTransferDst,
@@ -353,11 +362,18 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		}
 	);
 	m_resourceManager.queueBufferUpdate(
-		buffers[4], [instances = std::move(materialInstances)](void* ptr) {
+		buffers[4], [data = std::move(materialData)](void* ptr) {
 			std::memcpy(
 				ptr,
-				instances.data(),
-				instances.size() * sizeof(MaterialDefinitions::PBRInstance)
+				data.data(),
+				data.size() * sizeof(MaterialDefinitions::PBRInstance)
+			);
+		}
+	);
+	m_resourceManager.queueBufferUpdate(
+		buffers[5], [instances = std::move(materialInstances)](void* ptr) {
+			std::memcpy(
+				ptr, instances.data(), instances.size() * sizeof(uint32_t)
 			);
 		}
 	);

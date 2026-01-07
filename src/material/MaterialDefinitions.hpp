@@ -35,8 +35,8 @@ struct PBRInstance {
 	uint32_t albedoTexture = 0;
 	uint32_t normalTexture = 1;
 	uint32_t roughnessMetallicTexture = 2;
-	glm::vec3 albedoValue = { 1, 1, 1 };
 	float roughnessValue = 1;
+	glm::vec3 albedoValue = { 1, 1, 1 };
 	float metallicValue = 0;
 };
 
