@@ -34,7 +34,7 @@ private:
 
 	uint32_t m_currentFrame = 0;
 
-	void createRenderGraph(ResourceManager::AllocationIndex sceneAllocation);
+	void createRenderGraph(Scene& scene);
 
 public:
 	Renderer(SDL_Window* window);

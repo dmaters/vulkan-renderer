@@ -13,6 +13,12 @@ struct Scene {
 	Camera camera;
 	std::vector<Light> lights;
 	std::vector<Primitive> primitives;
+
+	struct PrimitiveBound {
+		glm::vec3 position;
+		float size;
+	};
+	std::vector<PrimitiveBound> primitiveBounds;
 	float size;
 
 	ResourceManager::AllocationIndex allocation;

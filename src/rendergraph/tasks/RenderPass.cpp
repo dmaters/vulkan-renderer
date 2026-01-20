@@ -144,6 +144,7 @@ void setupAttachments(
 
 void RenderPass(
 	TaskContext& context,
+	const std::vector<uint32_t>& primitives,
 	MaterialIndex materialIndex,
 	AttachmentOp colorOp,
 	AttachmentOp depthOp
@@ -183,8 +184,7 @@ void RenderPass(
 			{}
 		);
 
-	for (const uint32_t primitiveIndex :
-	     context.scene.buckets.at(materialIndex)) {
+	for (const uint32_t primitiveIndex : primitives) {
 		const Primitive& primitive = context.scene.primitives[primitiveIndex];
 
 		context.commandBuffer.pushConstants(
@@ -198,12 +198,42 @@ void RenderPass(
 
 		context.commandBuffer.drawIndexed(
 			primitive.indexCount,
-			primitive.instanceCount,
+			1,
 			primitive.baseIndex,
 			primitive.baseVertex,
-			primitive.baseInstance
+			0
 		);
 	}
 
 	context.commandBuffer.endRendering();
+}
+
+std::vector<uint32_t> FrustumCulling(
+	const Scene& scene,
+	const std::vector<uint32_t>& bucket,
+	const std::array<glm::vec4, 6>& planes
+) {
+	std::vector<uint32_t> filtered;
+	glm::vec3 cameraPos = scene.camera.getPosition();
+	for (uint32_t index : bucket) {
+		Scene::PrimitiveBound primitivePos = scene.primitiveBounds[index];
+
+		bool outside = false;
+
+		for (int i = 0; i < 6; i++) {
+			float distanceToPlane = glm::dot(
+				glm::vec3(planes[i]), primitivePos.position - cameraPos
+			);
+
+			if ((distanceToPlane - primitivePos.size - planes[i].w) < 0)
+				continue;
+
+			outside = true;
+			break;
+		}
+
+		if (!outside) filtered.push_back(index);
+	}
+
+	return filtered;
 }

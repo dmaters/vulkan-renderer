@@ -4,7 +4,6 @@
 
 #include "TaskContext.hpp"
 #include "resources/Buffer.hpp"
-#include "vulkan/vulkan.hpp"
 
 constexpr int32_t CASCADE_SIZE = 2048;
 
@@ -110,10 +109,10 @@ void ShadowPass(TaskContext& context, uint8_t cascade) {
 
 		context.commandBuffer.drawIndexed(
 			primitive.indexCount,
-			primitive.instanceCount,
+			1,
 			primitive.baseIndex,
 			primitive.baseVertex,
-			primitive.baseInstance
+			0
 		);
 	}
 

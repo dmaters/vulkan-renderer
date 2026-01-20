@@ -46,6 +46,7 @@ void Renderer::render() {
 		m_swapchain.rebuild();
 		return;
 	}
+
 	m_currentScene.camera.setResolution(
 		{
 			resolution.width,
@@ -62,7 +63,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
 
-	createRenderGraph(m_currentScene.allocation);
+	createRenderGraph(m_currentScene);
 
 	MaterialIndex gbufferMaterial =
 		m_materialManager.getMaterialIndex("gbuffer");
@@ -94,7 +95,7 @@ void Renderer::load(const std::filesystem::path& path) {
 			.baseVertex = 0,
 			.baseIndex = 0,
 			.indexCount = 3,
-			.instanceCount = 1,
+			.size = 1,
 		}
 	);
 	MaterialIndex lighting =
@@ -107,4 +108,6 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene.buckets[skybox].push_back(
 		m_currentScene.primitives.size() - 1
 	);
+
+	m_currentScene.camera.setFov(70);
 }

@@ -64,7 +64,7 @@ glm::mat4 getBaseTransform(aiNode& node, const aiScene& scene) {
 	return transform * getBaseTransform(*node.mParent, scene);
 }
 
-Primitive SceneLoader::loadMesh(aiMesh& mesh) {
+SceneLoader::MeshData SceneLoader::loadMesh(aiMesh& mesh) {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
@@ -77,7 +77,7 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		indices.push_back(face.mIndices[1]);
 		indices.push_back(face.mIndices[2]);
 	}
-
+	glm::vec3 boundsCenter = glm::vec3(0);
 	for (unsigned int i = 0; i < mesh.mNumVertices; i++) {
 		auto vertex = mesh.mVertices[i];
 		auto normal = mesh.mNormals[i];
@@ -97,6 +97,9 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 				 }
         }
 		);
+
+		boundsCenter += glm::vec3(vertex.x, vertex.y, vertex.z) /
+		                static_cast<float>(mesh.mNumVertices);
 	};
 
 	uint32_t vertexOffset;
@@ -105,11 +108,15 @@ Primitive SceneLoader::loadMesh(aiMesh& mesh) {
 		vertices, indices, vertexOffset, indexOffset
 	);
 
-	return Primitive {
-		.baseVertex = vertexOffset,
-		.baseIndex = indexOffset,
-		.indexCount = (uint32_t)indices.size(),
-		.size = size,
+	return {
+		.primitive =
+			Primitive {
+					   .baseVertex = vertexOffset,
+					   .baseIndex = indexOffset,
+					   .indexCount = (uint32_t)indices.size(),
+					   .size = size,
+					   },
+		.bounds = { boundsCenter, size - glm::length(boundsCenter) }
 	};
 }
 
@@ -239,39 +246,31 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	std::vector<MaterialDefinitions::PBRInstance> materialData =
 		loadMaterials(*import, folderPath);
 
-	std::vector<glm::mat4> instances;
+	std::vector<glm::mat4> transforms;
 	m_instanceCache = std::vector<std::vector<glm::mat4>>(import->mNumMeshes);
 
 	loadNode(*import->mRootNode, *import);
 
 	std::vector<Primitive> primitives;
+	std::vector<Scene::PrimitiveBound> bounds;
 	std::vector<uint32_t> materialInstances;
 	primitives.reserve(import->mNumMeshes);
 
 	float sceneSize = 0;
 	for (int i = 0; i < import->mNumMeshes; i++) {
 		aiMesh* mesh = import->mMeshes[i];
-		Primitive primitive = loadMesh(*mesh);
-
-		uint32_t firstInstance = instances.size();
+		auto [primitive, bound] = loadMesh(*mesh);
 
 		for (auto instance : m_instanceCache[i]) {
 			sceneSize = std::max(
 				sceneSize, glm::vec3(instance[3]).length() + primitive.size
 			);
-			instances.push_back(instance);
+			transforms.push_back(instance);
+			primitives.push_back(primitive);
+			bounds.push_back(bound);
+			materialInstances.push_back(mesh->mMaterialIndex);
 		}
-
-		uint32_t instanceCount = instances.size() - firstInstance;
-
-		primitive.baseInstance = firstInstance;
-		primitive.instanceCount = instanceCount;
-
-		primitives.push_back(primitive);
-		materialInstances.push_back(mesh->mMaterialIndex);
 	}
-
-	m_primitiveManager.addInstances(instances);
 
 	ResourceManager::AllocationIndex buffersAllocation =
 		m_resourceManager.createResources(
@@ -304,7 +303,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 				},
 				ResourceManager::BufferDescription {
 					.size = static_cast<uint32_t>(
-						instances.size() * sizeof(glm::mat4)
+						transforms.size() * sizeof(glm::mat4)
 					),
 					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
 	                         vk::BufferUsageFlagBits::eTransferDst,
@@ -354,10 +353,9 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		}
 	);
 	m_resourceManager.queueBufferUpdate(
-		buffers[3],
-		[instances = std::move(m_primitiveManager.m_instances)](void* ptr) {
+		buffers[3], [transforms = std::move(transforms)](void* ptr) {
 			std::memcpy(
-				ptr, instances.data(), instances.size() * sizeof(glm::mat4)
+				ptr, transforms.data(), transforms.size() * sizeof(glm::mat4)
 			);
 		}
 	);
@@ -379,8 +377,10 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	);
 
 	m_resourceManager.sync();
+
 	Scene scene {
-		.primitives = std::move(primitives),
+		.primitives = primitives,
+		.primitiveBounds = bounds,
 		.size = sceneSize,
 		.allocation = buffersAllocation,
 	};

@@ -9,31 +9,51 @@ public:
 		Orbital,
 		FreeLook
 	};
+	struct Fov {
+		float horizontal;
+		float vertical;
+	};
 
 private:
 	glm::vec3 m_position = glm::vec3(0, 0, 150);
 	float m_pitch = 0;
 	float m_yaw = 0;
-	float m_vfov = 70;
+	Fov m_fov;
 
-	std::array<float, 4> m_frustumPlanes { 0.1, 125, 700, 2500 };
+	std::array<float, 4> m_frustumPlanesDistances { 0.1, 125, 700, 2500 };
+
 	glm::vec3 m_cascadeSizes;
 	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
+
+	std::array<glm::vec3, 4> m_frustumEdgeDirections;
+	std::array<glm::vec3, 4> m_baseFrustumPlanes;
+
+	void updateFrustum();
 
 public:
 	void rotate(glm::vec2 rotation);
 	void translate(glm::vec3 deltaPos) { m_position += deltaPos; }
-	void setResolution(glm::ivec2 resolution) { m_resolution = resolution; }
+	void setResolution(glm::ivec2 resolution);
+	void setFov(float fov) {
+		m_fov = {
+			.horizontal = fov * m_resolution.x / m_resolution.y,
+			.vertical = fov,
+		};
+	}
 
 	glm::mat3 getOrientation() const;
+	glm::vec3 getPosition() const { return getOrientation() * m_position; };
 
 	glm::mat4 getViewMatrix() const;
 	glm::mat4 getProjectionMatrix() const;
-	struct Fov {
-		float horizontal;
-		float vertical;
-	};
-	Fov getFov() const;
 
-	std::array<float, 4> getFrustumPlanes() const { return m_frustumPlanes; }
+	Fov getFov() const { return m_fov; };
+
+	std::array<float, 4> getCascadeDistances() const {
+		return m_frustumPlanesDistances;
+	}
+	std::array<glm::vec4, 6> getFrustumPlanes() const;
+
+	using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
+	FrustumPoints getFrustumPoints(const Camera& camera);
 };

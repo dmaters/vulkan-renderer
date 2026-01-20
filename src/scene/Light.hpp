@@ -18,6 +18,21 @@ struct Light {
 	float intensity = 1.0f;
 	Type type = Type::Directional;
 	bool shadows;
+	std::array<glm::vec4, 6> frustumPlanes;
+
+	struct FrustumBounds {
+		float near;
+		float far;
+		float right;
+		float left;
+		float top;
+		float bottom;
+		float padding;
+	};
+
+	FrustumBounds getFrustumBounds(
+		const Camera& camera, float sceneSize, uint8_t cascade
+	) const;
 
 	MaterialDefinitions::Light getShaderObject(
 		const Camera& camera, float sceneSize

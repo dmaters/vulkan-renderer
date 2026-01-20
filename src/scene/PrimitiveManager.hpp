@@ -18,9 +18,7 @@ struct Vertex {
 struct PrimitiveManager {
 	std::vector<glm::vec3> m_positions;
 	std::vector<Vertex::Attributes> m_attributes;
-
 	std::vector<uint32_t> m_indexBuffer;
-	std::vector<glm::mat4> m_instances;
 
 	void addPrimitive(
 		std::vector<Vertex>& vertices,
@@ -28,7 +26,4 @@ struct PrimitiveManager {
 		uint32_t& vertexByteOffset,
 		uint32_t& indexByteOffset
 	);
-	void addInstances(std::vector<glm::mat4> instances) {
-		m_instances = instances;
-	}
 };

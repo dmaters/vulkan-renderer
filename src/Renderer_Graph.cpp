@@ -10,11 +10,10 @@
 #include "rendergraph/tasks/Task.hpp"
 #include "rendergraph/tasks/TaskContext.hpp"
 #include "resources/ResourceManager.hpp"
-#include "vulkan/vulkan.hpp"
 
-void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
+void Renderer::createRenderGraph(Scene& scene) {
 	const std::vector<BufferHandle>& buffers =
-		m_resourceManager.getBuffers(sceneData);
+		m_resourceManager.getBuffers(scene.allocation);
 
 	m_graph.registerBuffer("vertex_positions_buffer", buffers[0]);
 	m_graph.registerBuffer("vertex_attributes_buffer", buffers[1]);
@@ -44,7 +43,7 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 	);
 	m_graph.addTask(
 		"scene_update",
-		TaskType::CPU,
+		TaskType::Transfer,
 		{
     },
 		{
@@ -338,9 +337,16 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 			}
 		},
 		[](TaskContext& context) {
+		MaterialIndex materialIndex = context.materialManager.getMaterialIndex("gbuffer");
+            auto visiblePrimitives = FrustumCulling(
+                context.scene,
+                context.scene.buckets.at(materialIndex),
+                context.scene.camera.getFrustumPlanes()
+            );
             RenderPass(
                 context,
-                context.materialManager.getMaterialIndex("gbuffer"),
+                visiblePrimitives,
+                materialIndex,
                 AttachmentOp::ClearWrite,
 				AttachmentOp::ClearWrite
             );
@@ -394,9 +400,13 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 	                       .reference = 1 },
 		},
 		[](TaskContext& context) {
+			MaterialIndex materialIndex =
+				context.materialManager.getMaterialIndex("lighting_deferred");
+
 			RenderPass(
 				context,
-				context.materialManager.getMaterialIndex("lighting_deferred"),
+				context.scene.buckets.at(materialIndex),
+				materialIndex,
 				AttachmentOp::ClearWrite,
 				AttachmentOp::Read
 			);
@@ -436,9 +446,12 @@ void Renderer::createRenderGraph(ResourceManager::AllocationIndex sceneData) {
 		[](
 			TaskContext& context
 		) {
+
+		    MaterialIndex materialIndex = context.materialManager.getMaterialIndex("skybox");
 		    RenderPass(
 		        context,
-	            context.materialManager.getMaterialIndex("skybox"),
+	            context.scene.buckets.at(materialIndex),
+				materialIndex,
 				AttachmentOp::ReadWrite,
 				AttachmentOp::Read
 		    );

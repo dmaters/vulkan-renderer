@@ -23,7 +23,11 @@ class SceneLoader {
 		m_materialCache;
 	std::vector<std::vector<glm::mat4>> m_instanceCache;
 
-	Primitive loadMesh(aiMesh& mesh);
+	struct MeshData {
+		Primitive primitive;
+		Scene::PrimitiveBound bounds;
+	};
+	MeshData loadMesh(aiMesh& mesh);
 	void loadNode(aiNode& root, const aiScene& importedScene);
 	std::optional<ImageHandle> loadTexture(
 		aiMaterial* material,
