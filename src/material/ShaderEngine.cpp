@@ -313,6 +313,7 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 	m_pipelines[index] = pipeline.value();
 	m_layouts[index] = layouts;
 	m_graphicModules[index] = modules;
+	m_renderPassConfigurations[index] = renderPassConfig;
 
 	std::unordered_set<std::filesystem::path> dependencies;
 
