@@ -7,23 +7,23 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-#include "Frame.hpp"
 #include "Instance.hpp"
-#include "resources/Image.hpp"
 
-Swapchain::Swapchain() {
+Swapchain Swapchain::Create() {
+	Swapchain swapchain;
+
 	Instance& instance = Instance::Get();
 
 	vk::SurfaceCapabilitiesKHR capabilities =
 		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
 	if (capabilities.currentExtent.width != UINT32_MAX)
-		m_resolution = capabilities.currentExtent;
+		swapchain.m_resolution = capabilities.currentExtent;
+	if (capabilities.currentExtent == vk::Extent2D(0)) return {};
+	swapchain.createSwapchain();
+	swapchain.createFrames();
+	swapchain.createImages();
 
-	if (m_resolution == vk::Extent2D(0)) return;
-
-	createSwapchain();
-	createFrames();
-	createImages();
+	return swapchain;
 }
 void Swapchain::createSwapchain() {
 	Instance& instance = Instance::Get();

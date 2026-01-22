@@ -25,8 +25,7 @@ Renderer::Renderer(SDL_Window* window) :
 	m_instance(Instance::Create(window)),
 	m_resourceManager(),
 	m_materialManager(m_resourceManager),
-	m_swapchain(),
-	m_graph(m_swapchain, m_resourceManager, m_materialManager) {
+	m_graph(Instance::Get().swapchain, m_resourceManager, m_materialManager) {
 	if (window == nullptr) return;
 
 	m_graphicsQueue = m_instance.device.getQueue(
@@ -40,10 +39,10 @@ Renderer::Renderer(SDL_Window* window) :
 
 void Renderer::render() {
 	m_materialManager.update();
-	vk::Extent2D resolution = m_swapchain.getResolution();
+	vk::Extent2D resolution = Instance::Get().swapchain.getResolution();
 
 	if (resolution == vk::Extent2D(0)) {
-		m_swapchain.rebuild();
+		Instance::Get().swapchain.rebuild();
 		return;
 	}
 
@@ -54,6 +53,18 @@ void Renderer::render() {
 		}
 	);
 
+	glm::mat3 orientation = glm::mat3(1);
+	orientation[0] = glm::vec3(1, 0, 0);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, 1, 0);
+	orientation = glm::rotate_slow(
+		glm::mat4(orientation),
+		(-glm::pi<float>() / 2.0f) + m_uiParameters.lightingData.sunAngleRad,
+		glm::vec3(1, 0, 0)
+	);
+
+	m_currentScene.lights[0].orientation = orientation;
+
 	m_graph.submit(m_currentScene);
 
 	m_currentFrame = (m_currentFrame + 1) % 3;
@@ -62,6 +73,8 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
+	m_uiParameters.sceneData.scenePath = path;
+	m_uiParameters.sceneData.primitiveCount = m_currentScene.primitives.size();
 
 	createRenderGraph(m_currentScene);
 
@@ -82,6 +95,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	orientation = glm::rotate_slow(
 		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
 	);
+
 	m_currentScene.lights.push_back(
 		{
 			.position = glm::vec3(0, 0, 600),

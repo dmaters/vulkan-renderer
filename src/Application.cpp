@@ -6,6 +6,10 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_timer.h>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_sdlgpu3.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -13,6 +17,12 @@
 #include <memory>
 
 #include "Renderer.hpp"
+
+static void check_vk_result(VkResult err) {
+	if (err == 0) return;
+	fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
+	if (err < 0) abort();
+}
 
 Application::Application(const std::filesystem::path& path) {
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -31,6 +41,51 @@ Application::Application(const std::filesystem::path& path) {
 	}
 	m_renderer = std::make_unique<Renderer>(m_window);
 	m_renderer->load(path);
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+	ImGui_ImplSDL3_InitForVulkan(m_window);
+	Instance& instance = Instance::Get();
+
+	vk::DescriptorPoolSize poolSize = {
+		.type = vk::DescriptorType::eCombinedImageSampler,
+		.descriptorCount = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
+	};
+	vk::DescriptorPool imguiPool = instance.device.createDescriptorPool(
+		vk::DescriptorPoolCreateInfo {
+			.maxSets = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
+			.poolSizeCount = 1,
+			.pPoolSizes = &poolSize,
+		}
+	);
+	ImGui_ImplVulkanH_Window imguiWindow;
+	imguiWindow.Surface = instance.surface;
+	imguiWindow.Swapchain = instance.swapchain.getSwapchain();
+
+	VkFormat outputFormat = VkFormat::VK_FORMAT_R8G8B8A8_SNORM;
+	ImGui_ImplVulkan_InitInfo init_info = {
+		.Instance = instance.instance,
+		.PhysicalDevice = instance.physicalDevice,
+		.Device = instance.device,
+		.QueueFamily = instance.queueFamiliesIndices.graphicsIndex,
+		.Queue = instance.graphicQueue,
+		.DescriptorPool = imguiPool,
+		.MinImageCount = 3,
+		.ImageCount = 3,
+		.PipelineInfoMain = {
+		    .PipelineRenderingCreateInfo = {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+				.colorAttachmentCount = 1,
+				.pColorAttachmentFormats = &outputFormat,
+      		},
+      	 },
+		.UseDynamicRendering = true,
+        .CheckVkResultFn = check_vk_result,
+	};
+	ImGui_ImplVulkan_Init(&init_info);
 }
 
 int Application::run() {
@@ -49,6 +104,7 @@ int Application::run() {
 		lastFrameTime = currentTime;
 
 		while (SDL_PollEvent(&event)) {
+			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
 				running = false;
 			}

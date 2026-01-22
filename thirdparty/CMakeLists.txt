@@ -2,7 +2,6 @@ project(thirdparty)
 add_library(${PROJECT_NAME} INTERFACE)
 
 
-include(slang.cmake)
 include(FetchContent)
 
 FetchContent_Declare(
@@ -30,8 +29,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glm sdl assimp stb)
 
+include(slang.cmake)
+include(imgui.cmake)
+
+target_link_libraries(imgui PRIVATE SDL3::SDL3)
 
 find_package(Vulkan REQUIRED)
+
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
 
@@ -42,4 +46,5 @@ target_link_libraries(${PROJECT_NAME} INTERFACE
         Vulkan::Vulkan
         assimp
         slang
+        imgui
 )

@@ -16,6 +16,7 @@
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
+#include "ui/UI.hpp"
 
 class Renderer {
 private:
@@ -27,12 +28,12 @@ private:
 	Instance& m_instance;
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
-	Swapchain m_swapchain;
 	RenderGraph m_graph;
 
 	Scene m_currentScene;
-
 	uint32_t m_currentFrame = 0;
+
+	UI::UIParameters m_uiParameters;
 
 	void createRenderGraph(Scene& scene);
 

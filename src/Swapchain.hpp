@@ -26,7 +26,7 @@ private:
 	void createSwapchain();
 
 public:
-	Swapchain();
+	static Swapchain Create();
 
 	const Frame& getFrame(uint8_t index) { return m_frames[index]; }
 	Image& getImage(uint8_t index) { return m_images.at(index); }

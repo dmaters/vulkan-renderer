@@ -9,6 +9,7 @@
 #include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "rendergraph/tasks/TaskContext.hpp"
+#include "rendergraph/tasks/UIPass.hpp"
 #include "resources/ResourceManager.hpp"
 
 void Renderer::createRenderGraph(Scene& scene) {
@@ -336,13 +337,15 @@ void Renderer::createRenderGraph(Scene& scene) {
 				.reference = 1,
 			}
 		},
-		[](TaskContext& context) {
+		[&uiParameters = m_uiParameters](TaskContext& context) {
 		MaterialIndex materialIndex = context.materialManager.getMaterialIndex("gbuffer");
             auto visiblePrimitives = FrustumCulling(
                 context.scene,
                 context.scene.buckets.at(materialIndex),
                 context.scene.camera.getFrustumPlanes()
             );
+
+            uiParameters.sceneData.gbufferCount = visiblePrimitives.size();
             RenderPass(
                 context,
                 visiblePrimitives,
@@ -492,6 +495,17 @@ void Renderer::createRenderGraph(Scene& scene) {
 			);
 		}
 	);
-
+	m_graph.addTask(
+		"UI",
+		TaskType::Graphic,
+		{
+    },
+		{
+			{ result, ResourceUsage::Type::ColorAttachmentWrite },
+		},
+		[&uiParameters = m_uiParameters](TaskContext& context) {
+			UIPass(context, uiParameters);
+		}
+	);
 	m_graph.setOutputImage(result);
 }

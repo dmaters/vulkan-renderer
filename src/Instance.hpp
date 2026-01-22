@@ -6,6 +6,8 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+#include "Swapchain.hpp"
+
 struct SDL_Window;
 struct Instance {
 public:
@@ -20,15 +22,14 @@ public:
 	vk::SurfaceKHR surface;
 	vk::SurfaceFormatKHR surfaceFormat;
 
-
-
 	vk::PhysicalDevice physicalDevice;
 	vk::Instance instance;
-
 
 	vk::Queue graphicQueue;
 	vk::Queue transferQueue;
 	vk::Queue presentQueue;
+
+	Swapchain swapchain;
 
 	QueueFamilies queueFamiliesIndices;
 	static Instance& Create(SDL_Window* window);

@@ -56,12 +56,13 @@ Instance& Instance::Create(SDL_Window* window) {
 		.surfaceFormat = formats[0],
 		.physicalDevice = physicalDevice,
 		.instance = instance,
-
 		.graphicQueue = graphicQueue,
 		.transferQueue = transferQueue,
 		.presentQueue = graphicQueue,
 		.queueFamiliesIndices = getQueueFamilies(physicalDevice),
 	};
+	Instance::_instance->swapchain = Swapchain::Create();
+
 	return _instance.value();
 }
 
