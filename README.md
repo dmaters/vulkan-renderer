@@ -38,11 +38,14 @@ If you encounter any issues while loading other models, please consider creating
 
 ### Fox
 
-<img width="1920" height="1057" alt="0x0000022e46518840" src="https://github.com/user-attachments/assets/d98d8361-237a-4b88-a2aa-be0334fb8bf4" />
+<img width="1917" height="1034" alt="image" src="https://github.com/user-attachments/assets/09c78de5-6677-4885-8bcc-f22e8687b8c2" />
+
 
 ### Sponza
 
-<img width="1920" height="1057" alt="0x000002a4172c4000" src="https://github.com/user-attachments/assets/6e36244e-d3c4-4f35-a0e4-1f213fdf115e" />
+<img width="1917" height="1034" alt="image" src="https://github.com/user-attachments/assets/be5f4cb4-5532-48eb-a049-bdd484a3edf3" />
+
+
 
 ## Contributing
 
