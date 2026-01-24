@@ -20,6 +20,7 @@
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
+#include "ui/UI.hpp"
 
 Renderer::Renderer(SDL_Window* window) :
 	m_instance(Instance::Create(window)),
@@ -35,6 +36,8 @@ Renderer::Renderer(SDL_Window* window) :
 	m_presentQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.presentIndex, 0
 	);
+
+	UI::Setup();
 }
 
 void Renderer::render() {
@@ -59,7 +62,7 @@ void Renderer::render() {
 	orientation[2] = glm::vec3(0, 1, 0);
 	orientation = glm::rotate_slow(
 		glm::mat4(orientation),
-		(-glm::pi<float>() / 2.0f) + m_uiParameters.lightingData.sunAngleRad,
+		(-glm::pi<float>() / 2.0f) + UI::Data.lightingData.sunAngleRad,
 		glm::vec3(1, 0, 0)
 	);
 
@@ -73,8 +76,8 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
-	m_uiParameters.sceneData.scenePath = path;
-	m_uiParameters.sceneData.primitiveCount = m_currentScene.primitives.size();
+	UI::Data.sceneData.scenePath = path;
+	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();
 
 	createRenderGraph(m_currentScene);
 

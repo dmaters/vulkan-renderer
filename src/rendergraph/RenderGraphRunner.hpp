@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -38,8 +39,15 @@ private:
 
 	std::unordered_map<FeatureIndex, bool> m_features;
 
-	uint8_t m_currentFrame = 0;
+	uint64_t m_currentFrame = 0;
 	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
+
+	vk::QueryPool m_debugQueryPool;
+	std::chrono::time_point<
+		std::chrono::system_clock,
+		std::chrono::duration<long, std::nano>>
+		m_beginFrameTimestamp;
+	double m_lastCpuFrameTime;
 
 	void build();
 	void writeMemoryBarrier(
@@ -54,6 +62,7 @@ private:
 	void clearUnusedResources();
 	void buildSwapchainResources();
 	void rebuildSwapchain();
+	bool updateTimings() const;
 
 public:
 	RenderGraphRunner(

@@ -17,6 +17,7 @@
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
 #include "tasks/TaskContext.hpp"
+#include "ui/UI.hpp"
 
 using namespace rendergraph::internal;
 
@@ -204,14 +205,105 @@ void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
 	m_output = output;
 	m_execInfo = execInfo;
 	m_initialized = false;
+
+	vk::Device device = Instance::Get().device;
+
+	// TODO: Dispose of old query pool to reduce leaks
+	m_debugQueryPool = device.createQueryPool(
+		vk::QueryPoolCreateInfo {
+			.flags = vk::QueryPoolCreateFlagBits::eResetKHR,
+			.queryType = vk::QueryType::eTimestamp,
+			.queryCount = static_cast<uint32_t>(
+				(execInfo.tasks.size() - execInfo.barriers.size()) * 3 * 2 + 6
+			),
+		}
+	);
+}
+
+bool RenderGraphRunner::updateTimings() const {
+	if (m_currentFrame < 3) return true;
+
+	vk::Device device = Instance::Get().device;
+	uint8_t currentFrameInFlight = m_currentFrame % 3;
+	uint32_t baseTaskCount =
+		(m_execInfo.tasks.size() - m_execInfo.barriers.size());
+	uint32_t timestampsCount = (baseTaskCount) * 2 + 2;
+
+	std::vector<uint64_t> timestamps(timestampsCount);
+	vk::Result result = device.getQueryPoolResults(
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight,
+		timestampsCount,
+		sizeof(uint64_t) * timestampsCount,
+		timestamps.data(),
+		sizeof(uint64_t),
+		vk::QueryResultFlagBits::eWithAvailability |
+			vk::QueryResultFlagBits::e64
+	);
+	if (result != vk::Result::eSuccess) return false;
+
+	device.resetQueryPool(
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight,
+		timestampsCount
+	);
+
+	uint32_t timestampOffset = 2;
+
+	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
+		uint32_t taskIndex = m_execInfo.tasks[i];
+
+		if (taskIndex >= m_data.tasks.size()) continue;  // It's a barrier
+
+		float ms =
+			static_cast<float>(
+				timestamps[timestampOffset + 1] - timestamps[timestampOffset]
+			) /
+			10e6;
+
+		float pastFrameTime =
+			UI::Data.performanceData
+				.taskFrameTime[m_data.taskData[taskIndex].name];
+
+		UI::Data.performanceData
+			.taskFrameTime[m_data.taskData[taskIndex].name] =
+			(pastFrameTime / 64 * 63) + ms / 64;
+
+		timestampOffset += 2;
+	}
+
+	float lastGpuFrameTime = UI::Data.performanceData.gpuFrameTime;
+	float gpuMS = static_cast<float>(timestamps[1] - timestamps[0]) / 10e6;
+	UI::Data.performanceData.gpuFrameTime =
+		(lastGpuFrameTime / 64 * 63) + gpuMS / 64;
+
+	UI::Data.performanceData.cpuFrameTime =
+		(UI::Data.performanceData.cpuFrameTime / 64 * 63) +
+		m_lastCpuFrameTime / 64;
+
+	double lastTotalFrameTime =
+		std::chrono::duration_cast<std::chrono::duration<double>>(
+			std::chrono::high_resolution_clock::now() - m_beginFrameTimestamp
+		)
+			.count();
+
+	float currentFrameRate = lastTotalFrameTime > 0 ? (1.0 / lastTotalFrameTime)
+	                                                : 0;
+	UI::Data.performanceData.frameRate = static_cast<uint16_t>(
+		UI::Data.performanceData.frameRate / 64.0 * 63.0 +
+		currentFrameRate / 64.0
+	);
+
+	return true;
 }
 
 void RenderGraphRunner::submit(const Scene& scene) {
 	clearUnusedResources();
 
-	vk::Device& device = Instance::Get().device;
+	vk::Device device = Instance::Get().device;
 
-	const Frame& frame = m_swapchain.getFrame(m_currentFrame);
+	uint8_t currentFrameInFlight = m_currentFrame % 3;
+	const Frame& frame = m_swapchain.getFrame(currentFrameInFlight);
 
 	auto _ = device.waitForFences({ frame.fence }, vk::True, UINT64_MAX);
 
@@ -236,6 +328,16 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		return;
 	}
 
+	bool timingFetched =
+		updateTimings();  // Get last frame timings and reset queryPool
+
+	uint32_t totalTaskCount = m_data.tasks.size();
+	uint32_t baseTaskCount =
+		m_execInfo.tasks.size() - m_execInfo.barriers.size();
+
+	uint32_t timestampsCount = baseTaskCount * 2 + 2;
+
+	// Begin Frame
 	vk::CommandBufferAllocateInfo commandInfo;
 
 	commandInfo.commandBufferCount = 1;
@@ -248,6 +350,14 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
 		}
 	);
+	commandBuffer.writeTimestamp(
+		vk::PipelineStageFlagBits::eTopOfPipe,
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight
+	);
+
+	m_beginFrameTimestamp = std::chrono::high_resolution_clock::now();
+
 	if (!m_initialized) {
 		m_initialized = true;
 		auto _ = std::span<const ResourceDependency>();
@@ -263,11 +373,13 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		};
 		m_execInfo.initializationTask(context);
 	}
-	uint32_t taskCount = m_data.tasks.size();
+
+	uint32_t timestampOffset = 2;
+
 	for (auto taskIndex : m_execInfo.tasks) {
-		auto taskData = taskIndex < taskCount
+		auto taskData = taskIndex < totalTaskCount
 		                    ? m_data.taskData[taskIndex]
-		                    : m_execInfo.data[taskIndex - taskCount];
+		                    : m_execInfo.data[taskIndex - totalTaskCount];
 		auto inputs = std::span<const ResourceDependency>(
 			m_data.taskDependencies.data() + taskData.inputs.offset,
 			m_data.taskDependencies.data() + taskData.inputs.offset +
@@ -291,14 +403,52 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.scene = scene,
 		};
 
-		if (taskIndex < taskCount)
-			m_data.tasks[taskIndex](context);
-		else
-			m_execInfo.barriers[taskIndex - taskCount](context);
+		if (taskIndex >= totalTaskCount) {  // Is a barrier task
+			m_execInfo.barriers[taskIndex - totalTaskCount](context);
+			continue;
+		}
+
+		commandBuffer.beginDebugUtilsLabelEXT(
+			{
+				.pLabelName = m_data.taskData[taskIndex].name.data(),
+			}
+		);
+		if (timingFetched)
+			commandBuffer.writeTimestamp(
+				vk::PipelineStageFlagBits::eTopOfPipe,
+				m_debugQueryPool,
+				timestampOffset + timestampsCount * currentFrameInFlight
+			);
+
+		m_data.tasks[taskIndex](context);
+
+		if (timingFetched)
+			commandBuffer.writeTimestamp(
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				m_debugQueryPool,
+				timestampOffset + timestampsCount * currentFrameInFlight + 1
+			);
+		commandBuffer.endDebugUtilsLabelEXT();
+
+		timestampOffset += 2;
 	}
+
 	outputToSwapchain(commandBuffer, m_output, imageIndex);
+	commandBuffer.writeTimestamp(
+		vk::PipelineStageFlagBits::eBottomOfPipe,
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight + 1
+	);
+
+	auto endCPU = std::chrono::high_resolution_clock::now();
+
+	m_lastCpuFrameTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+							 endCPU - m_beginFrameTimestamp
+	)
+	                         .count();
 
 	commandBuffer.end();
+	// End Frame
 
 	uint64_t semaphoreWaitValues[2] = { m_resourceManager.sync(), 0 };
 
@@ -343,7 +493,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		rebuildSwapchain();
 	}
 
-	m_currentFrame = (m_currentFrame + 1) % 3;
+	m_currentFrame++;
 }
 
 void RenderGraphRunner::build() {

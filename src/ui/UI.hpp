@@ -1,10 +1,12 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <queue>
+#include <unordered_map>
 #include <vulkan/vulkan.hpp>
 
 namespace UI {
-struct UIParameters {
+struct UIData {
 	struct Scene {
 		std::string scenePath;
 		uint16_t primitiveCount;
@@ -23,9 +25,27 @@ struct UIParameters {
 	struct CameraData {
 		bool orbitalCamera;
 		float cameraSpeed;
+		float exposure;
+	};
+	CameraData cameraData;
+
+	struct Performance {
+		uint16_t frameRate;
+		float cpuFrameTime;
+		float gpuFrameTime;
+		std::unordered_map<std::string_view, float> taskFrameTime;
+	};
+	Performance performanceData;
+
+	struct System {
+		std::string currentGpu;
 	};
 
-	CameraData cameraData;
+	System systemData;
 };
-void Render(vk::CommandBuffer commandBuffer, UIParameters& parameters);
+
+void Setup();
+void Render(vk::CommandBuffer commandBuffer);
+
+extern UIData Data;
 }  // namespace UI

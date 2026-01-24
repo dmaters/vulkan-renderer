@@ -337,7 +337,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 				.reference = 1,
 			}
 		},
-		[&uiParameters = m_uiParameters](TaskContext& context) {
+		[](TaskContext& context) {
 		MaterialIndex materialIndex = context.materialManager.getMaterialIndex("gbuffer");
             auto visiblePrimitives = FrustumCulling(
                 context.scene,
@@ -345,7 +345,7 @@ void Renderer::createRenderGraph(Scene& scene) {
                 context.scene.camera.getFrustumPlanes()
             );
 
-            uiParameters.sceneData.gbufferCount = visiblePrimitives.size();
+            UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
             RenderPass(
                 context,
                 visiblePrimitives,
@@ -503,9 +503,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ result, ResourceUsage::Type::ColorAttachmentWrite },
 		},
-		[&uiParameters = m_uiParameters](TaskContext& context) {
-			UIPass(context, uiParameters);
-		}
+		UIPass
 	);
 	m_graph.setOutputImage(result);
 }
