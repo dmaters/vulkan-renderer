@@ -166,7 +166,7 @@ void MaterialManager::createTextureDescriptorSet() {
 }
 MaterialIndex MaterialManager::registerComputeMaterial(
 	std::string_view name,
-	ComputePipelineModule module,
+	ShaderModule module,
 	std::vector<vk::DescriptorSetLayoutBinding> bindings
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;

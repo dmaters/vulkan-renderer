@@ -43,7 +43,7 @@ private:
 		m_renderPassConfigurations;
 	std::unordered_map<PipelineIndex, GraphicPipelineModules> m_graphicModules;
 
-	std::unordered_map<PipelineIndex, ComputePipelineModule> m_computeModules;
+	std::unordered_map<PipelineIndex, ShaderModule> m_computeModules;
 
 	std::vector<std::pair<Pipeline, uint8_t>> m_retiredPipelines;
 	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>>
@@ -60,7 +60,9 @@ private:
 	void _monitor();
 
 	std::optional<vk::ShaderModule> loadModule(
-		const std::filesystem::path& path, SlangStage stage
+		const std::filesystem::path& path,
+		std::string_view entryPoint,
+		SlangStage stage
 	);
 
 	std::optional<Pipeline> buildGraphicPipeline(
@@ -69,7 +71,7 @@ private:
 		GraphicPipelineConfiguration& configuration
 	);
 	std::optional<Pipeline> buildComputePipeline(
-		ComputePipelineModule computeModule,
+		ShaderModule computeModule,
 		std::vector<vk::DescriptorSetLayout>& layouts
 	);
 	void reloadPipeline(PipelineIndex index);
@@ -84,8 +86,7 @@ public:
 		GraphicPipelineConfiguration configuration
 	);
 	PipelineIndex registerComputePipeline(
-		ComputePipelineModule computeModule,
-		std::vector<vk::DescriptorSetLayout> layouts
+		ShaderModule computeModule, std::vector<vk::DescriptorSetLayout> layouts
 	);
 
 	Pipeline getPipeline(PipelineIndex index) {

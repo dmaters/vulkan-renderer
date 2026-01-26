@@ -81,7 +81,7 @@ void RenderGraph::addComputePass(
 	std::string_view name,
 	std::vector<ResourceDependency> inputResources,
 	std::vector<ResourceDependency> outputResources,
-	ComputePipelineModule modules,
+	ShaderModule modules,
 	Task task,
 	FeatureIndex feature
 ) {

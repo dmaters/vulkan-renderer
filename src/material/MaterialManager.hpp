@@ -44,7 +44,7 @@ public:
 
 	MaterialIndex registerComputeMaterial(
 		std::string_view name,
-		ComputePipelineModule module,
+		ShaderModule module,
 		std::vector<vk::DescriptorSetLayoutBinding> bindings
 	);
 	MaterialIndex registerGraphicMaterial(

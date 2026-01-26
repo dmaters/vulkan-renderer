@@ -68,7 +68,7 @@ public:
 		std::string_view name,
 		std::vector<ResourceDependency> inputResources,
 		std::vector<ResourceDependency> outputResources,
-		ComputePipelineModule module,
+		ShaderModule module,
 		Task task,
 		FeatureIndex feature = 0
 	);

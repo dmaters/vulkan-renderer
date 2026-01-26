@@ -7,11 +7,14 @@
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-struct GraphicPipelineModules {
-	std::string_view vertex;
-	std::string_view fragment;
+struct ShaderModule {
+	std::string_view path;
+	std::string_view entryPoint = "main";
 };
-using ComputePipelineModule = std::string_view;
+struct GraphicPipelineModules {
+	ShaderModule vertex;
+	ShaderModule fragment;
+};
 
 struct GraphicPipelineConfiguration {
 	std::vector<vk::Format> colorAttachmentFormats = {};

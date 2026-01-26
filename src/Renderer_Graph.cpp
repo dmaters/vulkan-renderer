@@ -83,7 +83,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ transmittanceLUT, ResourceUsage::Type::ShaderWrite },
 		},
-		"resources/shaders/transmittanceLUT.slang",
+		{ "resources/shaders/transmittanceLUT.slang" },
 		[](TaskContext& context) {
 			ComputePass(
 				context,
@@ -116,7 +116,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
 			{ computeScratchBuffer, ResourceUsage::Type::StorageBufferWrite },
 		},
-		"resources/shaders/multiscatteringLUT.slang",
+		{ "resources/shaders/multiscatteringLUT.slang" },
 		[](TaskContext& context) {
 			ComputePass(
 				context,
@@ -149,7 +149,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ skyviewLUT, ResourceUsage::Type::ShaderWrite },
 		},
-		"resources/shaders/skyviewLUT.slang",
+		{ "resources/shaders/skyviewLUT.slang" },
 		[](TaskContext& context) {
 			ComputePass(
 				context,
@@ -175,7 +175,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ skyLightingSH, ResourceUsage::Type::StorageBufferWrite },
 		},
-		"resources/shaders/sky_lighting.slang",
+		{ "resources/shaders/sky_lighting.slang" },
 		[](TaskContext& context) {
 			ComputePass(
 				context,
@@ -483,7 +483,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ result, ResourceUsage::Type::ShaderWrite },
 		},
-		"resources/shaders/composition.slang",
+		{ "resources/shaders/composition.slang" },
 		[](TaskContext& context) {
 			ImageHandle input = context.images[context.inputs[0].first];
 			auto dispatch = context.resourceManager.getImage(input).size;

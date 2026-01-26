@@ -35,7 +35,9 @@ ShaderEngine::~ShaderEngine() {
 	m_monitorThread.join();
 }
 std::optional<vk::ShaderModule> ShaderEngine::loadModule(
-	const std::filesystem::path& path, SlangStage stage
+	const std::filesystem::path& path,
+	std::string_view entryPoint,
+	SlangStage stage
 ) {
 	std::cout << "Compiling :" << path.string() << std::endl;
 	assert(!path.empty());
@@ -88,10 +90,10 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			return std::nullopt;
 	}
 
-	Slang::ComPtr<slang::IEntryPoint> entryPoint;
+	Slang::ComPtr<slang::IEntryPoint> entryPointRef;
 
 	slangModule->findAndCheckEntryPoint(
-		"main", stage, entryPoint.writeRef(), &diagnostics
+		entryPoint.data(), stage, entryPointRef.writeRef(), &diagnostics
 	);
 
 	if (diagnostics) {
@@ -101,7 +103,7 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			return std::nullopt;
 	}
 
-	slang ::IComponentType* components[] = { slangModule, entryPoint };
+	slang ::IComponentType* components[] = { slangModule, entryPointRef };
 	slang::IComponentType* program;
 	session->createCompositeComponentType(
 		components, 2, &program, &diagnostics
@@ -151,10 +153,12 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	return module;
 }
 std::optional<Pipeline> ShaderEngine::buildComputePipeline(
-	ComputePipelineModule module, std::vector<vk::DescriptorSetLayout>& layouts
+	ShaderModule module, std::vector<vk::DescriptorSetLayout>& layouts
 ) {
-	assert(!module.empty());
-	auto res = loadModule(module, SlangStage::SLANG_STAGE_COMPUTE);
+	assert(!module.path.empty());
+	auto res = loadModule(
+		module.path, module.entryPoint, SlangStage::SLANG_STAGE_COMPUTE
+	);
 	if (!res.has_value()) return std::nullopt;
 
 	vk::PipelineShaderStageCreateInfo shaderModule = {
@@ -177,30 +181,36 @@ std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
 	GraphicPipelineConfiguration& configuration
 ) {
 	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-	assert(!modules.vertex.empty());
-	assert(!modules.fragment.empty());
+	assert(!modules.vertex.path.empty());
+	assert(!modules.fragment.path.empty());
 
-	auto vertexModule =
-		loadModule(modules.vertex, SlangStage::SLANG_STAGE_VERTEX);
+	auto vertexModule = loadModule(
+		modules.vertex.path,
+		modules.fragment.entryPoint,
+		SlangStage::SLANG_STAGE_VERTEX
+	);
 	if (!vertexModule.has_value()) return std::nullopt;
 
 	shaderStages.push_back(
 		{
 			.stage = vk::ShaderStageFlagBits::eVertex,
 			.module = vertexModule.value(),
-			.pName = "main",
+			.pName = modules.vertex.entryPoint.data(),
 		}
 	);
 
-	auto fragmentModule =
-		loadModule(modules.fragment, SlangStage::SLANG_STAGE_FRAGMENT);
+	auto fragmentModule = loadModule(
+		modules.fragment.path,
+		modules.fragment.entryPoint,
+		SlangStage::SLANG_STAGE_FRAGMENT
+	);
 	if (!fragmentModule.has_value()) return std::nullopt;
 
 	shaderStages.push_back(
 		{
 			.stage = vk::ShaderStageFlagBits::eFragment,
 			.module = fragmentModule.value(),
-			.pName = "main",
+			.pName = modules.fragment.entryPoint.data(),
 		}
 	);
 
@@ -264,7 +274,7 @@ void getDependencies(
 }
 
 PipelineIndex ShaderEngine::registerComputePipeline(
-	ComputePipelineModule module, std::vector<vk::DescriptorSetLayout> layouts
+	ShaderModule module, std::vector<vk::DescriptorSetLayout> layouts
 ) {
 	PipelineIndexFields fields {
 		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Compute),
@@ -282,10 +292,10 @@ PipelineIndex ShaderEngine::registerComputePipeline(
 
 	std::unordered_set<std::filesystem::path> dependencies;
 
-	m_modules[module].insert(index);
-	m_lastEdited[module] = std::filesystem::last_write_time(module);
+	m_modules[module.path].insert(index);
+	m_lastEdited[module.path] = std::filesystem::last_write_time(module.path);
 
-	getDependencies(module, dependencies);
+	getDependencies(module.path, dependencies);
 
 	for (auto dependecy : dependencies) {
 		m_modules[dependecy].insert(index);
@@ -317,17 +327,17 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 
 	std::unordered_set<std::filesystem::path> dependencies;
 
-	m_modules[modules.vertex].insert(index);
-	m_lastEdited[modules.vertex] =
-		std::filesystem::last_write_time(modules.vertex);
+	m_modules[modules.vertex.path].insert(index);
+	m_lastEdited[modules.vertex.path] =
+		std::filesystem::last_write_time(modules.vertex.path);
 
-	getDependencies(modules.vertex, dependencies);
+	getDependencies(modules.vertex.path, dependencies);
 
-	m_modules[modules.fragment].insert(index);
-	m_lastEdited[modules.fragment] =
-		std::filesystem::last_write_time(modules.fragment);
+	m_modules[modules.fragment.path].insert(index);
+	m_lastEdited[modules.fragment.path] =
+		std::filesystem::last_write_time(modules.fragment.path);
 
-	getDependencies(modules.fragment, dependencies);
+	getDependencies(modules.fragment.path, dependencies);
 
 	for (auto dependency : dependencies) {
 		m_modules[dependency].insert(index);
