@@ -73,6 +73,19 @@ public:
 		FeatureIndex feature = 0
 	);
 
+	struct ComputePass {
+		std::string_view name;
+		ShaderModule module;
+	};
+	void addComputePass(
+		std::string_view name,
+		std::vector<ResourceDependency> inputResources,
+		std::vector<ResourceDependency> outputResources,
+		std::vector<ComputePass> modules,
+		Task task,
+		FeatureIndex feature = 0
+	);
+
 	void addTask(
 		std::string_view name,
 		TaskType type,

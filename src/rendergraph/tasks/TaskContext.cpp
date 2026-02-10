@@ -55,12 +55,14 @@ TaskContext::Descriptors TaskContext::getDescriptors(bool isRenderPass) const {
 		}
 		bindingCount++;
 	}
-	if (isRenderPass)
-		return resources;  // TODO: Better resource definition, we need to avoid
-		                   // adding rendertargets to descriptors
 
 	for (auto [index, usage] : outputs) {
 		if (images.contains(index)) {
+			if (usage == ResourceUsage::Type::ColorAttachmentWrite ||
+			    usage == ResourceUsage::Type::DepthStencilWrite ||
+			    usage == ResourceUsage::Type::DepthStencilRead)
+				continue;
+
 			Image& image = resourceManager.getImage(images[index]);
 
 			resources._imageInfo.push_back(

@@ -186,7 +186,7 @@ std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
 
 	auto vertexModule = loadModule(
 		modules.vertex.path,
-		modules.fragment.entryPoint,
+		modules.vertex.entryPoint,
 		SlangStage::SLANG_STAGE_VERTEX
 	);
 	if (!vertexModule.has_value()) return std::nullopt;
@@ -213,6 +213,22 @@ std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
 			.pName = modules.fragment.entryPoint.data(),
 		}
 	);
+
+	if (!modules.geometry.path.empty()) {
+		auto geometryValue = loadModule(
+			modules.geometry.path,
+			modules.geometry.entryPoint,
+			SlangStage::SLANG_STAGE_GEOMETRY
+		);
+		if (!geometryValue.has_value()) return std::nullopt;
+		shaderStages.push_back(
+			{
+				.stage = vk::ShaderStageFlagBits::eGeometry,
+				.module = geometryValue.value(),
+				.pName = modules.geometry.entryPoint.data(),
+			}
+		);
+	}
 
 	return PipelineBuilder::BuildGraphicPipeline(
 		{
@@ -332,6 +348,14 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 		std::filesystem::last_write_time(modules.vertex.path);
 
 	getDependencies(modules.vertex.path, dependencies);
+
+	if (!modules.geometry.path.empty()) {
+		m_modules[modules.geometry.path].insert(index);
+		m_lastEdited[modules.geometry.path] =
+			std::filesystem::last_write_time(modules.geometry.path);
+
+		getDependencies(modules.geometry.path, dependencies);
+	}
 
 	m_modules[modules.fragment.path].insert(index);
 	m_lastEdited[modules.fragment.path] =

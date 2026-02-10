@@ -81,7 +81,27 @@ void RenderGraph::addComputePass(
 	std::string_view name,
 	std::vector<ResourceDependency> inputResources,
 	std::vector<ResourceDependency> outputResources,
-	ShaderModule modules,
+	ShaderModule module,
+	Task task,
+	FeatureIndex feature
+) {
+	addComputePass(
+		name,
+		inputResources,
+		outputResources,
+		{
+			{ name, module }
+    },
+		task,
+		feature
+	);
+}
+
+void RenderGraph::addComputePass(
+	std::string_view name,
+	std::vector<ResourceDependency> inputResources,
+	std::vector<ResourceDependency> outputResources,
+	std::vector<ComputePass> modules,
 	Task task,
 	FeatureIndex feature
 ) {
@@ -120,9 +140,11 @@ void RenderGraph::addComputePass(
 		);
 	}
 
-	m_materialManager.registerComputeMaterial(
-		name, modules, std::move(materialBindings)
-	);
+	for (auto& pass : modules) {
+		m_materialManager.registerComputeMaterial(
+			pass.name, pass.module, std::move(materialBindings)
+		);
+	}
 
 	addTask(
 		name,

@@ -238,6 +238,11 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
         }
 		);
 
+	vk::PhysicalDeviceFeatures vulkanFeatures {
+		.geometryShader = true,
+		.fragmentStoresAndAtomics = true,
+	};
+
 	vk::PhysicalDeviceVulkan11Features vulkan11Features {
 		.shaderDrawParameters = true,
 	};
@@ -269,6 +274,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.ppEnabledLayerNames = deviceLayers.data(),
 		.enabledExtensionCount = (uint32_t)deviceExtensions.size(),
 		.ppEnabledExtensionNames = deviceExtensions.data(),
+		.pEnabledFeatures = &vulkanFeatures,
 	};
 
 	return physicalDevice.createDevice(info);
