@@ -271,12 +271,13 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 }
 
 vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts) {
-	std::array<vk::PushConstantRange, 1> ranges {
+	std::array<vk::PushConstantRange, 2> ranges {
 		vk::PushConstantRange {
 							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
+		                  vk::ShaderStageFlagBits::eGeometry |
 		                  vk::ShaderStageFlagBits::eFragment,
 							   .offset = 0,
-							   .size = 4,
+							   .size = 128,
 							   },
 	};
 	vk::PipelineLayoutCreateInfo info {

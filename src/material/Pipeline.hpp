@@ -13,6 +13,7 @@ struct ShaderModule {
 };
 struct GraphicPipelineModules {
 	ShaderModule vertex;
+	ShaderModule geometry;
 	ShaderModule fragment;
 };
 

@@ -10,6 +10,7 @@
 #include "rendergraph/tasks/Task.hpp"
 #include "rendergraph/tasks/TaskContext.hpp"
 #include "rendergraph/tasks/UIPass.hpp"
+#include "rendergraph/tasks/VoxelizationPass.hpp"
 #include "resources/ResourceManager.hpp"
 
 void Renderer::createRenderGraph(Scene& scene) {
@@ -460,6 +461,13 @@ void Renderer::createRenderGraph(Scene& scene) {
 		    );
 		}
 	);
+	ResourceIndex voxelizationOutput = m_graph.createBuffer(
+		"voxelization_output",
+		{
+			.size = 1024,
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		}
+	);
 
 	ResourceIndex result = m_graph.createImage(
 		"result",
@@ -495,6 +503,39 @@ void Renderer::createRenderGraph(Scene& scene) {
 			);
 		}
 	);
+
+	m_graph.addGraphicPass(
+		"voxelization",
+		{},
+		{
+		    {
+				voxelizationOutput, ResourceUsage::Type::ShaderWrite
+			},
+			{
+			    result, ResourceUsage::Type::ColorAttachmentWrite
+			},
+		},
+		GraphicPipelineModules {
+			.vertex = {
+			    "resources/shaders/gi/voxel/octree_gen.slang",
+	            "main_vs",
+		    },
+			.geometry = {
+			    "resources/shaders/gi/voxel/octree_gen.slang",
+				"main_gs",
+		    },
+			.fragment = {
+			    "resources/shaders/gi/voxel/octree_gen.slang",
+				"main_fs",
+		    },
+		},
+		GraphicPipelineConfiguration{
+		    .depthWrite = false,
+			.stencilEnabled = false,
+		},
+		VoxelizationPass
+	);
+
 	m_graph.addTask(
 		"UI",
 		TaskType::Graphic,
