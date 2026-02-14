@@ -10,25 +10,40 @@ struct TaskContext {
 	std::span<const ResourceDependency>& outputs;
 	std::unordered_map<ResourceIndex, ImageHandle>& images;
 	std::unordered_map<ResourceIndex, BufferHandle>& buffers;
+	void* baseHostAddress;
+	std::unordered_map<ResourceIndex, uint32_t>& localBuffers;
+
+	uint8_t currentFrameIndex;
+
 	ResourceManager& resourceManager;
 	MaterialManager& materialManager;
 	const Scene& scene;
 
-	template <ContextResourceRef T>
-	T getInput(uint32_t index) {
+	template <typename T>
+	T getInput(ResourceIndex index) {
 		if constexpr (std::same_as<T, Buffer&>) {
 			return resourceManager.getBuffer(buffers[inputs[index].first]);
 		} else if constexpr (std::same_as<T, Image&>) {
 			return resourceManager.getImage(images[inputs[index].first]);
+		} else {
+			assert(localBuffers.contains(index));
+			return static_cast<T>(
+				static_cast<std::byte*>(baseHostAddress) + localBuffers[index]
+			);
 		}
 	}
 
-	template <ContextResourceRef T>
-	T getOutput(uint32_t index) {
+	template <typename T>
+	T getOutput(ResourceIndex index) {
 		if constexpr (std::same_as<T, Buffer&>) {
 			return resourceManager.getBuffer(buffers[outputs[index].first]);
 		} else if constexpr (std::same_as<T, Image&>) {
 			return resourceManager.getImage(images[outputs[index].first]);
+		} else {
+			assert(localBuffers.contains(index));
+			return static_cast<T>(
+				static_cast<std::byte*>(baseHostAddress) + localBuffers[index]
+			);
 		}
 	}
 

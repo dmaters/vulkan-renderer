@@ -365,7 +365,7 @@ void loadImage(
 	stbi_image_free(data);
 }
 
-ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
+ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 	std::vector<TextureInfo> textures
 ) {
 	stbi_set_flip_vertically_on_load(true);
@@ -394,9 +394,10 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 		);
 	}
 
-	AllocationIndex allocationIndex = createResources(textureDesc, {});
+	DeviceAllocationIndex allocationIndex = createResources(textureDesc, {});
 
-	uint32_t size = m_allocations.at(allocationIndex).getAllocation().size;
+	uint32_t size =
+		m_deviceAllocations.at(allocationIndex).getAllocation().size;
 
 	LinearAllocator stagingAllocator(
 		vk::MemoryPropertyFlagBits::eHostVisible |
@@ -442,7 +443,7 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 
 	for (int i = 0; i < textures.size(); i++) {
 		Image &image = m_images.at(
-			m_allocationResources.at(allocationIndex).first.at(i).value
+			m_deviceAllocationResources.at(allocationIndex).first.at(i).value
 		);
 
 		vk::MemoryRequirements requirements =
@@ -515,7 +516,7 @@ ResourceManager::AllocationIndex ResourceManager::loadSceneTextures(
 	return allocationIndex;
 }
 
-ResourceManager::AllocationIndex ResourceManager::createResources(
+ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 	std::vector<ImageDescription> imagesDescriptions,
 	std::vector<BufferDescription> buffersDescriptions
 ) {
@@ -554,7 +555,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 		imagesDescriptions.size() + buffersDescriptions.size();
 	resourcesRequirements.reserve(allocationSize);
 
-	AllocationIndex allocIndex = ++m_allocationCount;
+	DeviceAllocationIndex allocIndex = ++m_allocationCount;
 
 	for (int i = 0; i < imagesDescriptions.size(); i++) {
 		auto &description = imagesDescriptions[i];
@@ -580,7 +581,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 					},
 		};
 
-		m_allocationResources[allocIndex].first.push_back(handle);
+		m_deviceAllocationResources[allocIndex].first.push_back(handle);
 	}
 
 	for (int i = 0; i < buffersDescriptions.size(); i++) {
@@ -607,10 +608,10 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			.buffer = buffer,
 			.size = description.size,
 		};
-		m_allocationResources[allocIndex].second.push_back(handle);
+		m_deviceAllocationResources[allocIndex].second.push_back(handle);
 	}
 
-	m_allocations.emplace(
+	m_deviceAllocations.emplace(
 		allocIndex,
 		LinearAllocator(vk::MemoryPropertyFlagBits::eDeviceLocal, requiredSize)
 	);
@@ -618,12 +619,12 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	for (int i = 0; i < resourcesRequirements.size(); i++) {
 		if (images.contains(i)) {
 			Image &image = m_images.at(images.at(i).value);
-			image.allocation = m_allocations.at(allocIndex)
+			image.allocation = m_deviceAllocations.at(allocIndex)
 			                       .subAllocate(resourcesRequirements.at(i));
 
 			device.bindImageMemory(
 				image.image,
-				m_allocations.at(allocIndex).getAllocation().memory,
+				m_deviceAllocations.at(allocIndex).getAllocation().memory,
 				image.allocation->offset
 			);
 
@@ -644,12 +645,12 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		else if (buffers.contains(i)) {
 			Buffer &buffer = m_buffers.at(buffers.at(i).value);
-			buffer.allocation = m_allocations.at(allocIndex)
+			buffer.allocation = m_deviceAllocations.at(allocIndex)
 			                        .subAllocate(resourcesRequirements.at(i));
 
 			device.bindBufferMemory(
 				buffer.buffer,
-				m_allocations.at(allocIndex).getAllocation().memory,
+				m_deviceAllocations.at(allocIndex).getAllocation().memory,
 				buffer.allocation.offset
 			);
 		}
@@ -657,23 +658,71 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	return allocIndex;
 }
 
-void ResourceManager::freeAllocation(AllocationIndex index) {
+ResourceManager::HostAllocationIndex ResourceManager::createHostAllocation(
+	uint32_t size
+) {
+	assert(size > 0);
+	vk::Device &device = Instance::Get().device;
+	HostAllocationIndex allocIndex = ++m_allocationCount;
+	Allocation allocation = Allocation(
+		vk::MemoryPropertyFlagBits::eHostCoherent |
+			vk::MemoryPropertyFlagBits::eHostCached,
+		size
+	);
+	m_hostAllocations.emplace(allocIndex, allocation);
+
+	vk::Buffer buffer = device.createBuffer(
+		vk::BufferCreateInfo {
+			.size = size,
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		}
+	);
+	vk::MemoryRequirements requirements =
+		device.getBufferMemoryRequirements(buffer);
+
+	BufferHandle bufferHandle = { m_resourceCounter++ };
+	m_buffers[bufferHandle.value] = {
+		.buffer = buffer,
+		.allocation =
+			m_deviceAllocations.at(allocIndex).subAllocate(requirements),
+		.size = size,
+	};
+	m_deviceAllocationResources[allocIndex].second.push_back(bufferHandle);
+	void *memoryAddress;
+	vk::Result res = device.mapMemory(
+		allocation.memory, 0, size, vk::MemoryMapFlags(0), &memoryAddress
+	);
+
+	m_hostAllocationBuffers[allocIndex] = {
+		.buffer = buffer,
+		.address = memoryAddress,
+		.size = size,
+	};
+
+	assert(res == vk::Result::eSuccess);
+
+	return allocIndex;
+}
+
+void ResourceManager::freeDeviceAllocation(
+	ResourceManager::DeviceAllocationIndex index
+) {
 	vk::Device &device = Instance::Get().device;
 
-	for (auto &image : m_allocationResources[index].first) {
+	for (auto &image : m_deviceAllocationResources[index].first) {
 		device.destroyImageView(m_images[image.value].view);
 		device.destroyImage(m_images[image.value].image);
 		m_images.erase(image.value);
 	}
 
-	for (auto &buffer : m_allocationResources[index].second) {
+	for (auto &buffer : m_deviceAllocationResources[index].second) {
 		device.destroyBuffer(m_buffers[buffer.value].buffer);
 		m_buffers.erase(buffer.value);
 	}
-	m_allocationResources.erase(index);
+	m_deviceAllocationResources.erase(index);
 
-	m_allocations.at(index).getAllocation().free();
-	m_allocations.erase(index);
+	m_deviceAllocations.at(index).getAllocation().free();
+	m_deviceAllocations.erase(index);
 }
 
 uint64_t ResourceManager::sync() {

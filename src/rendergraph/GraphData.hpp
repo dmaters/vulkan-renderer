@@ -31,6 +31,7 @@ struct GraphData {
 	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
 	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
 		buffers;
+	std::unordered_map<ResourceIndex, uint32_t> localBufferSizes;
 	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
 
 	std::unordered_map<ResourceIndex, ImageHandle> externalImages;

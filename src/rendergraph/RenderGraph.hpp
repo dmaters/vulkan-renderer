@@ -46,12 +46,14 @@ public:
 		uint8_t swapchainRatio = 0
 	);
 
-	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
-
-	ResourceIndex createBuffer(
+	ResourceIndex createDeviceBuffer(
 		std::string_view name, ResourceManager::BufferDescription desc
 	);
 
+	template <typename T>
+	ResourceIndex createHostBuffer(std::string_view name);
+
+	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
 	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);
 
 	void addGraphicPass(

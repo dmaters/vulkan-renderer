@@ -3,11 +3,10 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <unordered_map>
-#include <vector>
 #include <vulkan/vulkan.hpp>
 
-#include "RenderGraphBuilder.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/GraphData.hpp"
@@ -29,13 +28,19 @@ private:
 	bool m_baseImagesInitialized = false;
 	bool m_swapchainImagesInitialized = false;
 
-	ResourceManager::AllocationIndex m_frameDataAllocation;
-	ResourceManager::AllocationIndex m_resolutionDependentAllocation = 0;
-	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation = 0;
+	ResourceManager::DeviceAllocationIndex m_frameDataAllocation;
+
+	std::optional<ResourceManager::HostAllocationIndex> m_hostDataAllocation;
+
+	ResourceManager::DeviceAllocationIndex m_resolutionDependentAllocation = 0;
+	ResourceManager::DeviceAllocationIndex m_oldResolutionDependentAllocation =
+		0;
+
 	uint8_t m_swapchainFlushCounter = 0;
 
 	std::unordered_map<ResourceIndex, ImageHandle> m_images;
 	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
+	std::unordered_map<ResourceIndex, uint32_t> m_localBufferOffests;
 
 	std::unordered_map<FeatureIndex, bool> m_features;
 

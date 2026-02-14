@@ -27,7 +27,6 @@ private:
 	std::unordered_map<std::string_view, MaterialIndex> m_names;
 
 	ResourceManager& m_resourceManager;
-	ResourceManager::AllocationIndex m_materialDataAllocation;
 
 	vk::DescriptorSetLayout m_textureSetLayout;
 	vk::DescriptorSet m_textureSet;
@@ -61,7 +60,9 @@ public:
 		return m_names.at(name);
 	}
 
-	uint32_t registerTextureGroup(ResourceManager::AllocationIndex allocation);
+	uint32_t registerTextureGroup(
+		ResourceManager::DeviceAllocationIndex allocation
+	);
 	vk::DescriptorSet getTextureSet() const { return m_textureSet; }
 	vk::DescriptorSet getEmptySet() const { return m_emptySet; }
 

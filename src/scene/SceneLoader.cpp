@@ -272,7 +272,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		}
 	}
 
-	ResourceManager::AllocationIndex buffersAllocation =
+	ResourceManager::DeviceAllocationIndex buffersAllocation =
 		m_resourceManager.createResources(
 			{
     },

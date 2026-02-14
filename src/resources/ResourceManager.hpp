@@ -33,7 +33,14 @@ public:
 	struct BufferDescription;
 	struct BufferCopy;
 
-	typedef uint32_t AllocationIndex;
+	struct HostAllocationBuffer {
+		vk::Buffer buffer;
+		void* address;
+		uint32_t size;
+	};
+
+	using DeviceAllocationIndex = uint32_t;
+	using HostAllocationIndex = uint32_t;
 
 private:
 	vk::Semaphore m_semaphore;
@@ -54,11 +61,16 @@ private:
 	RingAllocator m_stagingAllocation;
 	vk::Buffer m_stagingBuffer;
 
-	std::unordered_map<AllocationIndex, LinearAllocator> m_allocations;
+	std::unordered_map<DeviceAllocationIndex, LinearAllocator>
+		m_deviceAllocations;
+	std::unordered_map<HostAllocationIndex, Allocation> m_hostAllocations;
+
 	std::unordered_map<
-		AllocationIndex,
+		DeviceAllocationIndex,
 		std::pair<std::vector<ImageHandle>, std::vector<BufferHandle>>>
-		m_allocationResources;
+		m_deviceAllocationResources;
+	std::unordered_map<HostAllocationIndex, HostAllocationBuffer>
+		m_hostAllocationBuffers;
 
 	uint32_t m_allocationCount = 0;
 
@@ -74,13 +86,21 @@ public:
 		return m_buffers.at(handle.value);
 	}
 
-	const std::vector<ImageHandle>& getImages(AllocationIndex index) const {
+	const std::vector<ImageHandle>& getImages(
+		DeviceAllocationIndex index
+	) const {
 		if (index == 0) return {};
-		return m_allocationResources.at(index).first;
+		return m_deviceAllocationResources.at(index).first;
 	}
-	const std::vector<BufferHandle>& getBuffers(AllocationIndex index) const {
+	const std::vector<BufferHandle>& getBuffers(
+		DeviceAllocationIndex index
+	) const {
 		if (index == 0) return {};
-		return m_allocationResources.at(index).second;
+		return m_deviceAllocationResources.at(index).second;
+	}
+
+	HostAllocationBuffer getHostAllocation(HostAllocationIndex index) const {
+		return m_hostAllocationBuffers.at(index);
 	}
 
 	ImageHandle getNamedImageIndex(std::string_view name) const {
@@ -105,13 +125,15 @@ public:
 		vk::Format expectedFormat;
 	};
 
-	AllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);
-	AllocationIndex createResources(
+	DeviceAllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);
+	DeviceAllocationIndex createResources(
 		std::vector<ImageDescription> images,
 		std::vector<BufferDescription> buffers
 	);
+	HostAllocationIndex createHostAllocation(uint32_t size);
 
-	void freeAllocation(AllocationIndex index);
+	void freeDeviceAllocation(DeviceAllocationIndex index);
+	void freeHostAllocation(HostAllocationIndex index);
 
 	template <typename T, typename F>
 		requires std::invocable<F, T&>

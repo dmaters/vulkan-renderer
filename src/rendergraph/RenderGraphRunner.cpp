@@ -44,7 +44,9 @@ void RenderGraphRunner::clearUnusedResources() {
 	if (m_swapchainFlushCounter > 1)
 		m_swapchainFlushCounter--;
 	else if (m_swapchainFlushCounter == 1) {
-		m_resourceManager.freeAllocation(m_oldResolutionDependentAllocation);
+		m_resourceManager.freeDeviceAllocation(
+			m_oldResolutionDependentAllocation
+		);
 		m_swapchain.flush();
 		m_swapchainFlushCounter = 0;
 	}
@@ -361,12 +363,16 @@ void RenderGraphRunner::submit(const Scene& scene) {
 	if (!m_initialized) {
 		m_initialized = true;
 		auto _ = std::span<const ResourceDependency>();
+		std::unordered_map<ResourceIndex, uint32_t> _2;
 		TaskContext context {
 			.commandBuffer = commandBuffer,
 			.inputs = _,
 			.outputs = _,
 			.images = m_images,
 			.buffers = m_buffers,
+			.baseHostAddress = nullptr,
+			.localBuffers = _2,
+			.currentFrameIndex = static_cast<uint8_t>(m_currentFrame % 3),
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,
@@ -398,6 +404,13 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.outputs = outputs,
 			.images = m_images,
 			.buffers = m_buffers,
+			.baseHostAddress =
+				m_hostDataAllocation.has_value()
+					? m_resourceManager.getHostAllocation(*m_hostDataAllocation)
+						  .address
+					: nullptr,
+			.localBuffers = m_localBufferOffests,
+			.currentFrameIndex = static_cast<uint8_t>(m_currentFrame % 3),
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,
@@ -531,6 +544,16 @@ void RenderGraphRunner::build() {
 		m_resourceManager.setName(m_data.resourceNames[buffer], buffers[i]);
 
 		i++;
+	}
+
+	if (m_data.localBufferSizes.size() > 0) {
+		uint32_t hostAllocationSize = 0;
+		for (auto [index, size] : m_data.localBufferSizes) {
+			m_localBufferOffests[index] = hostAllocationSize;
+			hostAllocationSize += size;
+		}
+		m_hostDataAllocation =
+			m_resourceManager.createHostAllocation(hostAllocationSize);
 	}
 
 	for (auto entry : m_data.externalImages) m_images.insert(entry);

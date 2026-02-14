@@ -26,7 +26,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 	ResourceIndex pbrMaterialInstances =
 		m_graph.registerBuffer("pbr_instances_buffer", buffers[5]);
 
-	ResourceIndex cameraBuffer = m_graph.createBuffer(
+	ResourceIndex cameraBuffer = m_graph.createDeviceBuffer(
 		"camera_buffer",
 		ResourceManager::BufferDescription {
 			.size = sizeof(MaterialDefinitions::Camera),
@@ -34,7 +34,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 	                 vk::BufferUsageFlagBits::eUniformBuffer,
 		}
 	);
-	ResourceIndex lightBuffer = m_graph.createBuffer(
+	ResourceIndex lightBuffer = m_graph.createDeviceBuffer(
 		"light_buffer",
 		ResourceManager::BufferDescription {
 			.size = sizeof(MaterialDefinitions::Light),
@@ -54,7 +54,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		SceneUpdatePass
 	);
 
-	ResourceIndex computeScratchBuffer = m_graph.createBuffer(
+	ResourceIndex computeScratchBuffer = m_graph.createDeviceBuffer(
 		"compute_scratch_buffer",
 		ResourceManager::BufferDescription {
 			.size = 1 << 24,  // 16MB
@@ -159,7 +159,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	ResourceIndex skyLightingSH = m_graph.createBuffer(
+	ResourceIndex skyLightingSH = m_graph.createDeviceBuffer(
 		"skyLightingSH",
 		{
 			.size = sizeof(glm::vec4) * 9,
