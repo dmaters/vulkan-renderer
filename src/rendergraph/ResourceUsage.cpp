@@ -17,13 +17,7 @@ std::optional<vk::DescriptorType> ResourceUsage::getDescriptorType(
 			return vk::DescriptorType::eStorageBuffer;
 		case ResourceUsage::Type::UniformBuffer:
 			return vk::DescriptorType::eUniformBuffer;
-		case ResourceUsage::Type::ColorAttachmentWrite:
-		case ResourceUsage::Type::DepthStencilRead:
-		case ResourceUsage::Type::DepthStencilWrite:
-		case ResourceUsage::Type::VertexBuffer:
-		case ResourceUsage::Type::IndexBuffer:
-		case ResourceUsage::Type::TransferSrc:
-		case ResourceUsage::Type::TransferDst:
+		default:
 			return std::nullopt;
 	}
 }

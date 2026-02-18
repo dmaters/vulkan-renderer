@@ -40,7 +40,6 @@ private:
 
 	std::unordered_map<ResourceIndex, ImageHandle> m_images;
 	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
-	std::unordered_map<ResourceIndex, uint32_t> m_localBufferOffests;
 
 	std::unordered_map<FeatureIndex, bool> m_features;
 

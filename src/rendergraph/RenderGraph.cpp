@@ -66,10 +66,11 @@ ResourceIndex RenderGraph::createDeviceBuffer(
 	return index;
 }
 
-template <typename T>
-ResourceIndex RenderGraph::createHostBuffer(std::string_view name) {
+ResourceIndex RenderGraph::createHostBuffer(
+	std::string_view name, uint32_t size
+) {
 	ResourceIndex index = m_data.resourceNames.size();
-	m_data.localBufferSizes[index] = sizeof(T);
+	m_data.localBufferSizes[index] = size;
 	m_data.resourceNames.push_back(name);
 
 	return index;

@@ -48,7 +48,12 @@ void setupAttachments(
 
 	uint32_t width = 0, height = 0;
 
-	for (auto [index, _] : context.outputs) {
+	for (auto [index, usage] : context.outputs) {
+		if (usage != ResourceUsage::Type::ColorAttachmentWrite &&
+		    usage != ResourceUsage::Type::DepthStencilWrite &&
+		    usage != ResourceUsage::Type::DepthStencilRead)
+			continue;
+
 		Image& attachment =
 			context.resourceManager.getImage(context.images.at(index));
 
@@ -166,7 +171,7 @@ void RenderPass(
 		{}
 	);
 
-	TaskContext::Descriptors descriptors = context.getDescriptors(true);
+	TaskContext::Descriptors descriptors = context.getDescriptors();
 
 	if (descriptors.descriptors.size() > 0) {
 		context.commandBuffer.pushDescriptorSet(

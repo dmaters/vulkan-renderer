@@ -3,7 +3,29 @@
 #include "rendergraph/ResourceUsage.hpp"
 #include "vulkan/vulkan.hpp"
 
-TaskContext::Descriptors TaskContext::getDescriptors(bool isRenderPass) const {
+bool isValidImageDescriptor(ResourceUsage::Type usage) {
+	switch (usage) {
+		case ResourceUsage::Type::SampledRead:
+		case ResourceUsage::Type::ShaderWrite:
+		case ResourceUsage::Type::ShaderRead:
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool isValidBufferDescriptor(ResourceUsage::Type usage) {
+	switch (usage) {
+		case ResourceUsage::Type::StorageBufferRead:
+		case ResourceUsage::Type::StorageBufferWrite:
+		case ResourceUsage::Type::UniformBuffer:
+			return true;
+		default:
+			return false;
+	}
+}
+
+TaskContext::Descriptors TaskContext::getDescriptors() const {
 	uint32_t bindingCount = 0;
 	TaskContext::Descriptors resources;
 
@@ -12,6 +34,9 @@ TaskContext::Descriptors TaskContext::getDescriptors(bool isRenderPass) const {
 	resources._bufferInfo.reserve(maxPossibleSize);
 
 	for (auto [index, usage] : inputs) {
+		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage))
+			continue;
+
 		if (images.contains(index)) {
 			Image& image = resourceManager.getImage(images[index]);
 
@@ -55,11 +80,11 @@ TaskContext::Descriptors TaskContext::getDescriptors(bool isRenderPass) const {
 		}
 		bindingCount++;
 	}
-	if (isRenderPass)
-		return resources;  // TODO: Better resource definition, we need to avoid
-		                   // adding rendertargets to descriptors
 
 	for (auto [index, usage] : outputs) {
+		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage))
+			continue;
+
 		if (images.contains(index)) {
 			Image& image = resourceManager.getImage(images[index]);
 

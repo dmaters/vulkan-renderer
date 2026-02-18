@@ -96,7 +96,7 @@ void ShadowPass(TaskContext& context, uint8_t cascade) {
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
 	);
 
-	auto descriptors = context.getDescriptors(true);
+	auto descriptors = context.getDescriptors();
 	context.commandBuffer.pushDescriptorSet(
 		vk::PipelineBindPoint::eGraphics,
 		material.pipelineLayout,

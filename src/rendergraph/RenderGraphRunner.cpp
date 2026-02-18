@@ -371,8 +371,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.images = m_images,
 			.buffers = m_buffers,
 			.baseHostAddress = nullptr,
-			.localBuffers = _2,
-			.currentFrameIndex = static_cast<uint8_t>(m_currentFrame % 3),
+			.currentFrame = m_currentFrame,
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,
@@ -404,13 +403,12 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.outputs = outputs,
 			.images = m_images,
 			.buffers = m_buffers,
-			.baseHostAddress =
-				m_hostDataAllocation.has_value()
-					? m_resourceManager.getHostAllocation(*m_hostDataAllocation)
-						  .address
-					: nullptr,
-			.localBuffers = m_localBufferOffests,
-			.currentFrameIndex = static_cast<uint8_t>(m_currentFrame % 3),
+			.baseHostAddress = m_hostDataAllocation.has_value()
+			                       ? m_resourceManager.getHostAllocationAddress(
+										 *m_hostDataAllocation
+									 )
+			                       : nullptr,
+			.currentFrame = m_currentFrame,
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,
@@ -547,13 +545,25 @@ void RenderGraphRunner::build() {
 	}
 
 	if (m_data.localBufferSizes.size() > 0) {
-		uint32_t hostAllocationSize = 0;
+		std::vector<uint32_t> sizes;
+		std::vector<ResourceIndex> indices;
+
 		for (auto [index, size] : m_data.localBufferSizes) {
-			m_localBufferOffests[index] = hostAllocationSize;
-			hostAllocationSize += size;
+			sizes.push_back(size);
+			indices.push_back(index);
 		}
-		m_hostDataAllocation =
-			m_resourceManager.createHostAllocation(hostAllocationSize);
+
+		// Return buffers so they can bound to resource index
+		m_hostDataAllocation = m_resourceManager.createHostAllocation(sizes);
+
+		auto buffers = m_resourceManager.getHostBuffers(*m_hostDataAllocation);
+		i = 0;
+		for (ResourceIndex buffer : indices) {
+			m_buffers[buffer] = buffers[i];
+			m_resourceManager.setName(m_data.resourceNames[buffer], buffers[i]);
+
+			i++;
+		}
 	}
 
 	for (auto entry : m_data.externalImages) m_images.insert(entry);

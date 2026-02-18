@@ -58,6 +58,13 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 	i = (taskCount + i - 1) % taskCount;
 
 	ResourceUsage::Type currentUsage = resourceDependencies[usageIndex].usage;
+
+	if (currentUsage == ResourceUsage::Type::Undefined)
+		return {
+			.barrier = std::nullopt,
+			.task = resourceDependencies[i].taskIndex,
+		};
+
 	auto [currentStage, currentAccess, currentLayout] =
 		ResourceUsage::GetAccess(currentUsage);
 
@@ -70,13 +77,16 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 			continue;
 		}
 		ResourceUsage::Type previousUsage = resourceDependencies[i].usage;
-		auto [previousStage, previousAccess, previousLayout] =
-			ResourceUsage::GetAccess(resourceDependencies[i].usage);
-		if (readOnly && (currentUsage == previousUsage))
+
+		if ((readOnly && (currentUsage == previousUsage)) ||  // Read after read
+		    previousUsage == ResourceUsage::Type::Undefined)
 			return {
 				.barrier = std::nullopt,
 				.task = resourceDependencies[i].taskIndex,
-			};  // Read after read
+			};
+
+		auto [previousStage, previousAccess, previousLayout] =
+			ResourceUsage::GetAccess(resourceDependencies[i].usage);
 
 		return ResourceAccess {
 			.barrier =

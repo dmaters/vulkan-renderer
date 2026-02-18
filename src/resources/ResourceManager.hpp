@@ -33,12 +33,6 @@ public:
 	struct BufferDescription;
 	struct BufferCopy;
 
-	struct HostAllocationBuffer {
-		vk::Buffer buffer;
-		void* address;
-		uint32_t size;
-	};
-
 	using DeviceAllocationIndex = uint32_t;
 	using HostAllocationIndex = uint32_t;
 
@@ -69,8 +63,9 @@ private:
 		DeviceAllocationIndex,
 		std::pair<std::vector<ImageHandle>, std::vector<BufferHandle>>>
 		m_deviceAllocationResources;
-	std::unordered_map<HostAllocationIndex, HostAllocationBuffer>
+	std::unordered_map<HostAllocationIndex, std::vector<BufferHandle>>
 		m_hostAllocationBuffers;
+	std::unordered_map<HostAllocationIndex, void*> m_hostAllocationAddresses;
 
 	uint32_t m_allocationCount = 0;
 
@@ -98,9 +93,14 @@ public:
 		if (index == 0) return {};
 		return m_deviceAllocationResources.at(index).second;
 	}
-
-	HostAllocationBuffer getHostAllocation(HostAllocationIndex index) const {
+	const std::vector<BufferHandle>& getHostBuffers(
+		HostAllocationIndex index
+	) const {
+		if (index == 0) return {};
 		return m_hostAllocationBuffers.at(index);
+	}
+	void* getHostAllocationAddress(HostAllocationIndex index) const {
+		return m_hostAllocationAddresses.at(index);
 	}
 
 	ImageHandle getNamedImageIndex(std::string_view name) const {
@@ -130,7 +130,7 @@ public:
 		std::vector<ImageDescription> images,
 		std::vector<BufferDescription> buffers
 	);
-	HostAllocationIndex createHostAllocation(uint32_t size);
+	HostAllocationIndex createHostAllocation(std::vector<uint32_t> sizes);
 
 	void freeDeviceAllocation(DeviceAllocationIndex index);
 	void freeHostAllocation(HostAllocationIndex index);

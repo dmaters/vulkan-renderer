@@ -50,8 +50,7 @@ public:
 		std::string_view name, ResourceManager::BufferDescription desc
 	);
 
-	template <typename T>
-	ResourceIndex createHostBuffer(std::string_view name);
+	ResourceIndex createHostBuffer(std::string_view name, uint32_t size);
 
 	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
 	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);

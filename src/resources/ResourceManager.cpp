@@ -659,45 +659,54 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 }
 
 ResourceManager::HostAllocationIndex ResourceManager::createHostAllocation(
-	uint32_t size
+	std::vector<uint32_t> bufferSizes
 ) {
-	assert(size > 0);
+	assert(bufferSizes.size() > 0);
 	vk::Device &device = Instance::Get().device;
 	HostAllocationIndex allocIndex = ++m_allocationCount;
-	Allocation allocation = Allocation(
-		vk::MemoryPropertyFlagBits::eHostCoherent |
-			vk::MemoryPropertyFlagBits::eHostCached,
-		size
-	);
-	m_hostAllocations.emplace(allocIndex, allocation);
+
+	uint32_t totalSize = 0;
+	for (uint32_t size : bufferSizes) totalSize += size;
 
 	vk::Buffer buffer = device.createBuffer(
 		vk::BufferCreateInfo {
-			.size = size,
+			.size = totalSize,
 			.usage = vk::BufferUsageFlagBits::eTransferSrc,
 		}
 	);
-	vk::MemoryRequirements requirements =
-		device.getBufferMemoryRequirements(buffer);
 
-	BufferHandle bufferHandle = { m_resourceCounter++ };
-	m_buffers[bufferHandle.value] = {
-		.buffer = buffer,
-		.allocation =
-			m_deviceAllocations.at(allocIndex).subAllocate(requirements),
-		.size = size,
-	};
-	m_deviceAllocationResources[allocIndex].second.push_back(bufferHandle);
+	uint32_t requiredSize = device.getBufferMemoryRequirements(buffer).size;
+
+	Allocation allocation = Allocation(
+		vk::MemoryPropertyFlagBits::eHostCoherent |
+			vk::MemoryPropertyFlagBits::eHostCached,
+		requiredSize
+	);
+	m_hostAllocations.emplace(allocIndex, allocation);
+	device.bindBufferMemory(buffer, allocation.memory, 0);
+
+	uint32_t offset = 0;
+
+	for (uint32_t size : bufferSizes) {
+		BufferHandle bufferHandle = { ++m_resourceCounter };
+
+		m_buffers[bufferHandle.value] = {
+			.buffer = buffer,
+			.allocation = { .offset = offset, .size = size },
+			.size = size,
+		};
+
+		m_hostAllocationBuffers[allocIndex].push_back(bufferHandle);
+
+		offset += size;
+	}
+
 	void *memoryAddress;
 	vk::Result res = device.mapMemory(
-		allocation.memory, 0, size, vk::MemoryMapFlags(0), &memoryAddress
+		allocation.memory, 0, totalSize, vk::MemoryMapFlags(0), &memoryAddress
 	);
 
-	m_hostAllocationBuffers[allocIndex] = {
-		.buffer = buffer,
-		.address = memoryAddress,
-		.size = size,
-	};
+	m_hostAllocationAddresses[allocIndex] = memoryAddress;
 
 	assert(res == vk::Result::eSuccess);
 
