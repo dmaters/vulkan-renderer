@@ -261,6 +261,10 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.pNext = &dynamicRenderingFeature, .synchronization2 = true
 	};
 
+	vk::PhysicalDeviceFeatures features {
+		.multiDrawIndirect = true,
+	};
+
 	vk::DeviceCreateInfo info {
 		.pNext = &syncronizationFeature,
 		.queueCreateInfoCount = (uint32_t)queueInfo.size(),
@@ -269,6 +273,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.ppEnabledLayerNames = deviceLayers.data(),
 		.enabledExtensionCount = (uint32_t)deviceExtensions.size(),
 		.ppEnabledExtensionNames = deviceExtensions.data(),
+		.pEnabledFeatures = &features,
 	};
 
 	return physicalDevice.createDevice(info);

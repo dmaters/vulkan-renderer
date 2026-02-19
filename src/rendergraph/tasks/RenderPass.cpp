@@ -147,12 +147,83 @@ void setupAttachments(
 	);
 }
 
+void drawIndirect(
+	TaskContext& context, const std::vector<uint32_t>& primitives
+) {
+	assert(
+		context.inputs.back().second == ResourceUsage::Type::IndirectBufferRead
+	);
+	assert(context.outputs.back().second == ResourceUsage::Type::Undefined);
+
+	auto indirectBufferOutput =
+		context.getOutputSpan<vk::DrawIndexedIndirectCommand>(
+			context.outputs.size() - 1, true
+		);
+
+	auto indirectMaterialBufferOutput =
+		context.getOutputSpan<uint32_t>(context.outputs.size() - 2, true);
+
+	for (int i = 0; i < primitives.size(); i++) {
+		uint32_t primitiveIndex = primitives[i];
+		const Primitive& primitive = context.scene.primitives[primitiveIndex];
+
+		indirectBufferOutput[i] = vk::DrawIndexedIndirectCommand {
+			.indexCount = primitive.indexCount,
+			.instanceCount = 1,
+			.firstIndex = primitive.baseIndex,
+			.vertexOffset = static_cast<int32_t>(primitive.baseVertex),
+			.firstInstance = 0,
+		};
+
+		indirectMaterialBufferOutput[i] = primitiveIndex;
+	}
+
+	Buffer& indirectBuffer =
+		context.getInput<Buffer&>(context.inputs.size() - 1);
+
+	context.commandBuffer.drawIndexedIndirect(
+		indirectBuffer.buffer,
+		0,
+		context.currentFrame > 3 ? primitives.size()
+								 : 0,  // Warmup for syncronization
+		sizeof(vk::DrawIndexedIndirectCommand)
+	);
+}
+
+void drawDirect(
+	TaskContext& context,
+	const std::vector<uint32_t>& primitives,
+	vk::PipelineLayout pipelineLayout
+) {
+	for (const uint32_t primitiveIndex : primitives) {
+		const Primitive& primitive = context.scene.primitives[primitiveIndex];
+
+		context.commandBuffer.pushConstants(
+			pipelineLayout,
+			vk::ShaderStageFlagBits::eVertex |
+				vk::ShaderStageFlagBits::eFragment,
+			0,
+			sizeof(uint32_t),
+			&primitiveIndex  // TODO: better indexing for material instances
+		);
+
+		context.commandBuffer.drawIndexed(
+			primitive.indexCount,
+			1,
+			primitive.baseIndex,
+			primitive.baseVertex,
+			0
+		);
+	}
+}
+
 void RenderPass(
 	TaskContext& context,
 	const std::vector<uint32_t>& primitives,
 	MaterialIndex materialIndex,
 	AttachmentOp colorOp,
-	AttachmentOp depthOp
+	AttachmentOp depthOp,
+	bool indirect
 ) {
 	setupAttachments(context, colorOp, depthOp);
 
@@ -189,26 +260,10 @@ void RenderPass(
 			{}
 		);
 
-	for (const uint32_t primitiveIndex : primitives) {
-		const Primitive& primitive = context.scene.primitives[primitiveIndex];
-
-		context.commandBuffer.pushConstants(
-			material.pipelineLayout,
-			vk::ShaderStageFlagBits::eVertex |
-				vk::ShaderStageFlagBits::eFragment,
-			0,
-			sizeof(uint32_t),
-			&primitiveIndex  // TODO: better indexing for material instances
-		);
-
-		context.commandBuffer.drawIndexed(
-			primitive.indexCount,
-			1,
-			primitive.baseIndex,
-			primitive.baseVertex,
-			0
-		);
-	}
+	if (indirect)
+		drawIndirect(context, primitives);
+	else
+		drawDirect(context, primitives, material.pipelineLayout);
 
 	context.commandBuffer.endRendering();
 }

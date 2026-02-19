@@ -6,4 +6,5 @@ struct VertexOutput {
 	float3 tangent : TEXCOORD2;
 	float3 bitangent : TEXCOORD3;
 	float2 texcoord : TEXCOORD4;
+	uint drawIndex;
 };

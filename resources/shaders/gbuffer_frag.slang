@@ -19,7 +19,8 @@ struct PrimitiveInstance {
 };
 
 [vk_binding(1)] StructuredBuffer<PrimitiveInstance> _materialData;
-[vk_binding(2)] StructuredBuffer<uint32_t> _instances;
+[vk_binding(2)] StructuredBuffer<uint32_t> _materialMap;
+[vk_binding(3)] StructuredBuffer<uint32_t> _drawPrimitiveMap;
 
 float3 reconstructNormal(float2 xy) {
 	float z = sqrt(max(0.0, 1.0 - xy.x * xy.x - xy.y * xy.y));
@@ -29,7 +30,7 @@ float3 reconstructNormal(float2 xy) {
 [shader("fragment")] FragmentOutput main(VertexOutput input) {
 	FragmentOutput output;
 
-	PrimitiveInstance instance = _materialData[_instances[uPrimitive.index]];
+	PrimitiveInstance instance = _materialData[_materialMap[_drawPrimitiveMap[input.drawIndex]]];
 
 	output.color = _staticTextures[instance.albedo_texture].Sample(
 					   _samplers[SamplerType::LinearClamp], input.texcoord

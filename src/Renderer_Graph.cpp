@@ -3,6 +3,7 @@
 #include "Renderer.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "rendergraph/ResourceUsage.hpp"
+#include "rendergraph/tasks/BufferUpload.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/SceneUpdatePass.hpp"
@@ -184,6 +185,22 @@ void Renderer::createRenderGraph(Scene& scene) {
 			);
 		}
 	);
+	ResourceIndex indirectShadowBuffer = m_graph.createDeviceBuffer(
+		"indirect_shadow_buffer",
+		{
+			.size = static_cast<uint32_t>(
+				m_currentScene.primitives.size() *
+				sizeof(vk::DrawIndexedIndirectCommand) * 3
+			),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eIndirectBuffer,
+		}
+	);
+	ResourceIndex indirectShadowBufferHost = m_graph.createHostBuffer(
+		"indirect_shadow_buffer_host",
+		m_currentScene.primitives.size() *
+			sizeof(vk::DrawIndexedIndirectCommand) * 3 * 3
+	);
 
 	ResourceIndex shadowAtlas = m_graph.createImage(
 		"shadow_atlas",
@@ -201,11 +218,13 @@ void Renderer::createRenderGraph(Scene& scene) {
 	m_graph.addGraphicPass(
 		"shadowmap",
 		{
-			{ lightBuffer,  ResourceUsage::Type::UniformBuffer },
-			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
+			{ lightBuffer,          ResourceUsage::Type::UniformBuffer      },
+			{ cameraBuffer,         ResourceUsage::Type::UniformBuffer      },
+			{ indirectShadowBuffer, ResourceUsage::Type::IndirectBufferRead },
     },
 		{
 			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
+			{ indirectShadowBufferHost, ResourceUsage::Type::Undefined },
 		},
 		{
 			.vertex = "resources/shaders/shadow_vert.slang",
@@ -221,6 +240,51 @@ void Renderer::createRenderGraph(Scene& scene) {
 			ShadowPass(context, 1);
 			ShadowPass(context, 2);
 		}
+	);
+	m_graph.addTask(
+		"copy_shadow_indirect",
+		TaskType::Transfer,
+		{
+			{
+             indirectShadowBufferHost, ResourceUsage::Type::TransferSrc,
+			 },
+    },
+		{
+			{ indirectShadowBuffer, ResourceUsage::Type::TransferDst },
+		},
+		BufferUpload
+	);
+
+	ResourceIndex indirectGPassBuffer = m_graph.createDeviceBuffer(
+		"indirect_gpass_buffer",
+		{
+			.size = static_cast<uint32_t>(
+				m_currentScene.primitives.size() *
+				sizeof(vk::DrawIndexedIndirectCommand)
+			),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eIndirectBuffer,
+		}
+	);
+	ResourceIndex indirectGPassMaterialBuffer = m_graph.createDeviceBuffer(
+		"indirect_gpass_material_buffer",
+		{
+			.size = static_cast<uint32_t>(
+				m_currentScene.primitives.size() * sizeof(uint32_t)
+			),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eStorageBuffer,
+		}
+	);
+	ResourceIndex indirectGPassBufferHost = m_graph.createHostBuffer(
+		"indirect_gpass_buffer_host",
+		m_currentScene.primitives.size() *
+			sizeof(vk::DrawIndexedIndirectCommand) * 3
+	);
+
+	ResourceIndex indirectGPassMaterialBufferHost = m_graph.createHostBuffer(
+		"indirect_gpass_buffer_host",
+		m_currentScene.primitives.size() * sizeof(uint32_t) * 3
 	);
 
 	ResourceIndex albedo = m_graph.createImage(
@@ -303,7 +367,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 		    { cameraBuffer,ResourceUsage::Type::UniformBuffer },
 			{ pbrMaterialData , ResourceUsage::Type::StorageBufferRead	},
 			{ pbrMaterialInstances , ResourceUsage::Type::StorageBufferRead	},
-
+			{ indirectGPassMaterialBuffer, ResourceUsage::Type::StorageBufferRead },
+			{ indirectGPassBuffer, ResourceUsage::Type::IndirectBufferRead	},
 		},
 		{
 			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },
@@ -311,6 +376,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ worldPos, ResourceUsage::Type::ColorAttachmentWrite },
 			{ roughnessMetallic, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilWrite },
+			{ indirectGPassMaterialBufferHost, ResourceUsage::Type::Undefined },
+			{ indirectGPassBufferHost, ResourceUsage::Type::Undefined	},
 		},
 		{
 			.vertex = "resources/shaders/base_transform_vert.slang",
@@ -338,24 +405,50 @@ void Renderer::createRenderGraph(Scene& scene) {
 			}
 		},
 		[](TaskContext& context) {
-		MaterialIndex materialIndex = context.materialManager.getMaterialIndex("gbuffer");
-            auto visiblePrimitives = FrustumCulling(
-                context.scene,
-                context.scene.buckets.at(materialIndex),
-                context.scene.camera.getFrustumPlanes()
-            );
+		MaterialIndex materialIndex =
+			context.materialManager.getMaterialIndex("gbuffer");
+		auto visiblePrimitives = FrustumCulling(
+			context.scene,
+			context.scene.buckets.at(materialIndex),
+			context.scene.camera.getFrustumPlanes()
+		);
 
-            UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
-            RenderPass(
-                context,
-                visiblePrimitives,
-                materialIndex,
-                AttachmentOp::ClearWrite,
-				AttachmentOp::ClearWrite
-            );
+		UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
+		RenderPass(
+			context,
+			visiblePrimitives,
+			materialIndex,
+			AttachmentOp::ClearWrite,
+			AttachmentOp::ClearWrite,
+			true
+		);
 		}
 	);
 
+	m_graph.addTask(
+		"copy_indirect_gbuffer",
+		TaskType::Transfer,
+		{
+			{ indirectGPassBufferHost, ResourceUsage::Type::TransferSrc },
+    },
+		{
+			{ indirectGPassBuffer, ResourceUsage::Type::TransferDst },
+		},
+		BufferUpload
+	);
+	m_graph.addTask(
+		"copy_material_gbuffer",
+		TaskType::Transfer,
+		{
+			{
+             indirectGPassMaterialBufferHost, ResourceUsage::Type::TransferSrc,
+			 },
+    },
+		{
+			{ indirectGPassMaterialBuffer, ResourceUsage::Type::TransferDst },
+		},
+		BufferUpload
+	);
 	ResourceIndex hdr_output = m_graph.createImage(
 		"hdr_output",
 		{
@@ -449,15 +542,15 @@ void Renderer::createRenderGraph(Scene& scene) {
 		[](
 			TaskContext& context
 		) {
-
-		    MaterialIndex materialIndex = context.materialManager.getMaterialIndex("skybox");
-		    RenderPass(
-		        context,
-	            context.scene.buckets.at(materialIndex),
-				materialIndex,
-				AttachmentOp::ReadWrite,
-				AttachmentOp::Read
-		    );
+		MaterialIndex materialIndex =
+			context.materialManager.getMaterialIndex("skybox");
+		RenderPass(
+			context,
+			context.scene.buckets.at(materialIndex),
+			materialIndex,
+			AttachmentOp::ReadWrite,
+			AttachmentOp::Read
+		);
 		}
 	);
 

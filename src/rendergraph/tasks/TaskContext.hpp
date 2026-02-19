@@ -59,14 +59,20 @@ std::span<T> TaskContext::getInputSpan(uint32_t index, bool perFrame) {
 	Buffer& buffer = resourceManager.getBuffer(buffers[inputs[index].first]);
 	if (perFrame)
 		return std::span<T>(
-			static_cast<std::byte*>(baseHostAddress) +
+			reinterpret_cast<T*>(
+				static_cast<std::byte*>(baseHostAddress) +
 				buffer.allocation.offset +
-				(buffer.allocation.size / 3) * (currentFrame % 3),
+				(buffer.allocation.size / 3) * (currentFrame % 3)
+			),
 			buffer.allocation.size / 3 / sizeof(T)
 		);
 	else
 		return std::span<T>(
-			static_cast<T>(baseHostAddress), buffer.allocation.size
+			reinterpret_cast<T*>(
+				static_cast<std::byte*>(baseHostAddress) +
+				buffer.allocation.offset
+			),
+			buffer.allocation.size / sizeof(T)
 		);
 	;
 }

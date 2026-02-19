@@ -17,7 +17,8 @@ void RenderPass(
 	const std::vector<uint32_t>& primitives,
 	MaterialIndex materialIndex,
 	AttachmentOp color,
-	AttachmentOp depth
+	AttachmentOp depth,
+	bool indirect = false
 );
 
 std::vector<uint32_t> FrustumCulling(

@@ -3,7 +3,7 @@
 #include "common/geometry.slang"
 
 [vk_binding(0)] ConstantBuffer<Camera> _camera;
-[shader("vertex")] VertexOutput main(VertexInput input) {
+[shader("vertex")] VertexOutput main(VertexInput input, uint32_t drawIndex : SV_DrawIndex) {
 	VertexOutput output;
 	float4x4 mvp =
 		mul(mul(_camera.projection, _camera.view), input.transformation);
@@ -15,5 +15,6 @@
 	output.texcoord = input.texCoord;
 	output.tangent = input.tangent;
 	output.bitangent = input.bitangent;
+	output.drawIndex = drawIndex;
 	return output;
 }

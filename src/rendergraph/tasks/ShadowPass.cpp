@@ -104,17 +104,36 @@ void ShadowPass(TaskContext& context, uint8_t cascade) {
 		descriptors.descriptors
 	);
 
-	for (uint32_t primitiveIndex : context.scene.buckets.at(materialIndex)) {
+	auto outputSpan = context.getOutputSpan<vk::DrawIndexedIndirectCommand>(
+		context.outputs.size() - 1, true
+	);
+	uint baseOffset = outputSpan.size() / 3 * cascade;
+
+	const auto& bucket = context.scene.buckets.at(materialIndex);
+	for (int i = 0; i < bucket.size(); i++) {
+		PipelineIndex primitiveIndex = bucket[i];
 		const Primitive& primitive = context.scene.primitives[primitiveIndex];
 
-		context.commandBuffer.drawIndexed(
-			primitive.indexCount,
-			1,
-			primitive.baseIndex,
-			primitive.baseVertex,
-			0
-		);
+		outputSpan[baseOffset + i] = vk::DrawIndexedIndirectCommand {
+			.indexCount = primitive.indexCount,
+			.instanceCount = 1,
+			.firstIndex = primitive.baseIndex,
+			.vertexOffset = static_cast<int32_t>(primitive.baseVertex),
+			.firstInstance = 0,
+
+		};
 	}
+
+	Buffer& indirectBuffer =
+		context.getInput<Buffer&>(context.inputs.size() - 1);
+
+	if (context.currentFrame > 3)
+		context.commandBuffer.drawIndexedIndirect(
+			indirectBuffer.buffer,
+			baseOffset * sizeof(vk::DrawIndexedIndirectCommand),
+			bucket.size(),
+			sizeof(vk::DrawIndexedIndirectCommand)
+		);
 
 	context.commandBuffer.endRendering();
 }

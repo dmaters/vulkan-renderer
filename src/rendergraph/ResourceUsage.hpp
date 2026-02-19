@@ -17,6 +17,7 @@ enum class Type {
 	UniformBuffer,
 	StorageBufferWrite,
 	StorageBufferRead,
+	IndirectBufferRead,
 	TransferSrc,
 	TransferDst,
 };
@@ -104,7 +105,14 @@ static Access GetAccess(Type type) {
 				.layout = vk::ImageLayout::eTransferDstOptimal,
 
 			};
-		case Type::Undefined:
+		case Type::IndirectBufferRead:
+			return {
+				.stage = vk::PipelineStageFlagBits2::eDrawIndirect,
+				.access = vk::AccessFlagBits2::eIndirectCommandRead,
+				.layout = vk::ImageLayout::eUndefined,
+			};
+
+		default:
 			return {};
 	}
 }
