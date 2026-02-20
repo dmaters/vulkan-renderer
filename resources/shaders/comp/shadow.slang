@@ -5,7 +5,7 @@
 
 namespace Shadow {
 
-static const float CASCADE_BOUNDS[4] = { 0.1, 125, 700, 2500 };
+static const float CASCADE_BOUNDS[3] = { 125, 700, 2500 };
 float getValue(
 	Texture2D shadowMap,
 	float3 worldPos,
@@ -44,14 +44,13 @@ float shadowPercentage(
 	LightData light
 ) {
 	float distance = abs(mul(camera.view, float4(worldPos, 1)).z);
-	if (distance > CASCADE_BOUNDS[3]) return 1;
+	if (distance > CASCADE_BOUNDS[2]) return 1;
 
-	uint cascade = distance < CASCADE_BOUNDS[2] ? 1 : 2;
-	cascade = distance < (CASCADE_BOUNDS[1]) ? 0 : cascade;
+	uint cascade = distance < CASCADE_BOUNDS[1] ? 1 : 2;
+	cascade = distance < (CASCADE_BOUNDS[0]) ? 0 : cascade;
 
-	float cascadeRadius = CASCADE_BOUNDS[cascade + 1];
-	float blendStart = cascadeRadius - light.paddings[cascade];
-	float blendEnd = cascadeRadius + light.paddings[cascade];
+	float blendStart =  CASCADE_BOUNDS[cascade] - light.paddings[cascade + 1];
+	float blendEnd = CASCADE_BOUNDS[cascade] + light.paddings[cascade];
 
 	float weight = saturate((distance - blendStart) / (blendEnd - blendStart));
 	weight = weight * weight * (3 - 2 * weight);
