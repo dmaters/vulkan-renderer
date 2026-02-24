@@ -5,7 +5,11 @@
 #include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/tasks/BufferUpload.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
-#include "rendergraph/tasks/RenderPass.hpp"
+#include "rendergraph/tasks/DrawPass.hpp"
+#include "rendergraph/tasks/DrawPassIndirect.hpp"
+#include "rendergraph/tasks/FrustumCulling.hpp"
+#include "rendergraph/tasks/RenderPassBegin.hpp"
+#include "rendergraph/tasks/RenderPassEnd.hpp"
 #include "rendergraph/tasks/SceneUpdatePass.hpp"
 #include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
@@ -368,14 +372,14 @@ void Renderer::createRenderGraph(Scene& scene) {
 			);
 
 			UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
-			RenderPass(
-				context,
-				visiblePrimitives,
-				material,
-				AttachmentOp::ClearWrite,
-				AttachmentOp::ClearWrite,
-				true
+
+			RenderPassBegin(
+				context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite
 			);
+
+			DrawPassIndirect(context, material, visiblePrimitives);
+
+			RenderPassEnd(context);
 		}
 	);
 
@@ -437,13 +441,11 @@ void Renderer::createRenderGraph(Scene& scene) {
 		[material = m_materialManager.getMaterialIndex("lighting_deferred")](
 			TaskContext& context
 		) {
-			RenderPass(
-				context,
-				context.scene.buckets.at(material),
-				material,
-				AttachmentOp::ClearWrite,
-				AttachmentOp::Read
+			RenderPassBegin(
+				context, AttachmentOp::ClearWrite, AttachmentOp::Read
 			);
+			DrawPass(context, material, context.scene.buckets.at(material));
+			RenderPassEnd(context);
 		}
 	);
 
@@ -462,13 +464,11 @@ void Renderer::createRenderGraph(Scene& scene) {
 		[material = m_materialManager.getMaterialIndex("skybox")](
 			TaskContext& context
 		) {
-			RenderPass(
-				context,
-				context.scene.buckets.at(material),
-				material,
-				AttachmentOp::ReadWrite,
-				AttachmentOp::Read
+			RenderPassBegin(
+				context, AttachmentOp::ReadWrite, AttachmentOp::Read
 			);
+			DrawPass(context, material, context.scene.buckets.at(material));
+			RenderPassEnd(context);
 		}
 	);
 
