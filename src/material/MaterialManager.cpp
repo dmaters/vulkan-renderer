@@ -44,9 +44,11 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 	m_pool = device.createDescriptorPool(info);
 
 	createTextureDescriptorSet();
-	m_emptySetLayout = Instance::Get().device.createDescriptorSetLayout({});
 
+	m_emptySetLayout = Instance::Get().device.createDescriptorSetLayout({});
 	m_shaderEngine = std::make_unique<ShaderEngine>();
+
+	registerMaterials();
 }
 
 void MaterialManager::createTextureDescriptorSet() {
@@ -164,13 +166,26 @@ void MaterialManager::createTextureDescriptorSet() {
 	m_textureSet = set;
 	m_textureSetLayout = layout;
 }
+
 MaterialIndex MaterialManager::registerComputeMaterial(
 	std::string_view name,
 	ShaderModule module,
-	std::vector<vk::DescriptorSetLayoutBinding> bindings
+	std::vector<vk::DescriptorType> descriptors
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;
-	if (bindings.size() > 0) {
+	if (descriptors.size() > 0) {
+		std::vector<vk::DescriptorSetLayoutBinding> bindings;
+
+		for (int i = 0; i < descriptors.size(); i++)
+			bindings.push_back(
+				{
+					.binding = static_cast<uint32_t>(i),
+					.descriptorType = descriptors[i],
+					.descriptorCount = 1,
+					.stageFlags = vk::ShaderStageFlagBits::eAll,
+				}
+			);
+
 		layout = Instance::Get().device.createDescriptorSetLayout(
 			{
 				.flags =
@@ -190,14 +205,27 @@ MaterialIndex MaterialManager::registerComputeMaterial(
 	m_names[name] = index;
 	return index;
 }
+
 MaterialIndex MaterialManager::registerGraphicMaterial(
 	std::string_view name,
 	GraphicPipelineModules modules,
-	std::vector<vk::DescriptorSetLayoutBinding> bindings,
-	GraphicPipelineConfiguration renderpassConfig
+	GraphicPipelineConfiguration renderpassConfig,
+	std::vector<vk::DescriptorType> descriptors
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;
-	if (bindings.size() > 0) {
+	if (descriptors.size() > 0) {
+		std::vector<vk::DescriptorSetLayoutBinding> bindings;
+
+		for (int i = 0; i < descriptors.size(); i++)
+			bindings.push_back(
+				{
+					.binding = static_cast<uint32_t>(i),
+					.descriptorType = descriptors[i],
+					.descriptorCount = 1,
+					.stageFlags = vk::ShaderStageFlagBits::eAll,
+				}
+			);
+
 		layout = Instance::Get().device.createDescriptorSetLayout(
 			{
 				.flags =
@@ -248,4 +276,161 @@ uint32_t MaterialManager::registerTextureGroup(
 
 	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
 	return 0;
+}
+
+void MaterialManager::registerMaterials() {
+	registerComputeMaterial(
+		"transmittanceLUT",
+		{ "resources/shaders/transmittanceLUT.slang" },
+		{ vk::DescriptorType::eStorageImage }
+	);
+
+	registerComputeMaterial(
+		"multiscatteringLUT",
+		{ "resources/shaders/multiscatteringLUT.slang" },
+		{
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eStorageImage,
+			vk::DescriptorType::eStorageBuffer,
+		}
+	);
+
+	registerComputeMaterial(
+		"skyviewLUT",
+		{ "resources/shaders/skyviewLUT.slang" },
+		{
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eStorageImage,
+		}
+	);
+
+	registerComputeMaterial(
+		"sky_lighting",
+		{ "resources/shaders/sky_lighting.slang" },
+		{
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eStorageBuffer,
+		}
+	);
+
+	registerGraphicMaterial(
+		"shadowmap",
+		{
+			.vertex = { "resources/shaders/shadow_vert.slang" },
+			.fragment = { "resources/shaders/dummy_frag.slang" },
+		},
+		{
+			.depthFormat = vk::Format::eD16Unorm,
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+		},
+		{
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eUniformBuffer,
+		}
+	);
+
+	registerGraphicMaterial(
+		"gbuffer",
+		{
+			.vertex = {"resources/shaders/base_transform_vert.slang"},
+			.fragment = {"resources/shaders/gbuffer_frag.slang"},
+		},
+		{
+			.colorAttachmentFormats = {
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+
+			},
+			.depthFormat = vk::Format::eD24UnormS8Uint,
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+			.stencilEnabled = true,
+			.stencilOp = {
+				.failOp = vk::StencilOp::eKeep,
+				.passOp = vk::StencilOp::eReplace,
+				.compareOp = vk::CompareOp::eAlways,
+				.compareMask = 0xFF,
+				.writeMask = 0xFF,
+				.reference = 1,
+			}
+		},
+		{
+		    vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
+		}
+	);
+
+	registerGraphicMaterial(
+		"lighting_deferred",
+		{
+			.vertex = { "resources/shaders/quad_vert.slang"         },
+			.fragment = { "resources/shaders/lighting_deferred.slang" },
+    },
+		{
+			.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
+			.depthFormat = vk::Format::eD24UnormS8Uint,
+			.cullMode = vk::CullModeFlagBits::eNone,
+			.stencilEnabled = true,
+			.stencilOp = { .failOp = vk::StencilOp::eKeep,
+	                       .passOp = vk::StencilOp::eKeep,
+	                       .compareOp = vk::CompareOp::eEqual,
+	                       .compareMask = 0xFF,
+	                       .writeMask = 0,
+	                       .reference = 1 },
+		},
+		{
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eSampledImage,
+			vk::DescriptorType::eUniformBuffer,
+		}
+	);
+
+	registerGraphicMaterial(
+	    "skybox",
+    	{
+    		.vertex = {"resources/shaders/quad_vert.slang"},
+    		.fragment = {"resources/shaders/skybox.slang"},
+    	},
+    	{
+    		.colorAttachmentFormats = {
+    		    vk::Format::eR16G16B16A16Sfloat
+    		},
+    		.depthFormat = vk::Format::eD24UnormS8Uint,
+    		.depthWrite = false,
+    		.stencilEnabled = true,
+    		.stencilOp =
+    			{
+    			.failOp = vk::StencilOp::eKeep,
+    			.passOp = vk::StencilOp::eKeep,
+    			.compareOp = vk::CompareOp::eEqual,
+    			.compareMask = 0xFF,
+    			.reference = 0,
+    			}
+    	},
+        {
+            vk::DescriptorType::eUniformBuffer,
+            vk::DescriptorType::eSampledImage,
+        }
+	);
+
+	registerComputeMaterial(
+		"composition",
+		{ "resources/shaders/composition.slang" },
+		{
+			vk::DescriptorType::eStorageImage,
+			vk::DescriptorType::eStorageImage,
+		}
+	);
 }

@@ -77,21 +77,17 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	m_graph.addComputePass(
+	m_graph.addTask(
 		"transmittanceLUT",
+		TaskType::Compute,
 		{
     },
 		{
 			{ transmittanceLUT, ResourceUsage::Type::ShaderWrite },
 		},
-		{ "resources/shaders/transmittanceLUT.slang" },
-		[](TaskContext& context) {
-			ComputePass(
-				context,
-				context.materialManager.getMaterialIndex("transmittanceLUT"),
-				{ 256, 64, 1 }
-			);
-		}
+		[material = m_materialManager.getMaterialIndex("transmittanceLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 256, 64, 1 }); }
 	);
 
 	ResourceIndex multiscatteringLUT = m_graph.createImage(
@@ -108,8 +104,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	m_graph.addComputePass(
+	m_graph.addTask(
 		"multiscatteringLUT",
+		TaskType::Compute,
 		{
 			{ transmittanceLUT, ResourceUsage::Type::SampledRead },
     },
@@ -117,14 +114,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
 			{ computeScratchBuffer, ResourceUsage::Type::StorageBufferWrite },
 		},
-		{ "resources/shaders/multiscatteringLUT.slang" },
-		[](TaskContext& context) {
-			ComputePass(
-				context,
-				context.materialManager.getMaterialIndex("multiscatteringLUT"),
-				{ 64, 64, 1 }
-			);
-		}
+		[material = m_materialManager.getMaterialIndex("multiscatteringLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 64, 64, 1 }); }
 	);
 
 	ResourceIndex skyviewLUT = m_graph.createImage(
@@ -140,8 +132,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 		}
 	);
-	m_graph.addComputePass(
+	m_graph.addTask(
 		"skyviewLUT",
+		TaskType::Compute,
 		{
 			{ lightBuffer,        ResourceUsage::Type::UniformBuffer },
 			{ transmittanceLUT,   ResourceUsage::Type::SampledRead   },
@@ -150,14 +143,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ skyviewLUT, ResourceUsage::Type::ShaderWrite },
 		},
-		{ "resources/shaders/skyviewLUT.slang" },
-		[](TaskContext& context) {
-			ComputePass(
-				context,
-				context.materialManager.getMaterialIndex("skyviewLUT"),
-				{ 200, 100, 1 }
-			);
-		}
+		[material = m_materialManager.getMaterialIndex("skyviewLUT")](
+			TaskContext& context
+		) { ComputePass(context, material, { 200, 100, 1 }); }
 	);
 
 	ResourceIndex skyLightingSH = m_graph.createDeviceBuffer(
@@ -168,23 +156,20 @@ void Renderer::createRenderGraph(Scene& scene) {
 	                 vk::BufferUsageFlagBits::eUniformBuffer,
 		}
 	);
-	m_graph.addComputePass(
+	m_graph.addTask(
 		"skyLighting",
+		TaskType::Compute,
 		{
 			{ skyviewLUT, ResourceUsage::Type::SampledRead },
     },
 		{
 			{ skyLightingSH, ResourceUsage::Type::StorageBufferWrite },
 		},
-		{ "resources/shaders/sky_lighting.slang" },
-		[](TaskContext& context) {
-			ComputePass(
-				context,
-				context.materialManager.getMaterialIndex("skyLighting"),
-				{ 1, 1, 1 }
-			);
-		}
+		[material = m_materialManager.getMaterialIndex("sky_lighting")](
+			TaskContext& context
+		) { ComputePass(context, material, { 1, 1, 1 }); }
 	);
+
 	ResourceIndex indirectShadowBuffer = m_graph.createDeviceBuffer(
 		"indirect_shadow_buffer",
 		{
@@ -215,8 +200,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 		}
 	);
-	m_graph.addGraphicPass(
+	m_graph.addTask(
 		"shadowmap",
+		TaskType::Graphic,
 		{
 			{ lightBuffer,          ResourceUsage::Type::UniformBuffer      },
 			{ cameraBuffer,         ResourceUsage::Type::UniformBuffer      },
@@ -225,15 +211,6 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
 			{ indirectShadowBufferHost, ResourceUsage::Type::Undefined },
-		},
-		{
-			.vertex = "resources/shaders/shadow_vert.slang",
-			.fragment = "resources/shaders/dummy_frag.slang",
-		},
-		{
-			.depthFormat = vk::Format::eD16Unorm,
-			.depthWrite = true,
-			.depthOp = vk::CompareOp::eLessOrEqual,
 		},
 		[](TaskContext& context) {
 			ShadowPass(context, 0);
@@ -361,15 +338,17 @@ void Renderer::createRenderGraph(Scene& scene) {
 		1
 	);
 
-	m_graph.addGraphicPass(
+	m_graph.addTask(
 		"gbuffer",
+		TaskType::Graphic,
 		{
-		    { cameraBuffer,ResourceUsage::Type::UniformBuffer },
-			{ pbrMaterialData , ResourceUsage::Type::StorageBufferRead	},
-			{ pbrMaterialInstances , ResourceUsage::Type::StorageBufferRead	},
-			{ indirectGPassMaterialBuffer, ResourceUsage::Type::StorageBufferRead },
-			{ indirectGPassBuffer, ResourceUsage::Type::IndirectBufferRead	},
-		},
+			{ cameraBuffer,                ResourceUsage::Type::UniformBuffer      },
+			{ pbrMaterialData,             ResourceUsage::Type::StorageBufferRead  },
+			{ pbrMaterialInstances,        ResourceUsage::Type::StorageBufferRead  },
+			{ indirectGPassMaterialBuffer,
+             ResourceUsage::Type::StorageBufferRead                                },
+			{ indirectGPassBuffer,         ResourceUsage::Type::IndirectBufferRead },
+    },
 		{
 			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },
 			{ normal, ResourceUsage::Type::ColorAttachmentWrite },
@@ -377,51 +356,26 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ roughnessMetallic, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilWrite },
 			{ indirectGPassMaterialBufferHost, ResourceUsage::Type::Undefined },
-			{ indirectGPassBufferHost, ResourceUsage::Type::Undefined	},
+			{ indirectGPassBufferHost, ResourceUsage::Type::Undefined },
 		},
-		{
-			.vertex = "resources/shaders/base_transform_vert.slang",
-			.fragment = "resources/shaders/gbuffer_frag.slang",
-		},
-		{
-			.colorAttachmentFormats = {
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
+		[material = m_materialManager.getMaterialIndex("gbuffer")](
+			TaskContext& context
+		) {
+			auto visiblePrimitives = FrustumCulling(
+				context.scene,
+				context.scene.buckets.at(material),
+				context.scene.camera.getFrustumPlanes()
+			);
 
-			},
-			.depthFormat = vk::Format::eD24UnormS8Uint,
-			.depthWrite = true,
-			.depthOp = vk::CompareOp::eLessOrEqual,
-			.stencilEnabled = true,
-			.stencilOp = {
-				.failOp = vk::StencilOp::eKeep,
-				.passOp = vk::StencilOp::eReplace,
-				.compareOp = vk::CompareOp::eAlways,
-				.compareMask = 0xFF,
-				.writeMask = 0xFF,
-				.reference = 1,
-			}
-		},
-		[](TaskContext& context) {
-		MaterialIndex materialIndex =
-			context.materialManager.getMaterialIndex("gbuffer");
-		auto visiblePrimitives = FrustumCulling(
-			context.scene,
-			context.scene.buckets.at(materialIndex),
-			context.scene.camera.getFrustumPlanes()
-		);
-
-		UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
-		RenderPass(
-			context,
-			visiblePrimitives,
-			materialIndex,
-			AttachmentOp::ClearWrite,
-			AttachmentOp::ClearWrite,
-			true
-		);
+			UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
+			RenderPass(
+				context,
+				visiblePrimitives,
+				material,
+				AttachmentOp::ClearWrite,
+				AttachmentOp::ClearWrite,
+				true
+			);
 		}
 	);
 
@@ -463,8 +417,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 		},
 		1
 	);
-	m_graph.addGraphicPass(
+	m_graph.addTask(
 		"lighting_deferred",
+		TaskType::Graphic,
 		{
 			{ cameraBuffer,      ResourceUsage::Type::UniformBuffer },
 			{ lightBuffer,       ResourceUsage::Type::UniformBuffer },
@@ -479,78 +434,41 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilRead },
 		},
-		{
-			.vertex = "resources/shaders/quad_vert.slang",
-			.fragment = "resources/shaders/lighting_deferred.slang",
-		},
-		{
-			.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
-			.depthFormat = vk::Format::eD24UnormS8Uint,
-			.cullMode = vk::CullModeFlagBits::eNone,
-			.stencilEnabled = true,
-			.stencilOp = { .failOp = vk::StencilOp::eKeep,
-	                       .passOp = vk::StencilOp::eKeep,
-	                       .compareOp = vk::CompareOp::eEqual,
-	                       .compareMask = 0xFF,
-	                       .writeMask = 0,
-	                       .reference = 1 },
-		},
-		[](TaskContext& context) {
-			MaterialIndex materialIndex =
-				context.materialManager.getMaterialIndex("lighting_deferred");
-
+		[material = m_materialManager.getMaterialIndex("lighting_deferred")](
+			TaskContext& context
+		) {
 			RenderPass(
 				context,
-				context.scene.buckets.at(materialIndex),
-				materialIndex,
+				context.scene.buckets.at(material),
+				material,
 				AttachmentOp::ClearWrite,
 				AttachmentOp::Read
 			);
 		}
 	);
 
-	m_graph.addGraphicPass(
+	m_graph.addTask(
 		"skybox",
+		TaskType::Graphic,
 		{
-		    { cameraBuffer, ResourceUsage::Type::UniformBuffer },
-			{ skyviewLUT, ResourceUsage::Type::SampledRead },
-        },
+			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
+			{ skyviewLUT,   ResourceUsage::Type::SampledRead   },
+    },
 		{
 			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilRead },
 		},
-		{
-			.vertex = "resources/shaders/quad_vert.slang",
-			.fragment = "resources/shaders/skybox.slang",
-		},
-		{
-			.colorAttachmentFormats = {
-			    vk::Format::eR16G16B16A16Sfloat
-			},
-			.depthFormat = vk::Format::eD24UnormS8Uint,
-			.depthWrite = false,
-			.stencilEnabled = true,
-			.stencilOp =
-				{
-				.failOp = vk::StencilOp::eKeep,
-				.passOp = vk::StencilOp::eKeep,
-				.compareOp = vk::CompareOp::eEqual,
-				.compareMask = 0xFF,
-				.reference = 0,
-				}
-		},
-		[](
+
+		[material = m_materialManager.getMaterialIndex("skybox")](
 			TaskContext& context
 		) {
-		MaterialIndex materialIndex =
-			context.materialManager.getMaterialIndex("skybox");
-		RenderPass(
-			context,
-			context.scene.buckets.at(materialIndex),
-			materialIndex,
-			AttachmentOp::ReadWrite,
-			AttachmentOp::Read
-		);
+			RenderPass(
+				context,
+				context.scene.buckets.at(material),
+				material,
+				AttachmentOp::ReadWrite,
+				AttachmentOp::Read
+			);
 		}
 	);
 
@@ -568,22 +486,24 @@ void Renderer::createRenderGraph(Scene& scene) {
 		},
 		1
 	);
-	m_graph.addComputePass(
+	m_graph.addTask(
 		"composition",
+		TaskType::Compute,
 		{
 			{ hdr_output, ResourceUsage::Type::ShaderRead },
     },
 		{
 			{ result, ResourceUsage::Type::ShaderWrite },
 		},
-		{ "resources/shaders/composition.slang" },
-		[](TaskContext& context) {
+		[composition = m_materialManager.getMaterialIndex("composition")](
+			TaskContext& context
+		) {
 			ImageHandle input = context.images[context.inputs[0].first];
 			auto dispatch = context.resourceManager.getImage(input).size;
 
 			ComputePass(
 				context,
-				context.materialManager.getMaterialIndex("composition"),
+				composition,
 				glm::uvec3(dispatch.width, dispatch.height, 1)
 			);
 		}

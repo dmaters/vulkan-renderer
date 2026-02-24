@@ -55,25 +55,6 @@ public:
 	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
 	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);
 
-	void addGraphicPass(
-		std::string_view name,
-		std::vector<ResourceDependency> inputResources,
-		std::vector<ResourceDependency> outputResources,
-		GraphicPipelineModules modules,
-		GraphicPipelineConfiguration configuration,
-		Task task,
-		FeatureIndex feature = 0
-	);
-
-	void addComputePass(
-		std::string_view name,
-		std::vector<ResourceDependency> inputResources,
-		std::vector<ResourceDependency> outputResources,
-		ShaderModule module,
-		Task task,
-		FeatureIndex feature = 0
-	);
-
 	void addTask(
 		std::string_view name,
 		TaskType type,

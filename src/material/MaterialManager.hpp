@@ -36,6 +36,8 @@ private:
 
 	void createTextureDescriptorSet();
 
+	void registerMaterials();
+
 public:
 	MaterialManager(ResourceManager& resourceManager);
 
@@ -44,14 +46,16 @@ public:
 	MaterialIndex registerComputeMaterial(
 		std::string_view name,
 		ShaderModule module,
-		std::vector<vk::DescriptorSetLayoutBinding> bindings
+		std::vector<vk::DescriptorType> descriptors
 	);
+
 	MaterialIndex registerGraphicMaterial(
 		std::string_view name,
 		GraphicPipelineModules modules,
-		std::vector<vk::DescriptorSetLayoutBinding> bindings,
-		GraphicPipelineConfiguration renderpassConfig
+		GraphicPipelineConfiguration renderpassConfig,
+		std::vector<vk::DescriptorType> descriptors
 	);
+
 	Pipeline getPipeline(MaterialIndex index) {
 		return m_shaderEngine->getPipeline(m_pipelines[index]);
 	}

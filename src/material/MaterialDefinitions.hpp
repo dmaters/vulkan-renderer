@@ -29,8 +29,6 @@ struct Lights {
 	Light light;
 };
 
-struct LightingMaterial {};
-
 struct PBRInstance {
 	uint32_t albedoTexture = 0;
 	uint32_t normalTexture = 1;
@@ -39,23 +37,5 @@ struct PBRInstance {
 	glm::vec3 albedoValue = { 1, 1, 1 };
 	float metallicValue = 0;
 };
-
-struct SimpleMaterial {};
-struct ErrorFallback {};
-
-struct GBufferBase {};
-
-struct DeferredLighting {};
-
-struct ShadowMap {};
-
-struct CompositionPass {};
-
-struct TransmittanceLUT {};
-struct SkyViewLUT {};
-struct MultiscatteringLUT {};
-
-struct Skybox {};
-struct SkyLighting {};
 
 }  // namespace MaterialDefinitions
