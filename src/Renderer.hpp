@@ -24,7 +24,6 @@ private:
 	RenderGraph m_graph;
 
 	Scene m_currentScene;
-	uint32_t m_currentFrame = 0;
 
 	void createRenderGraph(Scene& scene);
 

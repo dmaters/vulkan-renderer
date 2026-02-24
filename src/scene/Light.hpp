@@ -6,18 +6,12 @@
 #include "scene/Camera.hpp"
 
 struct Light {
-	enum class Type {
-		Directional,
-		Point
-	};
-
 	glm::vec3 position = glm::vec3(0);
 	glm::mat3 orientation = glm::mat3(orientation);
 
 	glm::vec3 color = glm::vec3(1);
 	float intensity = 1.0f;
-	Type type = Type::Directional;
-	bool shadows;
+
 	std::array<glm::vec4, 6> frustumPlanes;
 
 	struct FrustumBounds {

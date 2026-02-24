@@ -69,8 +69,6 @@ void Renderer::render() {
 	m_currentScene.lights[0].orientation = orientation;
 
 	m_graph.submit(m_currentScene);
-
-	m_currentFrame = (m_currentFrame + 1) % 3;
 };
 
 void Renderer::load(const std::filesystem::path& path) {

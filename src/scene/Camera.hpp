@@ -5,10 +5,6 @@
 
 class Camera {
 public:
-	enum class Mode {
-		Orbital,
-		FreeLook
-	};
 	struct Fov {
 		float horizontal;
 		float vertical;
@@ -22,7 +18,6 @@ private:
 
 	std::array<float, 4> m_frustumPlanesDistances { 0.1, 125, 700, 2500 };
 
-	glm::vec3 m_cascadeSizes;
 	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
 
 	std::array<glm::vec3, 4> m_frustumEdgeDirections;

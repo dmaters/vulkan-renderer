@@ -1,5 +1,6 @@
 #include "SceneLoader.hpp"
 
+#include <assimp/GltfMaterial.h>
 #include <assimp/material.h>
 #include <assimp/matrix4x4.h>
 #include <assimp/mesh.h>
@@ -182,6 +183,15 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 			);
 			instance.albedoTexture = imageCount++;
 		}
+
+		aiString alphaMode;
+		if (materialInstance->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaMode) ==
+		    AI_SUCCESS) {
+			if (std::string(alphaMode.C_Str()) == "MASK") {
+				// instance.alphaCutoff = true;
+			}
+		}
+
 		aiColor4D diffuseColor;
 		if (materialInstance->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) ==
 		    AI_SUCCESS)
