@@ -19,8 +19,6 @@ class SceneLoader {
 	MaterialManager& m_materialManager;
 	PrimitiveManager m_primitiveManager;
 
-	std::unordered_map<uint16_t, MaterialDefinitions::PBRInstance>
-		m_materialCache;
 	std::vector<std::vector<glm::mat4>> m_instanceCache;
 
 	struct MeshData {
@@ -34,7 +32,12 @@ class SceneLoader {
 		aiTextureType type,
 		std::filesystem::path& folderPath
 	);
-	std::vector<MaterialDefinitions::PBRInstance> loadMaterials(
+
+	struct MaterialData {
+		std::vector<MaterialDefinitions::PBRInstance> instances;
+		std::unordered_set<uint32_t> alphaTestedInstances;
+	};
+	MaterialData loadMaterials(
 		const aiScene& scene, std::filesystem::path& texturePath
 	);
 

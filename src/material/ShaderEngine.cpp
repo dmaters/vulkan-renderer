@@ -186,7 +186,7 @@ std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
 
 	auto vertexModule = loadModule(
 		modules.vertex.path,
-		modules.fragment.entryPoint,
+		modules.vertex.entryPoint,
 		SlangStage::SLANG_STAGE_VERTEX
 	);
 	if (!vertexModule.has_value()) return std::nullopt;

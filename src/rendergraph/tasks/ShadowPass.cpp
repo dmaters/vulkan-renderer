@@ -4,6 +4,7 @@
 
 #include "TaskContext.hpp"
 #include "resources/Buffer.hpp"
+#include "scene/Scene.hpp"
 
 constexpr int32_t CASCADE_SIZE = 2048;
 
@@ -68,7 +69,7 @@ void ShadowPass(TaskContext& context, uint8_t cascade) {
 	uint32_t pcascade = cascade;
 	context.commandBuffer.pushConstants(
 		material.pipelineLayout,
-		vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+		vk::ShaderStageFlagBits::eVertex,
 		0,
 		sizeof(uint32_t),
 		&pcascade
@@ -134,6 +135,36 @@ void ShadowPass(TaskContext& context, uint8_t cascade) {
 			bucket.size(),
 			sizeof(vk::DrawIndexedIndirectCommand)
 		);
+
+	materialIndex =
+		context.materialManager.getMaterialIndex("shadowmap_alphatested");
+	const Pipeline alphatested =
+		context.materialManager.getPipeline(materialIndex);
+
+	context.commandBuffer.bindPipeline(
+		vk::PipelineBindPoint::eGraphics, alphatested.pipeline
+	);
+
+	for (const uint32_t primitiveIndex :
+	     context.scene.buckets.at(materialIndex)) {
+		const Primitive& primitive = context.scene.primitives[primitiveIndex];
+
+		context.commandBuffer.pushConstants(
+			material.pipelineLayout,
+			vk::ShaderStageFlagBits::eFragment,
+			4,
+			sizeof(uint32_t),
+			&primitiveIndex  // TODO: better indexing for material instances
+		);
+
+		context.commandBuffer.drawIndexed(
+			primitive.indexCount,
+			1,
+			primitive.baseIndex,
+			primitive.baseVertex,
+			0
+		);
+	}
 
 	context.commandBuffer.endRendering();
 }

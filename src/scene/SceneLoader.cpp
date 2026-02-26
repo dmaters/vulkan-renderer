@@ -137,7 +137,7 @@ void SceneLoader::loadNode(aiNode& root, const aiScene& importedScene) {
 
 void loadPrimitives() {}
 
-std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
+SceneLoader::MaterialData SceneLoader::loadMaterials(
 	const aiScene& scene, std::filesystem::path& texturePath
 ) {
 	uint32_t imageCount = 3;
@@ -167,6 +167,8 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 		}
 	);
 
+	std::unordered_set<uint32_t> alphaTestedMaterialInstances;
+
 	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
 		aiMaterial* materialInstance = scene.mMaterials[i];
 		aiString path;
@@ -185,10 +187,10 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 		}
 
 		aiString alphaMode;
-		if (materialInstance->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaMode) ==
+		if (materialInstance->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) ==
 		    AI_SUCCESS) {
 			if (std::string(alphaMode.C_Str()) == "MASK") {
-				// instance.alphaCutoff = true;
+				alphaTestedMaterialInstances.insert(i);
 			}
 		}
 
@@ -238,7 +240,10 @@ std::vector<MaterialDefinitions::PBRInstance> SceneLoader::loadMaterials(
 	auto allocation = m_resourceManager.loadSceneTextures(textures);
 	m_materialManager.registerTextureGroup(allocation);
 
-	return instances;
+	return {
+		.instances = instances,
+		.alphaTestedInstances = alphaTestedMaterialInstances,
+	};
 }
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
@@ -253,8 +258,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	assert(import != nullptr);
 
 	auto folderPath = path.parent_path();
-	std::vector<MaterialDefinitions::PBRInstance> materialData =
-		loadMaterials(*import, folderPath);
+	MaterialData materialData = loadMaterials(*import, folderPath);
 
 	std::vector<glm::mat4> transforms;
 	m_instanceCache = std::vector<std::vector<glm::mat4>>(import->mNumMeshes);
@@ -320,7 +324,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 				},
 				ResourceManager::BufferDescription {
 					.size = static_cast<uint32_t>(
-						materialData.size() *
+						materialData.instances.size() *
 						sizeof(MaterialDefinitions::PBRInstance)
 					),
 					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
@@ -370,7 +374,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		}
 	);
 	m_resourceManager.queueBufferUpdate(
-		buffers[4], [data = std::move(materialData)](void* ptr) {
+		buffers[4], [data = std::move(materialData.instances)](void* ptr) {
 			std::memcpy(
 				ptr,
 				data.data(),
@@ -379,7 +383,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		}
 	);
 	m_resourceManager.queueBufferUpdate(
-		buffers[5], [instances = std::move(materialInstances)](void* ptr) {
+		buffers[5], [instances = materialInstances](void* ptr) {
 			std::memcpy(
 				ptr, instances.data(), instances.size() * sizeof(uint32_t)
 			);
@@ -389,11 +393,66 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	m_resourceManager.sync();
 
 	Scene scene {
+		.camera = Camera(),
+		.lights = {},
 		.primitives = primitives,
 		.primitiveBounds = bounds,
 		.size = sceneSize,
 		.allocation = buffersAllocation,
 	};
+
+	MaterialIndex gbufferMaterial =
+		m_materialManager.getMaterialIndex("gbuffer");
+	MaterialIndex shadowMapMaterial =
+		m_materialManager.getMaterialIndex("shadowmap");
+
+	MaterialIndex gbufferAlphaTestedMaterial =
+		m_materialManager.getMaterialIndex("gbuffer_alphatested");
+	MaterialIndex shadowMapAlphaTestedMaterial =
+		m_materialManager.getMaterialIndex("shadowmap_alphatested");
+
+	for (int i = 0; i < scene.primitives.size(); i++) {
+		if (materialData.alphaTestedInstances.contains(materialInstances[i])) {
+			scene.buckets[gbufferAlphaTestedMaterial].push_back(i);
+			scene.buckets[shadowMapAlphaTestedMaterial].push_back(i);
+		} else {
+			scene.buckets[shadowMapMaterial].push_back(i);
+			scene.buckets[gbufferMaterial].push_back(i);
+		}
+	}
+
+	glm::mat3 orientation = glm::mat3(1);
+	orientation[0] = glm::vec3(1, 0, 0);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, 1, 0);
+	orientation = glm::rotate_slow(
+		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
+	);
+
+	scene.lights.push_back(
+		{
+			.position = glm::vec3(0, 0, 600),
+			.orientation = orientation,
+			.intensity = 25.0f,
+		}
+	);
+
+	scene.primitives.push_back(
+		{
+			.baseVertex = 0,
+			.baseIndex = 0,
+			.indexCount = 3,
+			.size = 1,
+		}
+	);
+	MaterialIndex lighting =
+		m_materialManager.getMaterialIndex("lighting_deferred");
+	scene.buckets[lighting].push_back(scene.primitives.size() - 1);
+
+	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
+	scene.buckets[skybox].push_back(scene.primitives.size() - 1);
+
+	scene.camera.setFov(70);
 
 	return scene;
 }

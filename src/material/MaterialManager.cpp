@@ -318,9 +318,15 @@ void MaterialManager::registerMaterials() {
 	registerGraphicMaterial(
 		"shadowmap",
 		{
-			.vertex = { "resources/shaders/shadow_vert.slang" },
-			.fragment = { "resources/shaders/dummy_frag.slang" },
+			.vertex = {
+			    .path = "resources/shaders/shadow_mapping.slang",
+                .entryPoint = "main_vs",
+			},
+			.fragment = {
+			    .path = "resources/shaders/shadow_mapping.slang",
+				.entryPoint = "main_fs",
 		},
+    },
 		{
 			.depthFormat = vk::Format::eD16Unorm,
 			.depthWrite = true,
@@ -329,14 +335,74 @@ void MaterialManager::registerMaterials() {
 		{
 			vk::DescriptorType::eUniformBuffer,
 			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
+		}
+	);
+	registerGraphicMaterial(
+		"shadowmap_alphatested",
+		{
+			.vertex = {
+			    .path = "resources/shaders/shadow_mapping.slang",
+                .entryPoint = "main_vs_alpha",
+			},
+			.fragment = {
+			    .path = "resources/shaders/shadow_mapping.slang",
+				.entryPoint ="main_fs_alpha",
+			},
+        },
+		{
+			.depthFormat = vk::Format::eD16Unorm,
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+		},
+		{
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
+		}
+	);
+	registerGraphicMaterial(
+		"gbuffer",
+		{
+			.vertex = {"resources/shaders/gbuffer.slang", "main_vs"},
+			.fragment = {"resources/shaders/gbuffer.slang", "main_fs"},
+		},
+		{
+			.colorAttachmentFormats = {
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+				vk::Format::eR16G16B16A16Sfloat,
+
+			},
+			.depthFormat = vk::Format::eD24UnormS8Uint,
+			.depthWrite = true,
+			.depthOp = vk::CompareOp::eLessOrEqual,
+			.stencilEnabled = true,
+			.stencilOp = {
+				.failOp = vk::StencilOp::eKeep,
+				.passOp = vk::StencilOp::eReplace,
+				.compareOp = vk::CompareOp::eAlways,
+				.compareMask = 0xFF,
+				.writeMask = 0xFF,
+				.reference = 1,
+			}
+		},
+		{
+		    vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBuffer,
 		}
 	);
 
 	registerGraphicMaterial(
-		"gbuffer",
+		"gbuffer_alphatested",
 		{
-			.vertex = {"resources/shaders/base_transform_vert.slang"},
-			.fragment = {"resources/shaders/gbuffer_frag.slang"},
+			.vertex = {"resources/shaders/gbuffer.slang", "main_vs"},
+			.fragment = {"resources/shaders/gbuffer.slang", "main_fs_alpha"},
 		},
 		{
 			.colorAttachmentFormats = {

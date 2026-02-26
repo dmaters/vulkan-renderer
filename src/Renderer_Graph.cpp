@@ -210,6 +210,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ lightBuffer,          ResourceUsage::Type::UniformBuffer      },
 			{ cameraBuffer,         ResourceUsage::Type::UniformBuffer      },
+			{ pbrMaterialData,      ResourceUsage::Type::StorageBufferRead  },
+			{ pbrMaterialInstances, ResourceUsage::Type::StorageBufferRead  },
 			{ indirectShadowBuffer, ResourceUsage::Type::IndirectBufferRead },
     },
 		{
@@ -362,22 +364,30 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ indirectGPassMaterialBufferHost, ResourceUsage::Type::Undefined },
 			{ indirectGPassBufferHost, ResourceUsage::Type::Undefined },
 		},
-		[material = m_materialManager.getMaterialIndex("gbuffer")](
-			TaskContext& context
-		) {
+		[material = m_materialManager.getMaterialIndex("gbuffer"),
+	     alphaTested = m_materialManager.getMaterialIndex(
+			 "gbuffer_alphatested"
+		 )](TaskContext& context) {
 			auto visiblePrimitives = FrustumCulling(
 				context.scene,
 				context.scene.buckets.at(material),
 				context.scene.camera.getFrustumPlanes()
 			);
+			auto visiblePrimitivesAlphaTested = FrustumCulling(
+				context.scene,
+				context.scene.buckets.at(alphaTested),
+				context.scene.camera.getFrustumPlanes()
+			);
 
-			UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
+			UI::Data.sceneData.gbufferCount =
+				visiblePrimitives.size() + visiblePrimitivesAlphaTested.size();
 
 			RenderPassBegin(
 				context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite
 			);
 
 			DrawPassIndirect(context, material, visiblePrimitives);
+			DrawPass(context, alphaTested, visiblePrimitivesAlphaTested);
 
 			RenderPassEnd(context);
 		}

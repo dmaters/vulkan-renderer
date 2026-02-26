@@ -12,7 +12,6 @@
 #include "RenderGraphRunner.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
-#include "material/Pipeline.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
