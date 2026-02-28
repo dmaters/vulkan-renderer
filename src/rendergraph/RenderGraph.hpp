@@ -46,7 +46,9 @@ public:
 	);
 
 	ResourceIndex createDeviceBuffer(
-		std::string_view name, ResourceManager::BufferDescription desc
+		std::string_view name,
+		ResourceManager::BufferDescription desc,
+		bool shared = false
 	);
 
 	ResourceIndex createHostBuffer(std::string_view name, uint32_t size);

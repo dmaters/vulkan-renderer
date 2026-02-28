@@ -22,7 +22,11 @@
 
 ResourceManager::ResourceManager() :
 	// 256MB
-	m_stagingAllocation(vk::MemoryPropertyFlagBits::eHostVisible, 1 << 28) {
+	m_stagingAllocation(
+		vk::MemoryPropertyFlagBits::eHostVisible |
+			vk::MemoryPropertyFlagBits::eHostCached,
+		1 << 28
+	) {
 	Instance &instance = Instance::Get();
 
 	m_transferPool = instance.device.createCommandPool(
@@ -442,9 +446,8 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 	std::vector<std::thread> threads;
 
 	for (int i = 0; i < textures.size(); i++) {
-		Image &image = m_images.at(
-			m_deviceAllocationResources.at(allocationIndex).first.at(i).value
-		);
+		Image &image =
+			m_images[m_deviceAllocatedImages[allocationIndex][i].value];
 
 		vk::MemoryRequirements requirements =
 			device.getImageMemoryRequirements(image.image);
@@ -567,7 +570,9 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 
 		ImageHandle handle = { ++m_resourceCounter };
 
-		requiredSize += requirements.size + requirements.alignment;
+		requiredSize = (requiredSize + requirements.alignment - 1) &
+		               ~(requirements.alignment - 1);
+		requiredSize += requirements.size;
 
 		resourcesRequirements.push_back(requirements);
 		images[resourceCount++] = handle;
@@ -581,7 +586,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 					},
 		};
 
-		m_deviceAllocationResources[allocIndex].first.push_back(handle);
+		m_deviceAllocatedImages[allocIndex].push_back(handle);
 	}
 
 	for (int i = 0; i < buffersDescriptions.size(); i++) {
@@ -597,7 +602,9 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 		vk::MemoryRequirements requirements =
 			device.getBufferMemoryRequirements(buffer);
 
-		requiredSize += requirements.size + requirements.alignment;
+		requiredSize = (requiredSize + requirements.alignment - 1) &
+		               ~(requirements.alignment - 1);
+		requiredSize += requirements.size;
 
 		resourcesRequirements.push_back(requirements);
 
@@ -608,7 +615,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 			.buffer = buffer,
 			.size = description.size,
 		};
-		m_deviceAllocationResources[allocIndex].second.push_back(handle);
+		m_deviceAllocatedBuffers[allocIndex].push_back(handle);
 	}
 
 	m_deviceAllocations.emplace(
@@ -657,7 +664,91 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
 	}
 	return allocIndex;
 }
+ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
+	std::vector<BufferDescription> bufferDescriptions
+) {
+	assert(bufferDescriptions.size() > 0);
 
+	assert(
+		std::find_if(
+			bufferDescriptions.begin(),
+			bufferDescriptions.end(),
+			[](BufferDescription &desc) { return desc.size == 0; }
+		) == bufferDescriptions.end()
+	);
+
+	vk::Device &device = Instance::Get().device;
+
+	uint32_t requiredSize = 0;
+	uint32_t resourceCount = 0;
+
+	std::unordered_map<uint32_t, BufferHandle> buffers;
+	std::vector<vk::MemoryRequirements> resourcesRequirements;
+
+	uint32_t allocationSize = bufferDescriptions.size();
+	resourcesRequirements.reserve(allocationSize);
+
+	DeviceAllocationIndex allocIndex = ++m_allocationCount;
+
+	for (int i = 0; i < bufferDescriptions.size(); i++) {
+		auto &description = bufferDescriptions[i];
+
+		vk::Buffer buffer = device.createBuffer(
+			vk::BufferCreateInfo {
+				.size = description.size,
+				.usage = description.usage,
+			}
+		);
+
+		vk::MemoryRequirements requirements =
+			device.getBufferMemoryRequirements(buffer);
+
+		requiredSize = (requiredSize + requirements.alignment - 1) &
+		               ~(requirements.alignment - 1);
+		requiredSize += requirements.size;
+
+		resourcesRequirements.push_back(requirements);
+
+		BufferHandle handle = { ++m_resourceCounter };
+
+		buffers[resourceCount++] = handle;
+		m_buffers[handle.value] = Buffer {
+			.buffer = buffer,
+			.size = description.size,
+		};
+		m_deviceAllocatedBuffers[allocIndex].push_back(handle);
+	}
+
+	m_deviceAllocations.emplace(
+		allocIndex,
+		LinearAllocator(
+			vk::MemoryPropertyFlagBits::eDeviceLocal |
+				vk::MemoryPropertyFlagBits::eHostVisible,
+			requiredSize
+		)
+	);
+
+	m_sharedAllocationAddresses[allocIndex] = device.mapMemory(
+		m_deviceAllocations.at(allocIndex).getAllocation().memory,
+		0,
+		requiredSize
+	);
+	for (int i = 0; i < resourcesRequirements.size(); i++) {
+		Buffer &buffer = m_buffers.at(buffers.at(i).value);
+		buffer.allocation = m_deviceAllocations.at(allocIndex)
+		                        .subAllocate(resourcesRequirements.at(i));
+		buffer.data =
+			static_cast<std::byte *>(m_sharedAllocationAddresses[allocIndex]) +
+			buffer.allocation.offset;
+
+		device.bindBufferMemory(
+			buffer.buffer,
+			m_deviceAllocations.at(allocIndex).getAllocation().memory,
+			buffer.allocation.offset
+		);
+	}
+	return allocIndex;
+}
 ResourceManager::HostAllocationIndex ResourceManager::createHostAllocation(
 	std::vector<uint32_t> bufferSizes
 ) {
@@ -701,14 +792,15 @@ ResourceManager::HostAllocationIndex ResourceManager::createHostAllocation(
 		offset += size;
 	}
 
-	void *memoryAddress;
-	vk::Result res = device.mapMemory(
-		allocation.memory, 0, totalSize, vk::MemoryMapFlags(0), &memoryAddress
-	);
+	m_hostAllocationAddresses[allocIndex] =
+		device.mapMemory(allocation.memory, 0, totalSize);
 
-	m_hostAllocationAddresses[allocIndex] = memoryAddress;
-
-	assert(res == vk::Result::eSuccess);
+	for (BufferHandle hostBuffer : m_hostAllocationBuffers[allocIndex]) {
+		Buffer &buffer = m_buffers[hostBuffer.value];
+		buffer.data =
+			static_cast<std::byte *>(m_hostAllocationAddresses[allocIndex]) +
+			buffer.allocation.offset;
+	}
 
 	return allocIndex;
 }
@@ -718,17 +810,18 @@ void ResourceManager::freeDeviceAllocation(
 ) {
 	vk::Device &device = Instance::Get().device;
 
-	for (auto &image : m_deviceAllocationResources[index].first) {
+	for (auto &image : m_deviceAllocatedImages[index]) {
 		device.destroyImageView(m_images[image.value].view);
 		device.destroyImage(m_images[image.value].image);
 		m_images.erase(image.value);
 	}
 
-	for (auto &buffer : m_deviceAllocationResources[index].second) {
+	for (auto &buffer : m_deviceAllocatedBuffers[index]) {
 		device.destroyBuffer(m_buffers[buffer.value].buffer);
 		m_buffers.erase(buffer.value);
 	}
-	m_deviceAllocationResources.erase(index);
+	m_deviceAllocatedBuffers.erase(index);
+	m_deviceAllocatedImages.erase(index);
 
 	m_deviceAllocations.at(index).getAllocation().free();
 	m_deviceAllocations.erase(index);

@@ -29,7 +29,7 @@ private:
 	bool m_swapchainImagesInitialized = false;
 
 	ResourceManager::DeviceAllocationIndex m_frameDataAllocation;
-
+	ResourceManager::DeviceAllocationIndex m_sharedDataAllocation;
 	std::optional<ResourceManager::HostAllocationIndex> m_hostDataAllocation;
 
 	ResourceManager::DeviceAllocationIndex m_resolutionDependentAllocation = 0;

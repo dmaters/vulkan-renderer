@@ -57,12 +57,14 @@ private:
 
 	std::unordered_map<DeviceAllocationIndex, LinearAllocator>
 		m_deviceAllocations;
-	std::unordered_map<HostAllocationIndex, Allocation> m_hostAllocations;
+	std::unordered_map<DeviceAllocationIndex, void*>
+		m_sharedAllocationAddresses;
+	std::unordered_map<DeviceAllocationIndex, std::vector<ImageHandle>>
+		m_deviceAllocatedImages;
+	std::unordered_map<DeviceAllocationIndex, std::vector<BufferHandle>>
+		m_deviceAllocatedBuffers;
 
-	std::unordered_map<
-		DeviceAllocationIndex,
-		std::pair<std::vector<ImageHandle>, std::vector<BufferHandle>>>
-		m_deviceAllocationResources;
+	std::unordered_map<HostAllocationIndex, Allocation> m_hostAllocations;
 	std::unordered_map<HostAllocationIndex, std::vector<BufferHandle>>
 		m_hostAllocationBuffers;
 	std::unordered_map<HostAllocationIndex, void*> m_hostAllocationAddresses;
@@ -84,25 +86,24 @@ public:
 	const std::vector<ImageHandle>& getImages(
 		DeviceAllocationIndex index
 	) const {
-		if (index == 0) return {};
-		return m_deviceAllocationResources.at(index).first;
+		return m_deviceAllocatedImages.at(index);
 	}
 	const std::vector<BufferHandle>& getBuffers(
 		DeviceAllocationIndex index
 	) const {
-		if (index == 0) return {};
-		return m_deviceAllocationResources.at(index).second;
+		return m_deviceAllocatedBuffers.at(index);
 	}
 	const std::vector<BufferHandle>& getHostBuffers(
 		HostAllocationIndex index
 	) const {
-		if (index == 0) return {};
 		return m_hostAllocationBuffers.at(index);
 	}
 	void* getHostAllocationAddress(HostAllocationIndex index) const {
 		return m_hostAllocationAddresses.at(index);
 	}
-
+	void* getSharedAllocationAddress(HostAllocationIndex index) const {
+		return m_sharedAllocationAddresses.at(index);
+	}
 	ImageHandle getNamedImageIndex(std::string_view name) const {
 		return m_imageNames.at(name);
 	}
@@ -128,6 +129,9 @@ public:
 	DeviceAllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);
 	DeviceAllocationIndex createResources(
 		std::vector<ImageDescription> images,
+		std::vector<BufferDescription> buffers
+	);
+	DeviceAllocationIndex createSharedAllocation(
 		std::vector<BufferDescription> buffers
 	);
 	HostAllocationIndex createHostAllocation(std::vector<uint32_t> sizes);

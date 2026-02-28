@@ -1,12 +1,12 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ResourceUsage.hpp"
 #include "resources/ResourceManager.hpp"
 #include "tasks/Task.hpp"
-
 namespace rendergraph::internal {
 
 using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
@@ -33,6 +33,7 @@ struct GraphData {
 		buffers;
 	std::unordered_map<ResourceIndex, uint32_t> localBufferSizes;
 	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
+	std::unordered_set<ResourceIndex> sharedBuffers;
 
 	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
 	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;

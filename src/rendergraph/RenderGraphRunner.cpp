@@ -370,7 +370,6 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.outputs = _,
 			.images = m_images,
 			.buffers = m_buffers,
-			.baseHostAddress = nullptr,
 			.currentFrame = m_currentFrame,
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
@@ -403,11 +402,6 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.outputs = outputs,
 			.images = m_images,
 			.buffers = m_buffers,
-			.baseHostAddress = m_hostDataAllocation.has_value()
-			                       ? m_resourceManager.getHostAllocationAddress(
-										 *m_hostDataAllocation
-									 )
-			                       : nullptr,
 			.currentFrame = m_currentFrame,
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
@@ -508,61 +502,84 @@ void RenderGraphRunner::submit(const Scene& scene) {
 }
 
 void RenderGraphRunner::build() {
-	std::vector<ResourceManager::ImageDescription> staticImagesDescriptions;
-	std::vector<ResourceManager::BufferDescription> buffersDescription;
+	std::vector<ResourceManager::ImageDescription> imageDescriptions;
+	std::vector<ResourceIndex> imagesIndices;
+
+	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
+	std::vector<ResourceIndex> bufferIndices;
+
 	for (auto& [index, description] : m_data.images) {
 		if (m_data.swapchainImageRatio.contains(index)) continue;
 		if (m_data.externalImages.contains(index)) continue;
 
-		staticImagesDescriptions.push_back(description);
+		imageDescriptions.push_back(description);
+		imagesIndices.push_back(index);
 	}
 	for (auto& [index, description] : m_data.buffers) {
 		if (m_data.externalBuffers.contains(index)) continue;
-		buffersDescription.push_back(description);
+		if (m_data.sharedBuffers.contains(index)) continue;
+
+		bufferDescriptions.push_back(description);
+		bufferIndices.push_back(index);
 	}
 
 	m_frameDataAllocation = m_resourceManager.createResources(
-		staticImagesDescriptions, buffersDescription
+		imageDescriptions, bufferDescriptions
 	);
 	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
-	int i = 0;
-	for (auto& [index, _] : m_data.images) {
-		if (m_data.swapchainImageRatio.contains(index)) continue;
-		m_images[index] = images[i];
-		m_resourceManager.setName(m_data.resourceNames[index], images[i]);
-
-		i++;
+	for (int i = 0; i < imagesIndices.size(); i++) {
+		m_images[imagesIndices[i]] = images[i];
 	}
 
-	i = 0;
 	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
-	for (auto& [buffer, _] : m_data.buffers) {
-		m_buffers[buffer] = buffers[i];
-		m_resourceManager.setName(m_data.resourceNames[buffer], buffers[i]);
 
-		i++;
+	for (int i = 0; i < bufferIndices.size(); i++) {
+		m_buffers[bufferIndices[i]] = buffers[i];
+		m_resourceManager.setName(
+			m_data.resourceNames[bufferIndices[i]], buffers[i]
+		);
+	}
+
+	if (m_data.sharedBuffers.size() > 0) {
+		bufferDescriptions.clear();
+		bufferIndices.clear();
+
+		for (ResourceIndex index : m_data.sharedBuffers) {
+			bufferDescriptions.push_back(m_data.buffers.at(index));
+			bufferIndices.push_back(index);
+		}
+
+		m_sharedDataAllocation =
+			m_resourceManager.createSharedAllocation(bufferDescriptions);
+
+		auto buffers = m_resourceManager.getBuffers(m_sharedDataAllocation);
+		for (int i = 0; i < bufferIndices.size(); i++) {
+			m_buffers[bufferIndices[i]] = buffers[i];
+			m_resourceManager.setName(
+				m_data.resourceNames[bufferIndices[i]], buffers[i]
+			);
+		}
 	}
 
 	if (m_data.localBufferSizes.size() > 0) {
 		std::vector<uint32_t> sizes;
-		std::vector<ResourceIndex> indices;
+		bufferIndices.clear();
 
 		for (auto [index, size] : m_data.localBufferSizes) {
 			sizes.push_back(size);
-			indices.push_back(index);
+			bufferIndices.push_back(index);
 		}
 
 		// Return buffers so they can bound to resource index
 		m_hostDataAllocation = m_resourceManager.createHostAllocation(sizes);
 
 		auto buffers = m_resourceManager.getHostBuffers(*m_hostDataAllocation);
-		i = 0;
-		for (ResourceIndex buffer : indices) {
-			m_buffers[buffer] = buffers[i];
-			m_resourceManager.setName(m_data.resourceNames[buffer], buffers[i]);
-
-			i++;
+		for (int i = 0; i < bufferIndices.size(); i++) {
+			m_buffers[bufferIndices[i]] = buffers[i];
+			m_resourceManager.setName(
+				m_data.resourceNames[bufferIndices[i]], buffers[i]
+			);
 		}
 	}
 

@@ -10,7 +10,6 @@ struct TaskContext {
 	std::span<const ResourceDependency>& outputs;
 	std::unordered_map<ResourceIndex, ImageHandle>& images;
 	std::unordered_map<ResourceIndex, BufferHandle>& buffers;
-	void* baseHostAddress;
 
 	uint64_t currentFrame;
 
@@ -48,9 +47,8 @@ T TaskContext::getInput(uint32_t index) {
 	} else {
 		Buffer& buffer =
 			resourceManager.getBuffer(buffers[inputs[index].first]);
-		return static_cast<T>(
-			static_cast<std::byte*>(baseHostAddress) + buffer.allocation.offset
-		);
+
+		return static_cast<T>(buffer.data);
 	}
 }
 
@@ -60,18 +58,14 @@ std::span<T> TaskContext::getInputSpan(uint32_t index, bool perFrame) {
 	if (perFrame)
 		return std::span<T>(
 			reinterpret_cast<T*>(
-				static_cast<std::byte*>(baseHostAddress) +
-				buffer.allocation.offset +
+				static_cast<std::byte*>(buffer.data) +
 				(buffer.allocation.size / 3) * (currentFrame % 3)
 			),
 			buffer.allocation.size / 3 / sizeof(T)
 		);
 	else
 		return std::span<T>(
-			reinterpret_cast<T*>(
-				static_cast<std::byte*>(baseHostAddress) +
-				buffer.allocation.offset
-			),
+			reinterpret_cast<T*>(buffer.data),
 			buffer.allocation.size / sizeof(T)
 		);
 	;
@@ -87,9 +81,7 @@ T TaskContext::getOutput(ResourceIndex index) {
 		Buffer& buffer =
 			resourceManager.getBuffer(buffers[outputs[index].first]);
 
-		return static_cast<T>(
-			static_cast<std::byte*>(baseHostAddress) + buffer.allocation.offset
-		);
+		return static_cast<T>(buffer.data);
 	}
 }
 
@@ -100,8 +92,7 @@ std::span<T> TaskContext::getOutputSpan(uint32_t index, bool perFrame) {
 	if (perFrame)
 		return std::span<T>(
 			reinterpret_cast<T*>(
-				static_cast<std::byte*>(baseHostAddress) +
-				buffer.allocation.offset +
+				static_cast<std::byte*>(buffer.data) +
 				(buffer.allocation.size / 3) * (currentFrame % 3)
 			),
 			buffer.allocation.size / 3 / sizeof(T)
@@ -109,8 +100,7 @@ std::span<T> TaskContext::getOutputSpan(uint32_t index, bool perFrame) {
 	else
 		return std::span<T>(
 			reinterpret_cast<T*>(
-				static_cast<std::byte*>(baseHostAddress) +
-				buffer.allocation.offset
+				static_cast<std::byte*>(buffer.data) + buffer.allocation.offset
 			),
 			buffer.allocation.size / sizeof(T)
 		);

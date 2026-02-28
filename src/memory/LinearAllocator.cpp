@@ -10,19 +10,16 @@ LinearAllocator::LinearAllocator(
 ) :
 	m_allocation(memory, size) {}
 
-SubAllocation LinearAllocator::subAllocate(vk::MemoryRequirements requirements
+SubAllocation LinearAllocator::subAllocate(
+	vk::MemoryRequirements requirements
 ) {
-	uint32_t offsetAligment =
-		requirements.alignment > 1
-			? (requirements.alignment -
-	           (m_occupiedOffset % requirements.alignment))
-			: 0;
-	assert((offsetAligment + requirements.size) <= m_allocation.size);
+	uint32_t alignedOffset = (m_occupiedOffset + requirements.alignment - 1) &
+	                         ~(requirements.alignment - 1);
+	assert((alignedOffset + requirements.size) <= m_allocation.size);
 
-	uint32_t baseOffset = m_occupiedOffset + offsetAligment;
-	m_occupiedOffset += offsetAligment + requirements.size;
+	m_occupiedOffset = alignedOffset + requirements.size;
 	return {
-		.offset = baseOffset,
+		.offset = alignedOffset,
 		.size = requirements.size,
 	};
 }
