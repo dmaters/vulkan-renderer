@@ -250,6 +250,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.descriptorBindingPartiallyBound = true,
 		.descriptorBindingVariableDescriptorCount = true,
 		.runtimeDescriptorArray = true,
+		.hostQueryReset = true,
 		.timelineSemaphore = true,
 
 	};

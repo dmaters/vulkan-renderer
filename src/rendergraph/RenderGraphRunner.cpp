@@ -239,8 +239,7 @@ bool RenderGraphRunner::updateTimings() const {
 		sizeof(uint64_t) * timestampsCount,
 		timestamps.data(),
 		sizeof(uint64_t),
-		vk::QueryResultFlagBits::eWithAvailability |
-			vk::QueryResultFlagBits::e64
+		vk::QueryResultFlagBits::e64
 	);
 	if (result != vk::Result::eSuccess) return false;
 
