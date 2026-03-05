@@ -99,9 +99,7 @@ std::span<T> TaskContext::getOutputSpan(uint32_t index, bool perFrame) {
 		);
 	else
 		return std::span<T>(
-			reinterpret_cast<T*>(
-				static_cast<std::byte*>(buffer.data) + buffer.allocation.offset
-			),
+			reinterpret_cast<T*>(buffer.data),
 			buffer.allocation.size / sizeof(T)
 		);
 	;
