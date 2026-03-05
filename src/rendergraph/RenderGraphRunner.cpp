@@ -284,7 +284,7 @@ bool RenderGraphRunner::updateTimings() const {
 
 	double lastTotalFrameTime =
 		std::chrono::duration_cast<std::chrono::duration<double>>(
-			std::chrono::high_resolution_clock::now() - m_beginFrameTimestamp
+			std::chrono::steady_clock::now() - m_beginFrameTimestamp
 		)
 			.count();
 
@@ -357,7 +357,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		timestampsCount * currentFrameInFlight
 	);
 
-	m_beginFrameTimestamp = std::chrono::high_resolution_clock::now();
+	m_beginFrameTimestamp = std::chrono::steady_clock::now();
 
 	if (!m_initialized) {
 		m_initialized = true;
@@ -444,12 +444,11 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		timestampsCount * currentFrameInFlight + 1
 	);
 
-	auto endCPU = std::chrono::high_resolution_clock::now();
-
-	m_lastCpuFrameTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-							 endCPU - m_beginFrameTimestamp
-	)
-	                         .count();
+	m_lastCpuFrameTime =
+		std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - m_beginFrameTimestamp
+		)
+			.count();
 
 	commandBuffer.end();
 	// End Frame

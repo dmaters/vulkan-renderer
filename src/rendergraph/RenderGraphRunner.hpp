@@ -47,10 +47,7 @@ private:
 	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
 
 	vk::QueryPool m_debugQueryPool;
-	std::chrono::time_point<
-		std::chrono::system_clock,
-		std::chrono::duration<long, std::nano>>
-		m_beginFrameTimestamp;
+	std::chrono::time_point<std::chrono::steady_clock> m_beginFrameTimestamp;
 	double m_lastCpuFrameTime;
 
 	void build();

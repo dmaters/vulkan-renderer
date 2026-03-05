@@ -48,8 +48,16 @@ Application::Application(const std::filesystem::path& path) {
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
 	ImGui_ImplSDL3_InitForVulkan(m_window);
-	Instance& instance = Instance::Get();
 
+	Instance& instance = Instance::Get();
+	ImGui_ImplVulkan_LoadFunctions(
+		vk::ApiVersion13,
+		[](const char* function_name, void* vulkan_instance) {
+			return static_cast<vk::Instance*>(vulkan_instance)
+		        ->getProcAddr(function_name);
+		},
+		static_cast<void*>(&instance.instance)
+	);
 	vk::DescriptorPoolSize poolSize = {
 		.type = vk::DescriptorType::eCombinedImageSampler,
 		.descriptorCount = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,

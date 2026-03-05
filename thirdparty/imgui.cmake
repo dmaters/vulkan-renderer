@@ -8,7 +8,11 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(imgui)
 
-add_library(imgui
+add_library(imgui INTERFACE)
+
+target_sources(
+    imgui
+    INTERFACE
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -19,6 +23,4 @@ add_library(imgui
 
 )
 
-target_include_directories(imgui PUBLIC
-    ${imgui_SOURCE_DIR}
-)
+target_include_directories(imgui INTERFACE ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)

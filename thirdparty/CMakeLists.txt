@@ -32,19 +32,20 @@ FetchContent_MakeAvailable(glm sdl assimp stb)
 include(slang.cmake)
 include(imgui.cmake)
 
-target_link_libraries(imgui PRIVATE SDL3::SDL3)
 
 find_package(Vulkan REQUIRED)
+target_link_libraries(imgui INTERFACE SDL3::SDL3 Vulkan::Vulkan)
 
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
 
-
-target_link_libraries(${PROJECT_NAME} INTERFACE
-        glm::glm
-        SDL3::SDL3
-        Vulkan::Vulkan
-        assimp
-        slang
-        imgui
+target_compile_options(assimp INTERFACE -Wno-error)
+target_link_libraries(
+    ${PROJECT_NAME} INTERFACE
+    glm::glm
+    SDL3::SDL3
+    Vulkan::Vulkan
+    assimp
+    slang
+    imgui
 )

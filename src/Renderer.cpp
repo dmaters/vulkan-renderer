@@ -74,7 +74,7 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
-	UI::Data.sceneData.scenePath = path;
+	UI::Data.sceneData.scenePath = path.string();
 	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();
 
 	createRenderGraph(m_currentScene);
