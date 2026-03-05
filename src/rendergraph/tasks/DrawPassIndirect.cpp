@@ -7,13 +7,11 @@
 void DrawPassIndirect(
 	TaskContext& context,
 	MaterialIndex materialIndex,
-	const std::vector<uint32_t>& primitives
+	const std::vector<uint32_t>& primitives,
+	uint32_t indirectBufferIndex,
+	uint32_t primitiveBufferIndex,
+	uint32_t pushConstant
 ) {
-	assert(
-		context.inputs.back().second == ResourceUsage::Type::IndirectBufferRead
-	);
-	assert(context.outputs.back().second == ResourceUsage::Type::Undefined);
-
 	const Pipeline& material =
 		context.materialManager.getPipeline(materialIndex);
 
@@ -47,19 +45,27 @@ void DrawPassIndirect(
 			{}
 		);
 
-	auto indirectBufferOutput =
-		context.getOutputSpan<vk::DrawIndexedIndirectCommand>(
-			context.outputs.size() - 1, true
+	auto indirectBufferValues =
+		context.getInputSpan<vk::DrawIndexedIndirectCommand>(
+			indirectBufferIndex, true
 		);
 
-	auto indirectMaterialBufferOutput =
-		context.getOutputSpan<uint32_t>(context.outputs.size() - 2, true);
+	auto primitiveBufferValues =
+		context.getInputSpan<uint32_t>(primitiveBufferIndex, true);
+
+	context.commandBuffer.pushConstants(
+		material.pipelineLayout,
+		vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+		0,
+		sizeof(uint32_t),
+		&pushConstant
+	);
 
 	for (int i = 0; i < primitives.size(); i++) {
 		uint32_t primitiveIndex = primitives[i];
 		const Primitive& primitive = context.scene.primitives[primitiveIndex];
 
-		indirectBufferOutput[i] = vk::DrawIndexedIndirectCommand {
+		indirectBufferValues[i] = vk::DrawIndexedIndirectCommand {
 			.indexCount = primitive.indexCount,
 			.instanceCount = 1,
 			.firstIndex = primitive.baseIndex,
@@ -67,17 +73,15 @@ void DrawPassIndirect(
 			.firstInstance = 0,
 		};
 
-		indirectMaterialBufferOutput[i] = primitiveIndex;
+		primitiveBufferValues[i] = primitiveIndex;
 	}
 
-	Buffer& indirectBuffer =
-		context.getInput<Buffer&>(context.inputs.size() - 1);
+	Buffer& indirectBuffer = context.getInput<Buffer&>(indirectBufferIndex);
 
 	context.commandBuffer.drawIndexedIndirect(
 		indirectBuffer.buffer,
-		0,
-		context.currentFrame > 3 ? primitives.size()
-								 : 0,  // Warmup for syncronization
+		indirectBuffer.size / 3 * (context.currentFrame % 3),
+		primitives.size(),
 		sizeof(vk::DrawIndexedIndirectCommand)
 	);
 }

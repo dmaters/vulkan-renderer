@@ -11,5 +11,16 @@ enum class AttachmentOp {
 };
 
 void RenderPassBegin(
+	TaskContext& context,
+	AttachmentOp color,
+	AttachmentOp depth,
+	vk::Rect2D viewport
+);
+
+void RenderPassBegin(
 	TaskContext& context, AttachmentOp color, AttachmentOp depth
 );
+
+constexpr void RenderPassEnd(TaskContext& context) {
+	context.commandBuffer.endRendering();
+}

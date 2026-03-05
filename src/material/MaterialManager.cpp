@@ -336,7 +336,6 @@ void MaterialManager::registerMaterials() {
 			vk::DescriptorType::eUniformBuffer,
 			vk::DescriptorType::eUniformBuffer,
 			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
 		}
 	);
 	registerGraphicMaterial(
@@ -359,6 +358,7 @@ void MaterialManager::registerMaterials() {
 		{
 			vk::DescriptorType::eUniformBuffer,
 			vk::DescriptorType::eUniformBuffer,
+			vk::DescriptorType::eStorageBuffer,
 			vk::DescriptorType::eStorageBuffer,
 			vk::DescriptorType::eStorageBuffer,
 		}
@@ -495,7 +495,7 @@ void MaterialManager::registerMaterials() {
 		"composition",
 		{ "resources/shaders/composition.slang" },
 		{
-			vk::DescriptorType::eStorageImage,
+			vk::DescriptorType::eSampledImage,
 			vk::DescriptorType::eStorageImage,
 		}
 	);

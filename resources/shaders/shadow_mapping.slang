@@ -8,7 +8,6 @@
 
 struct ShadowData {
 	uint32_t cascade;
-	uint32_t primitiveIndex;
 };
 
 [vk::push_constant] ConstantBuffer<ShadowData> _shadowData;
@@ -24,13 +23,13 @@ struct ShadowData {
 }
 
 
-
 struct VertexOutputAlphaTested {
     float4 position : SV_Position;
     float2 texcoord : TEXCOORD0;
+    uint drawID;
 };
 
-[shader("vertex")] VertexOutputAlphaTested main_vs_alpha(VertexInput input) {
+[shader("vertex")] VertexOutputAlphaTested main_vs_alpha(VertexInput input, uint drawID : SV_DrawIndex) {
 	VertexOutputAlphaTested output;
 
 
@@ -42,6 +41,7 @@ struct VertexOutputAlphaTested {
 	);
 
 	output.texcoord = input.texCoord;
+	output.drawID = drawID;
 	return output;
 }
 
@@ -58,6 +58,7 @@ struct PrimitiveInstance {
 
 [vk_binding(2)] StructuredBuffer<PrimitiveInstance> _materialData;
 [vk_binding(3)] StructuredBuffer<uint32_t> _materialMap;
+[vk_binding(4)] StructuredBuffer<uint32_t> _primitives;
 
 
 
@@ -65,7 +66,7 @@ struct PrimitiveInstance {
 
 [shader("fragment")] void main_fs() {}
 [shader("fragment")] void main_fs_alpha(VertexOutputAlphaTested input) {
-    PrimitiveInstance instance = _materialData[_materialMap[_shadowData.primitiveIndex]];
+    PrimitiveInstance instance = _materialData[_materialMap[_primitives[input.drawID]]];
 
     clip(
         _staticTextures[instance.albedo_texture].Sample(

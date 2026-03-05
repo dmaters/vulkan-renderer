@@ -1,4 +1,4 @@
-#include "RenderPassBegin.hpp"
+#include "RenderPass.hpp"
 
 #include <cstdint>
 #include <unordered_map>
@@ -32,15 +32,16 @@ std::pair<vk::AttachmentLoadOp, vk::AttachmentStoreOp> getAttachmentOps(
 }
 
 void RenderPassBegin(
-	TaskContext& context, AttachmentOp colorOp, AttachmentOp depthOp
+	TaskContext& context,
+	AttachmentOp color,
+	AttachmentOp depth,
+	vk::Rect2D viewport
 ) {
 	std::vector<vk::RenderingAttachmentInfo> attachments;
 
 	std::vector<vk::RenderingAttachmentInfo> colorAttachments;
 	std::optional<vk::RenderingAttachmentInfo> depthAttachment;
 	bool hasStencil = false;
-
-	uint32_t width = 0, height = 0;
 
 	for (auto [index, usage] : context.outputs) {
 		if (usage != ResourceUsage::Type::ColorAttachmentWrite &&
@@ -56,7 +57,7 @@ void RenderPassBegin(
 
 		bool isDepth = attachment.format == vk::Format::eD16Unorm || isStencil;
 		if (isDepth) {
-			auto [loadOp, storeOp] = getAttachmentOps(depthOp);
+			auto [loadOp, storeOp] = getAttachmentOps(depth);
 
 			depthAttachment = vk::RenderingAttachmentInfo{
 				.imageView = attachment.view,
@@ -66,12 +67,8 @@ void RenderPassBegin(
 				.storeOp = storeOp,
 				.clearValue = { .depthStencil = { .depth = 1, .stencil = 0 }, },
 			};
-
-			width = attachment.size.width;
-			height = attachment.size.height;
-
 		} else {
-			auto [loadOp, storeOp] = getAttachmentOps(colorOp);
+			auto [loadOp, storeOp] = getAttachmentOps(color);
 
 			colorAttachments.push_back({
 			.imageView = attachment.view,
@@ -85,9 +82,6 @@ void RenderPassBegin(
 											0.f, 0.f, 0.f, 0.f }, }, },
 			});
 		}
-
-		width = attachment.size.width;
-		height = attachment.size.height;
 	}
 
 	assert(colorAttachments.size() > 0 || depthAttachment.has_value());
@@ -102,19 +96,20 @@ void RenderPassBegin(
 		.pStencilAttachment = hasStencil ? &depthAttachment.value() : nullptr,
 
 	};
-	renderingInfo.renderArea = vk::Rect2D({ 0, 0 }, { width, height }),
+	renderingInfo.renderArea = viewport,
 	context.commandBuffer.beginRendering(renderingInfo);
-	context.commandBuffer.setScissor(
-		0,
-		{
-			vk::Rect2D { { 0, 0 }, { width, height } }
-    }
-	);
+	context.commandBuffer.setScissor(0, viewport);
 
 	context.commandBuffer.setViewport(
 		0,
 		{
-			vk::Viewport { 0, 0, (float)width, (float)height, 0, 1 }
+			vk::Viewport {
+						  (float)viewport.offset.x,
+						  (float)viewport.offset.y,
+						  (float)viewport.extent.width,
+						  (float)viewport.extent.height,
+						  0, 1,
+						  }
     }
 	);
 
@@ -138,5 +133,34 @@ void RenderPassBegin(
 	);
 	context.commandBuffer.bindIndexBuffer(
 		indexBuffer.buffer, 0, vk::IndexType::eUint32
+	);
+}
+
+void RenderPassBegin(
+	TaskContext& context, AttachmentOp color, AttachmentOp depth
+) {
+	uint32_t width, height;
+	for (auto [index, usage] : context.outputs) {
+		if (usage != ResourceUsage::Type::ColorAttachmentWrite &&
+		    usage != ResourceUsage::Type::DepthStencilWrite &&
+		    usage != ResourceUsage::Type::DepthStencilRead)
+			continue;
+
+		Image& attachment =
+			context.resourceManager.getImage(context.images.at(index));
+
+		width = attachment.size.width;
+		height = attachment.size.height;
+		break;
+	}
+
+	RenderPassBegin(
+		context,
+		color,
+		depth,
+		{
+			{ 0,     0      },
+			{ width, height },
+    }
 	);
 }

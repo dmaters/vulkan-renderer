@@ -3,15 +3,12 @@
 #include "Renderer.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "rendergraph/ResourceUsage.hpp"
-#include "rendergraph/tasks/BufferUpload.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
 #include "rendergraph/tasks/DrawPass.hpp"
 #include "rendergraph/tasks/DrawPassIndirect.hpp"
 #include "rendergraph/tasks/FrustumCulling.hpp"
-#include "rendergraph/tasks/RenderPassBegin.hpp"
-#include "rendergraph/tasks/RenderPassEnd.hpp"
+#include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/SceneUpdatePass.hpp"
-#include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/Task.hpp"
 #include "rendergraph/tasks/TaskContext.hpp"
 #include "rendergraph/tasks/UIPass.hpp"
@@ -174,23 +171,6 @@ void Renderer::createRenderGraph(Scene& scene) {
 		) { ComputePass(context, material, { 1, 1, 1 }); }
 	);
 
-	ResourceIndex indirectShadowBuffer = m_graph.createDeviceBuffer(
-		"indirect_shadow_buffer",
-		{
-			.size = static_cast<uint32_t>(
-				m_currentScene.primitives.size() *
-				sizeof(vk::DrawIndexedIndirectCommand) * 3
-			),
-			.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                 vk::BufferUsageFlagBits::eIndirectBuffer,
-		}
-	);
-	ResourceIndex indirectShadowBufferHost = m_graph.createHostBuffer(
-		"indirect_shadow_buffer_host",
-		m_currentScene.primitives.size() *
-			sizeof(vk::DrawIndexedIndirectCommand) * 3 * 3
-	);
-
 	ResourceIndex shadowAtlas = m_graph.createImage(
 		"shadow_atlas",
 		{
@@ -204,72 +184,188 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 		}
 	);
-	m_graph.addTask(
-		"shadowmap",
-		TaskType::Graphic,
-		{
-			{ lightBuffer,          ResourceUsage::Type::UniformBuffer      },
-			{ cameraBuffer,         ResourceUsage::Type::UniformBuffer      },
-			{ pbrMaterialData,      ResourceUsage::Type::StorageBufferRead  },
-			{ pbrMaterialInstances, ResourceUsage::Type::StorageBufferRead  },
-			{ indirectShadowBuffer, ResourceUsage::Type::IndirectBufferRead },
-    },
-		{
-			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
-			{ indirectShadowBufferHost, ResourceUsage::Type::Undefined },
-		},
-		[](TaskContext& context) {
-			ShadowPass(context, 0);
-			ShadowPass(context, 1);
-			ShadowPass(context, 2);
-		}
-	);
-	m_graph.addTask(
-		"copy_shadow_indirect",
-		TaskType::Transfer,
-		{
+
+	for (int i = 0; i < 3; i++) {
+		ResourceIndex indirectShadowBuffer = m_graph.createDeviceBuffer(
+			"indirect_shadow_buffer_cascade_" + std::to_string(i),
 			{
-             indirectShadowBufferHost, ResourceUsage::Type::TransferSrc,
-			 },
-    },
-		{
-			{ indirectShadowBuffer, ResourceUsage::Type::TransferDst },
-		},
-		BufferUpload
-	);
+				.size = static_cast<uint32_t>(
+					m_currentScene
+						.buckets[m_materialManager
+		                             .getMaterialIndex("shadowmap")]
+						.size() *
+					sizeof(vk::DrawIndexedIndirectCommand) * 3
+				),
+				.usage = vk::BufferUsageFlagBits::eIndirectBuffer,
+			},
+			true
+		);
+		ResourceIndex primitiveShadowBuffer = m_graph.createDeviceBuffer(
+			"primitive_shadow_buffer_cascade_" + std::to_string(i),
+			{
+				.size = static_cast<uint32_t>(
+					m_currentScene
+						.buckets[m_materialManager
+		                             .getMaterialIndex("shadowmap")]
+						.size() *
+					sizeof(uint32_t) * 3
+				),
+				.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+			},
+			true
+		);
+		ResourceIndex indirectShadowBufferAlpha = m_graph.createDeviceBuffer(
+			"indirect_shadow_buffer_alphatested_cascade_" + std::to_string(i),
+			{
+				.size = static_cast<uint32_t>(
+					m_currentScene
+						.buckets[m_materialManager
+		                             .getMaterialIndex("shadowmap_alphatested")]
+						.size() *
+					sizeof(vk::DrawIndexedIndirectCommand) * 3
+				),
+				.usage = vk::BufferUsageFlagBits::eIndirectBuffer,
+			},
+			true
+		);
+		ResourceIndex primitiveShadowBufferAlpha = m_graph.createDeviceBuffer(
+			"primitive_shadow_buffer_alphatested_cascade_" + std::to_string(i),
+			{
+				.size = static_cast<uint32_t>(
+					m_currentScene
+						.buckets[m_materialManager
+		                             .getMaterialIndex("shadowmap_alphatested")]
+						.size() *
+					sizeof(uint32_t) * 3
+				),
+				.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+			},
+			true
+		);
+		m_graph.addTask(
+			"shadowmap_cascade_" + std::to_string(i),
+			TaskType::Graphic,
+			{
+				{ lightBuffer,           ResourceUsage::Type::UniformBuffer },
+				{ cameraBuffer,          ResourceUsage::Type::UniformBuffer },
+				{ indirectShadowBuffer,
+                 ResourceUsage::Type::IndirectBufferRead                    },
+				{ primitiveShadowBuffer,
+                 ResourceUsage::Type::StorageBufferRead                     },
+        },
+			{
+				{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
+			},
+			[material = m_materialManager.getMaterialIndex("shadowmap"),
+		     i](TaskContext& context) {
+				static const uint16_t CASCADE_SIZE = 2048;
+				RenderPassBegin(
+					context,
+					AttachmentOp::Read,
+					AttachmentOp::ClearWrite,
+					vk::Rect2D {
+						{ CASCADE_SIZE * i, 0            },
+						{ CASCADE_SIZE,     CASCADE_SIZE },
+                }
+				);
+
+				DrawPassIndirect(
+					context,
+					material,
+					context.scene.buckets.at(material),
+					2,
+					3,
+					i
+				);
+				RenderPassEnd(context);
+			}
+		);
+		m_graph.addTask(
+			"shadowmap_cascade_" + std::to_string(i) + "_alphatested",
+			TaskType::Graphic,
+			{
+				{ lightBuffer,                ResourceUsage::Type::UniformBuffer     },
+				{ cameraBuffer,               ResourceUsage::Type::UniformBuffer     },
+				{ pbrMaterialData,            ResourceUsage::Type::StorageBufferRead },
+				{ pbrMaterialInstances,
+                 ResourceUsage::Type::StorageBufferRead                              },
+				{ indirectShadowBufferAlpha,
+                 ResourceUsage::Type::IndirectBufferRead                             },
+				{ primitiveShadowBufferAlpha,
+                 ResourceUsage::Type::StorageBufferRead                              },
+        },
+			{
+				{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
+			},
+			[material =
+		         m_materialManager.getMaterialIndex("shadowmap_alphatested"),
+		     i](TaskContext& context) {
+				static const uint16_t CASCADE_SIZE = 2048;
+				RenderPassBegin(
+					context,
+					AttachmentOp::Read,
+					AttachmentOp::ReadWrite,
+					vk::Rect2D {
+						{ CASCADE_SIZE * i, 0            },
+						{ CASCADE_SIZE,     CASCADE_SIZE },
+                }
+				);
+
+				DrawPassIndirect(
+					context,
+					material,
+					context.scene.buckets.at(material),
+					4,
+					5,
+					i
+				);
+				RenderPassEnd(context);
+			}
+		);
+	}
 
 	ResourceIndex indirectGPassBuffer = m_graph.createDeviceBuffer(
 		"indirect_gpass_buffer",
 		{
 			.size = static_cast<uint32_t>(
 				m_currentScene.primitives.size() *
-				sizeof(vk::DrawIndexedIndirectCommand)
+				sizeof(vk::DrawIndexedIndirectCommand) * 3
 			),
-			.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                 vk::BufferUsageFlagBits::eIndirectBuffer,
-		}
+			.usage = vk::BufferUsageFlagBits::eIndirectBuffer,
+		},
+		true
 	);
-	ResourceIndex indirectGPassMaterialBuffer = m_graph.createDeviceBuffer(
-		"indirect_gpass_material_buffer",
+	ResourceIndex primitivesGPassBuffer = m_graph.createDeviceBuffer(
+		"primitive_gpass_buffer",
 		{
 			.size = static_cast<uint32_t>(
-				m_currentScene.primitives.size() * sizeof(uint32_t)
+				m_currentScene.primitives.size() * sizeof(uint32_t) * 3
 			),
-			.usage = vk::BufferUsageFlagBits::eTransferDst |
-	                 vk::BufferUsageFlagBits::eStorageBuffer,
-		}
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		},
+		true
 	);
-	ResourceIndex indirectGPassBufferHost = m_graph.createHostBuffer(
-		"indirect_gpass_buffer_host",
-		m_currentScene.primitives.size() *
-			sizeof(vk::DrawIndexedIndirectCommand) * 3
+	ResourceIndex indirectGPassAlphatestedBuffer = m_graph.createDeviceBuffer(
+		"indirect_gpass_alphatested_buffer",
+		{
+			.size = static_cast<uint32_t>(
+				m_currentScene.primitives.size() *
+				sizeof(vk::DrawIndexedIndirectCommand) * 3
+			),
+			.usage = vk::BufferUsageFlagBits::eIndirectBuffer,
+		},
+		true
 	);
-
-	ResourceIndex indirectGPassMaterialBufferHost = m_graph.createHostBuffer(
-		"indirect_gpass_buffer_host",
-		m_currentScene.primitives.size() * sizeof(uint32_t) * 3
+	ResourceIndex primitivesGPassAlphatestedBuffer = m_graph.createDeviceBuffer(
+		"primitives_gpass_alphatested_buffer",
+		{
+			.size = static_cast<uint32_t>(
+				m_currentScene.primitives.size() * sizeof(uint32_t) * 3
+			),
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		},
+		true
 	);
-
 	ResourceIndex albedo = m_graph.createImage(
 		"gbuffer_albedo",
 		{
@@ -348,12 +444,11 @@ void Renderer::createRenderGraph(Scene& scene) {
 		"gbuffer",
 		TaskType::Graphic,
 		{
-			{ cameraBuffer,                ResourceUsage::Type::UniformBuffer      },
-			{ pbrMaterialData,             ResourceUsage::Type::StorageBufferRead  },
-			{ pbrMaterialInstances,        ResourceUsage::Type::StorageBufferRead  },
-			{ indirectGPassMaterialBuffer,
-             ResourceUsage::Type::StorageBufferRead                                },
-			{ indirectGPassBuffer,         ResourceUsage::Type::IndirectBufferRead },
+			{ cameraBuffer,          ResourceUsage::Type::UniformBuffer      },
+			{ pbrMaterialData,       ResourceUsage::Type::StorageBufferRead  },
+			{ pbrMaterialInstances,  ResourceUsage::Type::StorageBufferRead  },
+			{ indirectGPassBuffer,   ResourceUsage::Type::IndirectBufferRead },
+			{ primitivesGPassBuffer, ResourceUsage::Type::StorageBufferRead  },
     },
 		{
 			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },
@@ -361,62 +456,68 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ worldPos, ResourceUsage::Type::ColorAttachmentWrite },
 			{ roughnessMetallic, ResourceUsage::Type::ColorAttachmentWrite },
 			{ depth, ResourceUsage::Type::DepthStencilWrite },
-			{ indirectGPassMaterialBufferHost, ResourceUsage::Type::Undefined },
-			{ indirectGPassBufferHost, ResourceUsage::Type::Undefined },
 		},
-		[material = m_materialManager.getMaterialIndex("gbuffer"),
-	     alphaTested = m_materialManager.getMaterialIndex(
-			 "gbuffer_alphatested"
-		 )](TaskContext& context) {
+		[material = m_materialManager.getMaterialIndex("gbuffer")](
+			TaskContext& context
+		) {
 			auto visiblePrimitives = FrustumCulling(
 				context.scene,
 				context.scene.buckets.at(material),
 				context.scene.camera.getFrustumPlanes()
 			);
-			auto visiblePrimitivesAlphaTested = FrustumCulling(
-				context.scene,
-				context.scene.buckets.at(alphaTested),
-				context.scene.camera.getFrustumPlanes()
-			);
 
-			UI::Data.sceneData.gbufferCount =
-				visiblePrimitives.size() + visiblePrimitivesAlphaTested.size();
+			UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
 
 			RenderPassBegin(
 				context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite
 			);
 
-			DrawPassIndirect(context, material, visiblePrimitives);
-			DrawPass(context, alphaTested, visiblePrimitivesAlphaTested);
+			DrawPassIndirect(context, material, visiblePrimitives, 3, 4);
 
 			RenderPassEnd(context);
 		}
 	);
 
 	m_graph.addTask(
-		"copy_indirect_gbuffer",
-		TaskType::Transfer,
+		"gbuffer_alphatested",
+		TaskType::Graphic,
 		{
-			{ indirectGPassBufferHost, ResourceUsage::Type::TransferSrc },
+			{ cameraBuffer,                     ResourceUsage::Type::UniformBuffer     },
+			{ pbrMaterialData,                  ResourceUsage::Type::StorageBufferRead },
+			{ pbrMaterialInstances,             ResourceUsage::Type::StorageBufferRead },
+			{ indirectGPassAlphatestedBuffer,
+             ResourceUsage::Type::IndirectBufferRead                                   },
+			{ primitivesGPassAlphatestedBuffer,
+             ResourceUsage::Type::StorageBufferRead                                    },
     },
 		{
-			{ indirectGPassBuffer, ResourceUsage::Type::TransferDst },
+			{ albedo, ResourceUsage::Type::ColorAttachmentWrite },
+			{ normal, ResourceUsage::Type::ColorAttachmentWrite },
+			{ worldPos, ResourceUsage::Type::ColorAttachmentWrite },
+			{ roughnessMetallic, ResourceUsage::Type::ColorAttachmentWrite },
+			{ depth, ResourceUsage::Type::DepthStencilWrite },
 		},
-		BufferUpload
+		[material = m_materialManager.getMaterialIndex("gbuffer_alphatested")](
+			TaskContext& context
+		) {
+			auto visiblePrimitives = FrustumCulling(
+				context.scene,
+				context.scene.buckets.at(material),
+				context.scene.camera.getFrustumPlanes()
+			);
+
+			UI::Data.sceneData.gbufferCount += visiblePrimitives.size();
+
+			RenderPassBegin(
+				context, AttachmentOp::ReadWrite, AttachmentOp::ReadWrite
+			);
+
+			DrawPassIndirect(context, material, visiblePrimitives, 3, 4);
+
+			RenderPassEnd(context);
+		}
 	);
-	m_graph.addTask(
-		"copy_material_gbuffer",
-		TaskType::Transfer,
-		{
-			{
-             indirectGPassMaterialBufferHost, ResourceUsage::Type::TransferSrc,
-			 },
-    },
-		{
-			{ indirectGPassMaterialBuffer, ResourceUsage::Type::TransferDst },
-		},
-		BufferUpload
-	);
+
 	ResourceIndex hdr_output = m_graph.createImage(
 		"hdr_output",
 		{
@@ -491,6 +592,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			.miplevels = 1,
 			.format = vk::Format::eR8G8B8A8Snorm,
 			.usage = vk::ImageUsageFlagBits::eStorage |
+	                 vk::ImageUsageFlagBits::eColorAttachment |
 	                 vk::ImageUsageFlagBits::eTransferSrc,
 
 		},
@@ -526,7 +628,13 @@ void Renderer::createRenderGraph(Scene& scene) {
 		{
 			{ result, ResourceUsage::Type::ColorAttachmentWrite },
 		},
-		UIPass
+		[](TaskContext& context) {
+			RenderPassBegin(
+				context, AttachmentOp::ReadWrite, AttachmentOp::ReadWrite
+			);
+			UIPass(context);
+			RenderPassEnd(context);
+		}
 	);
 	m_graph.setOutputImage(result);
 }
