@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <optional>
-#include <queue>
+#include <stack>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -230,7 +230,7 @@ ExecutionInfo RenderGraphBuilder::getTasks(
 ) const {
 	assert(m_dependencies.contains(outputImage));
 
-	std::queue<uint32_t> taskQueue;
+	std::stack<uint32_t> taskQueue;
 	std::unordered_set<uint32_t> visitedTasks;
 
 	std::unordered_set<ResourceIndex> referencedImages;
@@ -245,7 +245,7 @@ ExecutionInfo RenderGraphBuilder::getTasks(
 		taskQueue.push(taskDependency.taskIndex);
 	}
 	while (!taskQueue.empty()) {
-		uint32_t taskIndex = taskQueue.front();
+		uint32_t taskIndex = taskQueue.top();
 		taskQueue.pop();
 
 		if (visitedTasks.contains(taskIndex)) continue;
