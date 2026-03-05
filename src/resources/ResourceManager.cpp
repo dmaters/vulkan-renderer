@@ -718,28 +718,21 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
 		};
 		m_deviceAllocatedBuffers[allocIndex].push_back(handle);
 	}
-
-	m_deviceAllocations.emplace(
-		allocIndex,
-		LinearAllocator(
-			vk::MemoryPropertyFlagBits::eDeviceLocal |
-				vk::MemoryPropertyFlagBits::eHostVisible,
-			requiredSize
-		)
-	);
-
-	m_sharedAllocationAddresses[allocIndex] = device.mapMemory(
-		m_deviceAllocations.at(allocIndex).getAllocation().memory,
-		0,
+	LinearAllocator allocator = LinearAllocator(
+		vk::MemoryPropertyFlagBits::eDeviceLocal |
+			vk::MemoryPropertyFlagBits::eHostVisible,
 		requiredSize
 	);
+	m_deviceAllocations.emplace(allocIndex, allocator);
+
+	void *address = allocator.getAllocation().address;
+
 	for (int i = 0; i < resourcesRequirements.size(); i++) {
 		Buffer &buffer = m_buffers.at(buffers.at(i).value);
 		buffer.allocation = m_deviceAllocations.at(allocIndex)
 		                        .subAllocate(resourcesRequirements.at(i));
 		buffer.data =
-			static_cast<std::byte *>(m_sharedAllocationAddresses[allocIndex]) +
-			buffer.allocation.offset;
+			static_cast<std::byte *>(address) + buffer.allocation.offset;
 
 		device.bindBufferMemory(
 			buffer.buffer,
@@ -792,14 +785,12 @@ ResourceManager::HostAllocationIndex ResourceManager::createHostAllocation(
 		offset += size;
 	}
 
-	m_hostAllocationAddresses[allocIndex] =
-		device.mapMemory(allocation.memory, 0, totalSize);
+	void *address = allocation.address;
 
 	for (BufferHandle hostBuffer : m_hostAllocationBuffers[allocIndex]) {
 		Buffer &buffer = m_buffers[hostBuffer.value];
 		buffer.data =
-			static_cast<std::byte *>(m_hostAllocationAddresses[allocIndex]) +
-			buffer.allocation.offset;
+			static_cast<std::byte *>(address) + buffer.allocation.offset;
 	}
 
 	return allocIndex;

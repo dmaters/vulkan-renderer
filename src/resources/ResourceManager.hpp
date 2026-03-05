@@ -57,8 +57,6 @@ private:
 
 	std::unordered_map<DeviceAllocationIndex, LinearAllocator>
 		m_deviceAllocations;
-	std::unordered_map<DeviceAllocationIndex, void*>
-		m_sharedAllocationAddresses;
 	std::unordered_map<DeviceAllocationIndex, std::vector<ImageHandle>>
 		m_deviceAllocatedImages;
 	std::unordered_map<DeviceAllocationIndex, std::vector<BufferHandle>>
@@ -67,7 +65,6 @@ private:
 	std::unordered_map<HostAllocationIndex, Allocation> m_hostAllocations;
 	std::unordered_map<HostAllocationIndex, std::vector<BufferHandle>>
 		m_hostAllocationBuffers;
-	std::unordered_map<HostAllocationIndex, void*> m_hostAllocationAddresses;
 
 	uint32_t m_allocationCount = 0;
 
@@ -98,12 +95,7 @@ public:
 	) const {
 		return m_hostAllocationBuffers.at(index);
 	}
-	void* getHostAllocationAddress(HostAllocationIndex index) const {
-		return m_hostAllocationAddresses.at(index);
-	}
-	void* getSharedAllocationAddress(HostAllocationIndex index) const {
-		return m_sharedAllocationAddresses.at(index);
-	}
+
 	ImageHandle getNamedImageIndex(std::string_view name) const {
 		return m_imageNames.at(std::string(name));
 	}
