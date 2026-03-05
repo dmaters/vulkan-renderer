@@ -14,7 +14,7 @@ using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
 struct GraphData {
 	struct TaskData {
 		TaskType type;
-		std::string_view name;
+		std::string name;
 
 		struct ResourceDependencySpan {
 			uint32_t offset;
@@ -38,7 +38,7 @@ struct GraphData {
 	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
 	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
 
-	std::vector<std::string_view> resourceNames;
+	std::vector<std::string> resourceNames;
 	std::vector<Task> tasks;
 	std::vector<TaskData> taskData;
 	std::vector<ResourceDependency> taskDependencies;

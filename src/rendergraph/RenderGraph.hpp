@@ -40,24 +40,24 @@ public:
 	);
 
 	ResourceIndex createImage(
-		std::string_view name,
+		std::string name,
 		ResourceManager::ImageDescription desc,
 		uint8_t swapchainRatio = 0
 	);
 
 	ResourceIndex createDeviceBuffer(
-		std::string_view name,
+		std::string name,
 		ResourceManager::BufferDescription desc,
 		bool shared = false
 	);
 
-	ResourceIndex createHostBuffer(std::string_view name, uint32_t size);
+	ResourceIndex createHostBuffer(std::string name, uint32_t size);
 
-	ResourceIndex registerImage(std::string_view name, ImageHandle handle);
-	ResourceIndex registerBuffer(std::string_view name, BufferHandle handle);
+	ResourceIndex registerImage(std::string name, ImageHandle handle);
+	ResourceIndex registerBuffer(std::string name, BufferHandle handle);
 
 	void addTask(
-		std::string_view name,
+		std::string name,
 		TaskType type,
 		std::vector<ResourceDependency> inputResources,
 		std::vector<ResourceDependency> outputResources,

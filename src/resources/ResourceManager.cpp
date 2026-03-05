@@ -78,7 +78,7 @@ ResourceManager::ResourceManager() :
 	);
 }
 
-void ResourceManager::setName(std::string_view name, ImageHandle handle) {
+void ResourceManager::setName(std::string name, ImageHandle handle) {
 	Instance::Get().device.setDebugUtilsObjectNameEXT(
 		vk::DebugUtilsObjectNameInfoEXT {
 			.objectType = vk::ObjectType::eImage,
@@ -88,7 +88,7 @@ void ResourceManager::setName(std::string_view name, ImageHandle handle) {
 	);
 	m_imageNames[name] = handle;
 }
-void ResourceManager::setName(std::string_view name, BufferHandle handle) {
+void ResourceManager::setName(std::string name, BufferHandle handle) {
 	Instance::Get().device.setDebugUtilsObjectNameEXT(
 		vk::DebugUtilsObjectNameInfoEXT {
 			.objectType = vk::ObjectType::eBuffer,

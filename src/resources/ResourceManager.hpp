@@ -47,8 +47,8 @@ private:
 	std::unordered_map<uint32_t, Image> m_images;
 	std::unordered_map<uint32_t, Buffer> m_buffers;
 
-	std::unordered_map<std::string_view, ImageHandle> m_imageNames;
-	std::unordered_map<std::string_view, BufferHandle> m_bufferNames;
+	std::unordered_map<std::string, ImageHandle> m_imageNames;
+	std::unordered_map<std::string, BufferHandle> m_bufferNames;
 
 	std::vector<LinearAllocator> m_stagingAdditionalAllocators;
 	vk::CommandBuffer m_stagingCommandBuffer;
@@ -105,21 +105,21 @@ public:
 		return m_sharedAllocationAddresses.at(index);
 	}
 	ImageHandle getNamedImageIndex(std::string_view name) const {
-		return m_imageNames.at(name);
+		return m_imageNames.at(std::string(name));
 	}
 	BufferHandle getNamedBufferIndex(std::string_view name) const {
-		return m_bufferNames.at(name);
+		return m_bufferNames.at(std::string(name));
 	}
 
 	Image& getNamedImage(std::string_view name) {
-		return m_images.at(m_imageNames.at(name).value);
+		return m_images.at(m_imageNames.at(std::string(name)).value);
 	}
 	Buffer& getNamedBuffer(std::string_view name) {
-		return m_buffers.at(m_bufferNames.at(name).value);
+		return m_buffers.at(m_bufferNames.at(std::string(name)).value);
 	}
 
-	void setName(std::string_view name, ImageHandle image);
-	void setName(std::string_view name, BufferHandle buffer);
+	void setName(std::string name, ImageHandle image);
+	void setName(std::string name, BufferHandle buffer);
 
 	struct TextureInfo {
 		std::filesystem::path path;

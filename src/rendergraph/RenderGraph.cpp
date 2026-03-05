@@ -28,7 +28,7 @@ RenderGraph::RenderGraph(
 }
 
 ResourceIndex RenderGraph::createImage(
-	std::string_view name,
+	std::string name,
 	ResourceManager::ImageDescription desc,
 	uint8_t swapchainRatio
 ) {
@@ -43,21 +43,19 @@ ResourceIndex RenderGraph::createImage(
 	return index;
 }
 
-ResourceIndex RenderGraph::registerImage(
-	std::string_view name, ImageHandle image
-) {
+ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
 	ResourceIndex index = m_data.resourceNames.size();
 
 	m_data.resourceNames.push_back(name);
 	m_data.externalImages[index] = image;
-	m_resourceManager.setName(name, image);
+	m_resourceManager.setName(m_data.resourceNames[index], image);
 	m_data.finalUsages[index] = ResourceUsage::Type::Undefined;
 
 	return index;
 }
 
 ResourceIndex RenderGraph::createDeviceBuffer(
-	std::string_view name, ResourceManager::BufferDescription desc, bool shared
+	std::string name, ResourceManager::BufferDescription desc, bool shared
 ) {
 	ResourceIndex index = m_data.resourceNames.size();
 	m_data.buffers[index] = desc;
@@ -68,9 +66,7 @@ ResourceIndex RenderGraph::createDeviceBuffer(
 	return index;
 }
 
-ResourceIndex RenderGraph::createHostBuffer(
-	std::string_view name, uint32_t size
-) {
+ResourceIndex RenderGraph::createHostBuffer(std::string name, uint32_t size) {
 	ResourceIndex index = m_data.resourceNames.size();
 	m_data.localBufferSizes[index] = size;
 	m_data.resourceNames.push_back(name);
@@ -79,18 +75,18 @@ ResourceIndex RenderGraph::createHostBuffer(
 }
 
 ResourceIndex RenderGraph::registerBuffer(
-	std::string_view name, BufferHandle buffer
+	std::string name, BufferHandle buffer
 ) {
 	ResourceIndex index = m_data.resourceNames.size();
 
 	m_data.resourceNames.push_back(name);
 	m_data.externalBuffers[index] = buffer;
-	m_resourceManager.setName(name, buffer);
+	m_resourceManager.setName(m_data.resourceNames[index], buffer);
 	return index;
 }
 
 void RenderGraph::addTask(
-	std::string_view name,
+	std::string name,
 	TaskType type,
 	std::vector<ResourceDependency> inputResources,
 	std::vector<ResourceDependency> outputResources,
@@ -99,7 +95,6 @@ void RenderGraph::addTask(
 ) {
 	TaskIndex index = m_data.tasks.size();
 
-	m_data.resourceNames.push_back(name);
 	uint32_t offset = m_data.taskDependencies.size();
 	uint8_t inputSize = inputResources.size();
 	m_data.taskData.push_back(
