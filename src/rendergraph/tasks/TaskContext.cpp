@@ -53,7 +53,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.dstBinding = bindingCount,
 					.descriptorCount = 1,
 					.descriptorType =
-						ResourceUsage::getDescriptorType(usage, false).value(),
+						ResourceUsage::GetDescriptorType(usage, false).value(),
 					.pImageInfo = &resources._imageInfo.back(),
 				}
 			);
@@ -73,7 +73,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.dstBinding = bindingCount,
 					.descriptorCount = 1,
 					.descriptorType =
-						ResourceUsage::getDescriptorType(usage, true).value(),
+						ResourceUsage::GetDescriptorType(usage, true).value(),
 					.pBufferInfo = &resources._bufferInfo.back(),
 				}
 			);
@@ -102,7 +102,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.dstBinding = bindingCount,
 					.descriptorCount = 1,
 					.descriptorType =
-						ResourceUsage::getDescriptorType(usage, false).value(),
+						ResourceUsage::GetDescriptorType(usage, false).value(),
 					.pImageInfo = &resources._imageInfo.back(),
 				}
 			);
@@ -122,7 +122,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.dstBinding = bindingCount,
 					.descriptorCount = 1,
 					.descriptorType =
-						ResourceUsage::getDescriptorType(usage, true).value(),
+						ResourceUsage::GetDescriptorType(usage, true).value(),
 					.pBufferInfo = &resources._bufferInfo.back(),
 				}
 			);

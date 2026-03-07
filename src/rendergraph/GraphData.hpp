@@ -23,8 +23,6 @@ struct GraphData {
 
 		ResourceDependencySpan inputs;
 		ResourceDependencySpan outputs;
-
-		FeatureIndex feature;
 	};
 
 	std::unordered_map<ResourceIndex, uint8_t> swapchainImageRatio;
