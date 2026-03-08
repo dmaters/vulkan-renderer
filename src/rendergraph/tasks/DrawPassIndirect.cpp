@@ -80,7 +80,7 @@ void DrawPassIndirect(
 
 	context.commandBuffer.drawIndexedIndirect(
 		indirectBuffer.buffer,
-		indirectBuffer.allocation.size / 3 * (context.currentFrame % 3),
+		(indirectBuffer.allocation.size / 3) * (context.currentFrame % 3),
 		primitives.size(),
 		sizeof(vk::DrawIndexedIndirectCommand)
 	);
