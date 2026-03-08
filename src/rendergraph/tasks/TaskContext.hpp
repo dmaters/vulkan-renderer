@@ -21,13 +21,13 @@ struct TaskContext {
 	T getInput(uint32_t index);
 
 	template <typename T>
-	std::span<T> getInputSpan(uint32_t index, bool perFrame = false);
+	std::span<T> getInputSpan(uint32_t index);
 
 	template <typename T>
 	T getOutput(uint32_t index);
 
 	template <typename T>
-	std::span<T> getOutputSpan(uint32_t index, bool perFrame = false);
+	std::span<T> getOutputSpan(uint32_t index);
 
 	struct Descriptors {
 		std::vector<vk::DescriptorImageInfo> _imageInfo = {};
@@ -53,9 +53,9 @@ T TaskContext::getInput(uint32_t index) {
 }
 
 template <typename T>
-std::span<T> TaskContext::getInputSpan(uint32_t index, bool perFrame) {
+std::span<T> TaskContext::getInputSpan(uint32_t index) {
 	Buffer& buffer = resourceManager.getBuffer(buffers[inputs[index].first]);
-	if (perFrame)
+	if (buffer.data != nullptr)
 		return std::span<T>(
 			reinterpret_cast<T*>(
 				static_cast<std::byte*>(buffer.data) +
@@ -86,10 +86,10 @@ T TaskContext::getOutput(ResourceIndex index) {
 }
 
 template <typename T>
-std::span<T> TaskContext::getOutputSpan(uint32_t index, bool perFrame) {
+std::span<T> TaskContext::getOutputSpan(uint32_t index) {
 	Buffer& buffer = resourceManager.getBuffer(buffers[outputs[index].first]);
 
-	if (perFrame)
+	if (buffer.data != nullptr)
 		return std::span<T>(
 			reinterpret_cast<T*>(
 				static_cast<std::byte*>(buffer.data) +

@@ -47,11 +47,11 @@ void DrawPassIndirect(
 
 	auto indirectBufferValues =
 		context.getInputSpan<vk::DrawIndexedIndirectCommand>(
-			indirectBufferIndex, true
+			indirectBufferIndex
 		);
 
 	auto primitiveBufferValues =
-		context.getInputSpan<uint32_t>(primitiveBufferIndex, true);
+		context.getInputSpan<uint32_t>(primitiveBufferIndex);
 
 	context.commandBuffer.pushConstants(
 		material.pipelineLayout,
@@ -80,7 +80,7 @@ void DrawPassIndirect(
 
 	context.commandBuffer.drawIndexedIndirect(
 		indirectBuffer.buffer,
-		indirectBuffer.size / 3 * (context.currentFrame % 3),
+		(indirectBuffer.allocation.size / 3) * (context.currentFrame % 3),
 		primitives.size(),
 		sizeof(vk::DrawIndexedIndirectCommand)
 	);

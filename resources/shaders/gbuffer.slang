@@ -35,7 +35,6 @@ struct VertexOutput {
 [vk_binding(1)] StructuredBuffer<PrimitiveInstance> _materialData;
 [vk_binding(2)] StructuredBuffer<uint32_t> _materialMap;
 [vk_binding(3)] StructuredBuffer<uint32_t> _drawPrimitiveMap;
-[vk_push_constant] uint32_t _primitiveID;
 
 
 struct FragmentOutput {
@@ -61,7 +60,7 @@ float3 reconstructNormal(float2 xy) {
 }
 
 [shader("fragment")] FragmentOutput main_fs_alpha(VertexOutput input) {
-    return output<true>(input,_primitiveID);
+    return output<true>(input,_drawPrimitiveMap[input.drawIndex]);
 }
 [shader("fragment")] FragmentOutput main_fs(VertexOutput input) {
     return output<false>(input,_drawPrimitiveMap[input.drawIndex]);
