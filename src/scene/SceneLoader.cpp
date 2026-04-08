@@ -149,21 +149,21 @@ SceneLoader::MaterialData SceneLoader::loadMaterials(
 	textures.push_back(
 		{
 			"resources/textures/default_albedo.png",
-			vk::Format::eR8G8B8A8Srgb,
+			ResourceManager::TextureInfo::TextureType::Albedo,
 		}
 	);
 
 	textures.push_back(
 		{
 			"resources/textures/default_normal.png",
-			vk::Format::eR8G8Unorm,
+			ResourceManager::TextureInfo::TextureType::Normal,
 		}
 	);
 
 	textures.push_back(
 		{
 			"resources/textures/default_metallicRoughness.png",
-			vk::Format::eR8G8B8A8Unorm,
+			ResourceManager::TextureInfo::TextureType::MetallicRoughness,
 		}
 	);
 
@@ -180,7 +180,7 @@ SceneLoader::MaterialData SceneLoader::loadMaterials(
 			textures.push_back(
 				{
 					texturePath / std::filesystem::path(path.C_Str()),
-					vk::Format::eR8G8B8A8Srgb,
+					ResourceManager::TextureInfo::TextureType::Albedo,
 				}
 			);
 			instance.albedoTexture = imageCount++;
@@ -206,7 +206,7 @@ SceneLoader::MaterialData SceneLoader::loadMaterials(
 			textures.push_back(
 				{
 					texturePath / std::filesystem::path(path.C_Str()),
-					vk::Format::eR8G8Unorm,
+					ResourceManager::TextureInfo::TextureType::Normal,
 				}
 			);
 			instance.normalTexture = imageCount++;
@@ -220,7 +220,8 @@ SceneLoader::MaterialData SceneLoader::loadMaterials(
 			textures.push_back(
 				{
 					texturePath / std::filesystem::path(path.C_Str()),
-					vk::Format::eR8G8B8A8Unorm,
+					ResourceManager::TextureInfo::TextureType::
+						MetallicRoughness,
 				}
 			);
 			instance.roughnessMetallicTexture = imageCount++;

@@ -115,7 +115,23 @@ public:
 
 	struct TextureInfo {
 		std::filesystem::path path;
-		vk::Format expectedFormat;
+
+		enum class TextureType {
+			Albedo,
+			Normal,
+			MetallicRoughness
+		};
+		TextureType textureType;
+
+		vk::Format getFormat() const {
+			switch (textureType) {
+				case TextureType::Albedo:
+					return vk::Format::eBc1RgbaSrgbBlock;
+				case TextureType::Normal:
+				case TextureType::MetallicRoughness:
+					return vk::Format::eBc5UnormBlock;
+			}
+		}
 	};
 
 	DeviceAllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);

@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <texture_compressor/compression.hpp>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -332,8 +333,28 @@ enum ChannelsValues : uint8_t {
 typedef uint8_t Channels;
 
 void loadImage(
-	std::filesystem::path &path, std::byte *stagingAddress, Channels channels
+	std::filesystem::path &path,
+	std::byte *stagingAddress,
+	ResourceManager::TextureInfo::TextureType textureType
 ) {
+	Channels channels = 0;
+	switch (textureType) {
+		case ResourceManager::TextureInfo::TextureType::Albedo:
+			channels = (ChannelsValues::R) | (ChannelsValues::G) |
+			           (ChannelsValues::B) | (ChannelsValues::A);
+			break;
+		case ResourceManager::TextureInfo::TextureType::Normal:
+			channels = (ChannelsValues::R) | (ChannelsValues::G);
+			break;
+		case ResourceManager::TextureInfo::TextureType::MetallicRoughness:
+			channels = (ChannelsValues::G) | (ChannelsValues::B);
+			break;
+		default:
+			channels = (ChannelsValues::R) | (ChannelsValues::G) |
+			           (ChannelsValues::B) | (ChannelsValues::A);
+			break;
+	}
+
 	int x, y, c;
 
 	std::byte *data =
@@ -346,25 +367,39 @@ void loadImage(
 	if (channels & ChannelsValues::B) channelCount++;
 	if (channels & ChannelsValues::A) channelCount++;
 
+	std::vector<std::byte> uncompressedData(x * y * channelCount);
+
 	for (int i = 0; i < x * y; i++) {
 		uint8_t texelOffset = 0;
 		if (channels & ChannelsValues::R) {
-			stagingAddress[i * channelCount] = data[i * 4];
+			uncompressedData[i * channelCount] = data[i * 4];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::G) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 1];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 1];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::B) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 2];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 2];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::A) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 3];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 3];
 			texelOffset++;
 		}
 	}
+
+	texture_compressor::Format format;
+	if (textureType == ResourceManager::TextureInfo::TextureType::Normal ||
+	    textureType ==
+	        ResourceManager::TextureInfo::TextureType::MetallicRoughness)
+		format = texture_compressor::Format::BC5;
+	else
+		format = texture_compressor::Format::BC1_ALPHA;
+
+	texture_compressor::compress(
+		x, y, format, uncompressedData.data(), stagingAddress
+	);
 
 	stbi_image_free(data);
 }
@@ -388,9 +423,9 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 				.width = (uint32_t)x,
 				.height = (uint32_t)y,
 				.depth = 1,
-				.miplevels =
-					(uint32_t)(std::floor(std::log2(std::max(x, y))) + 1),
-				.format = info.expectedFormat,
+				.miplevels = 1,
+				//	(uint32_t)(std::floor(std::log2(std::max(x, y))) + 1),
+				.format = info.getFormat(),
 				.usage = vk::ImageUsageFlagBits::eSampled |
 		                 vk::ImageUsageFlagBits::eTransferSrc |
 		                 vk::ImageUsageFlagBits::eTransferDst,
@@ -451,10 +486,6 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 
 		vk::MemoryRequirements requirements =
 			device.getImageMemoryRequirements(image.image);
-		Channels expectedChannels =
-			image.format == vk::Format::eR8G8Unorm
-				? (ChannelsValues::R | ChannelsValues::G)
-				: (0xff);
 
 		SubAllocation stagingAllocation = stagingAllocator.subAllocate(
 			{
@@ -465,18 +496,16 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 
 		std::byte *address =
 			stagingAllocator.getAllocation().address + stagingAllocation.offset;
-		threads.emplace_back(
-			[&path = textures[i].path, address, expectedChannels]() {
-				loadImage(path, address, expectedChannels);
-			}
-		);
+		threads.emplace_back([&textures, i, address]() {
+			loadImage(textures[i].path, address, textures[i].textureType);
+		});
 
 		copyToImage(
 			stagingBuffer,
 			image.image,
 			{
 				.bufferOffset = stagingAllocation.offset,
-				.bufferRowLength  = (uint32_t)image.size.width,
+				.bufferRowLength  = 0,
 				.imageSubresource = { .aspectMask =
 		                                vk::ImageAspectFlagBits::eColor,
 									.layerCount = 1,
@@ -485,15 +514,10 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 			 },
 			 transferBuffer
 		);
-
-		writeMipMaps(
-			image.image, image.size, textureDesc[i].miplevels, mipmapBuffer
-		);
 	}
 	transferBuffer.end();
 	m_stagingCommandBuffer.executeCommands(transferBuffer);
 
-	mipmapBuffer.end();
 	for (auto &thread : threads) thread.join();
 
 	sync();

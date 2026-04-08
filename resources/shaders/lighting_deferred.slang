@@ -39,7 +39,7 @@ struct VertexOutput {
 	float2 roughnessMetallic =
 		_roughness_metallic
 			.Sample(_samplers[SamplerType::LinearClamp], input.frag_position)
-			.gb;
+			.rg;
 
 	float shadowPercentage = Shadow::shadowPercentage(
 		_shadow_map, fragPos.xyz, normal.xyz, _camera, _lightData
