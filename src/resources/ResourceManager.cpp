@@ -178,7 +178,6 @@ void copyToImage(
 	std::vector<vk::BufferImageCopy> offsets,
 	vk::CommandBuffer &commandBuffer
 ) {
-
 	vk::ImageMemoryBarrier2 barrier {
         .dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
@@ -200,10 +199,7 @@ void copyToImage(
 		}
 	);
 	commandBuffer.copyBufferToImage(
-		origin,
-		destination,
-		vk::ImageLayout::eTransferDstOptimal,
-		{ offsets }
+		origin, destination, vk::ImageLayout::eTransferDstOptimal, { offsets }
 	);
 }
 
@@ -311,6 +307,49 @@ void loadImage(
 	stbi_image_free(data);
 }
 
+std::vector<vk::BufferImageCopy> getImageCopyInfo(
+	const Image &image,
+	ResourceManager::TextureInfo::TextureType textureType,
+	uint32_t stagingOffset
+) {
+	std::vector<vk::BufferImageCopy> copyInfos;
+	uint32_t baseOffset = 0;
+
+	for (uint32_t m = 0; m < image.mipLevels; m++) {
+		uint32_t mipWidth = std::max(1u, image.size.width >> m);
+		uint32_t mipHeight = std::max(1u, image.size.height >> m);
+
+		uint32_t blockWidth = (mipWidth + 3) / 4;
+		uint32_t blockHeight = (mipHeight + 3) / 4;
+
+		uint8_t blockSize = 0;
+		if (textureType == ResourceManager::TextureInfo::TextureType::Albedo)
+			blockSize = 8;
+		else
+			blockSize = 16;
+
+		uint32_t mipSize = blockWidth * blockHeight * blockSize;
+
+		copyInfos.push_back({
+      			.bufferOffset = stagingOffset + baseOffset,
+      			.bufferRowLength  = 0,
+      			.imageSubresource = {
+            	        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                      .mipLevel = m,
+      				.layerCount = 1,
+                  },
+      	        .imageExtent = {
+					.width = mipWidth,
+					.height = mipHeight,
+					.depth = 1
+				},
+      		 });
+
+		baseOffset += mipSize;
+	}
+	return copyInfos;
+}
+
 ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 	std::vector<TextureInfo> textures
 ) {
@@ -325,7 +364,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 		int32_t x, y, channels;
 		stbi_info(info.path.string().c_str(), &x, &y, &channels);
 
-		uint32_t mipLevels = std::floor(std::log2(std::min(x,y))) + 1;
+		uint32_t mipLevels = std::floor(std::log2(std::min(x, y))) + 1;
 		mipLevels = mipLevels < 3 ? 1 : mipLevels - 2;
 
 		textureDesc.push_back(
@@ -372,10 +411,8 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 		}
 	)[0];
 
-	vk::CommandBufferInheritanceInfo inheritanceInfo {};
 	vk::CommandBufferBeginInfo beginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-		.pInheritanceInfo = &inheritanceInfo,
 	};
 
 	transferBuffer.begin(beginInfo);
@@ -383,7 +420,6 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 	std::vector<std::thread> threads;
 
 	for (int i = 0; i < textures.size(); i++) {
-
 		Image &image =
 			m_images[m_deviceAllocatedImages[allocationIndex][i].value];
 
@@ -397,58 +433,25 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 			}
 		);
 
-		uint32_t mipLevels = std::floor(std::log2(std::min(image.size.width, image.size.height))) + 1;
-		mipLevels = mipLevels < 3 ? 1 : mipLevels - 2;
-
 		std::byte *address =
 			stagingAllocator.getAllocation().address + stagingAllocation.offset;
-		threads.emplace_back([&textures, i, address, mipLevels]() {
-			loadImage(textures[i].path, address, textures[i].textureType, mipLevels);
+
+		threads.emplace_back([&textures,
+		                      i,
+		                      address,
+		                      mipLevels = image.mipLevels]() {
+			loadImage(
+				textures[i].path, address, textures[i].textureType, mipLevels
+			);
 		});
 
-		std::vector<vk::BufferImageCopy> copyInfos;
-		uint32_t baseOffset = 0;
-
-		for(uint32_t m = 0; m < mipLevels; m++){
-
-		    uint32_t mipWidth  = std::max(1u, image.size.width  >> m);
-			uint32_t mipHeight = std::max(1u, image.size.height >> m);
-
-            uint32_t blockWidth = (mipWidth  + 3) / 4;
-            uint32_t blockHeight = (mipHeight + 3) / 4;
-
-            uint8_t blockSize = 0;
-           	if(textures[i].textureType == TextureInfo::TextureType::Albedo)
-                blockSize = 8;
-            else
-                blockSize = 16;
-
-            uint32_t mipSize = blockWidth * blockHeight * blockSize;
-
-		    copyInfos.push_back({
-    			.bufferOffset = stagingAllocation.offset + baseOffset,
-    			.bufferRowLength  = 0,
-    			.imageSubresource = {
-          	        .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .mipLevel = m,
-    				.layerCount = 1,
-                },
-    	        .imageExtent = {
-					.width = mipWidth,
-					.height = mipHeight,
-					.depth = 1
-				},
-    		 });
-
-			baseOffset += mipSize;
-		}
-		copyToImage(
-			stagingBuffer,
-			image.image,
-			copyInfos,
-		    transferBuffer
+		auto imageCopyInfos = getImageCopyInfo(
+			image, textures[i].textureType, stagingAllocation.offset
 		);
+
+		copyToImage(stagingBuffer, image.image, imageCopyInfos, transferBuffer);
 	}
+
 	transferBuffer.end();
 
 	for (auto &thread : threads) thread.join();
@@ -526,6 +529,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
                      description.height,
                      description.depth,
 					},
+			.mipLevels = description.miplevels,
 		};
 
 		m_deviceAllocatedImages[allocIndex].push_back(handle);

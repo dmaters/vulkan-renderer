@@ -36,6 +36,27 @@ public:
 	using DeviceAllocationIndex = uint32_t;
 	using HostAllocationIndex = uint32_t;
 
+	struct TextureInfo {
+		std::filesystem::path path;
+
+		enum class TextureType {
+			Albedo,
+			Normal,
+			MetallicRoughness
+		};
+		TextureType textureType;
+
+		vk::Format getFormat() const {
+			switch (textureType) {
+				case TextureType::Albedo:
+					return vk::Format::eBc1RgbaSrgbBlock;
+				case TextureType::Normal:
+				case TextureType::MetallicRoughness:
+					return vk::Format::eBc5UnormBlock;
+			}
+		}
+	};
+
 private:
 	vk::Semaphore m_semaphore;
 	uint64_t m_transferCount = 0;
@@ -112,27 +133,6 @@ public:
 
 	void setName(std::string name, ImageHandle image);
 	void setName(std::string name, BufferHandle buffer);
-
-	struct TextureInfo {
-		std::filesystem::path path;
-
-		enum class TextureType {
-			Albedo,
-			Normal,
-			MetallicRoughness
-		};
-		TextureType textureType;
-
-		vk::Format getFormat() const {
-			switch (textureType) {
-				case TextureType::Albedo:
-					return vk::Format::eBc1RgbaSrgbBlock;
-				case TextureType::Normal:
-				case TextureType::MetallicRoughness:
-					return vk::Format::eBc5UnormBlock;
-			}
-		}
-	};
 
 	DeviceAllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);
 	DeviceAllocationIndex createResources(
