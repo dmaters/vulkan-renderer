@@ -499,4 +499,17 @@ void MaterialManager::registerMaterials() {
 			vk::DescriptorType::eStorageImage,
 		}
 	);
+	registerGraphicMaterial(
+		"fxaa",
+		{
+			.vertex = { "resources/shaders/quad_vert.slang" },
+			.fragment = { "resources/shaders/fxaa.slang" },
+		},
+		{
+			.colorAttachmentFormats = { vk::Format::eR8G8B8A8Unorm },
+		},
+		{
+			vk::DescriptorType::eSampledImage,
+		}
+	);
 }
