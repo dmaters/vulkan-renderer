@@ -583,16 +583,29 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	ResourceIndex result = m_graph.createImage(
-		"result",
+	ResourceIndex tonemapped = m_graph.createImage(
+		"tonemapped",
 		{
 			.width = 1280,
 			.height = 720,
 			.depth = 1,
 			.miplevels = 1,
-			.format = vk::Format::eR8G8B8A8Snorm,
+			.format = vk::Format::eR8G8B8A8Unorm,
 			.usage = vk::ImageUsageFlagBits::eStorage |
-	                 vk::ImageUsageFlagBits::eColorAttachment |
+	                 vk::ImageUsageFlagBits::eSampled,
+
+		},
+		1
+	);
+	ResourceIndex final = m_graph.createImage(
+		"final",
+		{
+			.width = 1280,
+			.height = 720,
+			.depth = 1,
+			.miplevels = 1,
+			.format = vk::Format::eR8G8B8A8Unorm,
+			.usage = vk::ImageUsageFlagBits::eColorAttachment |
 	                 vk::ImageUsageFlagBits::eTransferSrc,
 
 		},
@@ -605,7 +618,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			{ hdr_output, ResourceUsage::Type::ShaderRead },
     },
 		{
-			{ result, ResourceUsage::Type::ShaderWrite },
+			{ tonemapped, ResourceUsage::Type::ShaderWrite },
 		},
 		[composition = m_materialManager.getMaterialIndex("composition")](
 			TaskContext& context
@@ -621,12 +634,30 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 	m_graph.addTask(
+		"fxaa",
+		TaskType::Graphic,
+		{
+			{ tonemapped, ResourceUsage::Type::SampledRead },
+    },
+		{
+			{ final, ResourceUsage::Type::ColorAttachmentWrite },
+		},
+		[material =
+	         m_materialManager.getMaterialIndex("fxaa")](TaskContext& context) {
+			RenderPassBegin(
+				context, AttachmentOp::ClearWrite, AttachmentOp::Read
+			);
+			DrawPass(context, material, context.scene.buckets.at(material));
+			RenderPassEnd(context);
+		}
+	);
+	m_graph.addTask(
 		"UI",
 		TaskType::Graphic,
 		{
     },
 		{
-			{ result, ResourceUsage::Type::ColorAttachmentWrite },
+			{ final, ResourceUsage::Type::ColorAttachmentWrite },
 		},
 		[](TaskContext& context) {
 			RenderPassBegin(
@@ -636,5 +667,5 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
-	m_graph.setOutputImage(result);
+	m_graph.setOutputImage(final);
 }

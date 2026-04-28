@@ -452,6 +452,9 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
 	scene.buckets[skybox].push_back(scene.primitives.size() - 1);
 
+	MaterialIndex fxaa = m_materialManager.getMaterialIndex("fxaa");
+	scene.buckets[fxaa].push_back(scene.primitives.size() - 1);
+
 	scene.camera.setFov(70);
 
 	return scene;
