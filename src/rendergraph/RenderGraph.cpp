@@ -55,6 +55,7 @@ ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
 ResourceIndex RenderGraph::createDeviceBuffer(
 	std::string name, ResourceManager::BufferDescription desc, bool shared
 ) {
+	assert(desc.size > 0);
 	ResourceIndex index = m_data.resourceNames.size();
 	m_data.buffers[index] = desc;
 	m_data.resourceNames.push_back(name);
