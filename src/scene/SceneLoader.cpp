@@ -411,6 +411,9 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	MaterialIndex shadowMapAlphaTestedMaterial =
 		m_materialManager.getMaterialIndex("shadowmap_alphatested");
 
+	scene.buckets[gbufferAlphaTestedMaterial] = {};
+	scene.buckets[shadowMapAlphaTestedMaterial] = {};
+
 	for (int i = 0; i < scene.primitives.size(); i++) {
 		if (materialData.alphaTestedInstances.contains(materialInstances[i])) {
 			scene.buckets[gbufferAlphaTestedMaterial].push_back(i);
