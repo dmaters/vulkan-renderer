@@ -44,9 +44,16 @@ struct GraphData {
 
 struct ExecutionInfo {
 	std::vector<TaskIndex> tasks;
-	std::vector<GraphData::TaskData> data;
-	std::vector<Task> barriers;
-	Task initializationTask;
+
+	struct Barrier {
+		ResourceUsage::Type lastUsage;
+		ResourceUsage::Type currentUsage;
+		ResourceIndex index;
+	};
+	std::vector<Barrier> barriers;
+	std::vector<std::size_t> barrierOffsets;
+
+	std::vector<Barrier> initializationBarriers;
 	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
 };
 

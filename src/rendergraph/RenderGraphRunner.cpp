@@ -203,6 +203,78 @@ void RenderGraphRunner::outputToSwapchain(
     }
 	);
 }
+
+void writeBarrier(
+	vk::CommandBuffer commandBuffer,
+	std::span<const ExecutionInfo::Barrier> barriers,
+	std::unordered_map<ResourceIndex, ImageHandle>& images,
+	std::unordered_map<ResourceIndex, BufferHandle>& buffers,
+	ResourceManager& resourceManager
+) {
+	if (barriers.size() == 0) return;
+
+	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
+	imageBarriers.reserve(barriers.size());
+	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
+	bufferBarriers.reserve(barriers.size());
+
+	for (ExecutionInfo::Barrier barrier : barriers) {
+		ResourceUsage::Access previousAccess =
+			ResourceUsage::GetAccess(barrier.lastUsage);
+
+		ResourceUsage::Access currentAccess =
+			ResourceUsage::GetAccess(barrier.lastUsage);
+
+		if (images.contains(barrier.index)) {
+			Image& image = resourceManager.getImage(images.at(barrier.index));
+
+			imageBarriers.push_back(
+			    {
+					.srcStageMask = previousAccess.stage,
+					.srcAccessMask = previousAccess.access,
+					.dstStageMask = currentAccess.stage,
+					.dstAccessMask = currentAccess.access,
+					.oldLayout = previousAccess.layout,
+					.newLayout = currentAccess.layout,
+					.image = image.image,
+					.subresourceRange = {
+										 .aspectMask = image.getAspectFlags(),
+										 .levelCount = 1,
+										 .layerCount = 1,
+					},
+                }
+			);
+		} else {
+			Buffer& buffer =
+				resourceManager.getBuffer(buffers.at(barrier.index));
+
+			bufferBarriers.push_back(
+				{
+					.srcStageMask = previousAccess.stage,
+					.srcAccessMask = previousAccess.access,
+					.dstStageMask = currentAccess.stage,
+					.dstAccessMask = currentAccess.access,
+					.buffer = buffer.buffer,
+					.offset = 0,
+					.size = static_cast<uint32_t>(buffer.size),
+				}
+			);
+		}
+
+		commandBuffer.pipelineBarrier2(
+			vk::DependencyInfo {
+				.bufferMemoryBarrierCount =
+					static_cast<uint32_t>(bufferBarriers.size()),
+				.pBufferMemoryBarriers = bufferBarriers.data(),
+				.imageMemoryBarrierCount =
+					static_cast<uint32_t>(imageBarriers.size()),
+				.pImageMemoryBarriers = imageBarriers.data(),
+
+			}
+		);
+	}
+}
+
 void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
 	m_output = output;
 	m_execInfo = execInfo;
@@ -210,16 +282,16 @@ void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
 
 	vk::Device device = Instance::Get().device;
 
+	uint32_t queryCount =
+		static_cast<uint32_t>(execInfo.tasks.size() * 3 * 2 + 6);
 	// TODO: Dispose of old query pool to reduce leaks
 	m_debugQueryPool = device.createQueryPool(
 		vk::QueryPoolCreateInfo {
-			.flags = vk::QueryPoolCreateFlagBits::eResetKHR,
 			.queryType = vk::QueryType::eTimestamp,
-			.queryCount = static_cast<uint32_t>(
-				(execInfo.tasks.size() - execInfo.barriers.size()) * 3 * 2 + 6
-			),
+			.queryCount = queryCount,
 		}
 	);
+	device.resetQueryPool(m_debugQueryPool, 0, queryCount);
 }
 
 bool RenderGraphRunner::updateTimings() const {
@@ -227,9 +299,7 @@ bool RenderGraphRunner::updateTimings() const {
 
 	vk::Device device = Instance::Get().device;
 	uint8_t currentFrameInFlight = m_currentFrame % 3;
-	uint32_t baseTaskCount =
-		(m_execInfo.tasks.size() - m_execInfo.barriers.size());
-	uint32_t timestampsCount = (baseTaskCount) * 2 + 2;
+	uint32_t timestampsCount = m_execInfo.tasks.size() * 2 + 2;
 
 	std::vector<uint64_t> timestamps(timestampsCount);
 	vk::Result result = device.getQueryPoolResults(
@@ -332,11 +402,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 	bool timingFetched =
 		updateTimings();  // Get last frame timings and reset queryPool
 
-	uint32_t totalTaskCount = m_data.tasks.size();
-	uint32_t baseTaskCount =
-		m_execInfo.tasks.size() - m_execInfo.barriers.size();
-
-	uint32_t timestampsCount = baseTaskCount * 2 + 2;
+	uint32_t timestampsCount = m_execInfo.tasks.size() * 2 + 2;
 
 	// Begin Frame
 	vk::CommandBufferAllocateInfo commandInfo;
@@ -361,28 +427,20 @@ void RenderGraphRunner::submit(const Scene& scene) {
 
 	if (!m_initialized) {
 		m_initialized = true;
-		auto _ = std::span<const ResourceDependency>();
-		std::unordered_map<ResourceIndex, uint32_t> _2;
-		TaskContext context {
-			.commandBuffer = commandBuffer,
-			.inputs = _,
-			.outputs = _,
-			.images = m_images,
-			.buffers = m_buffers,
-			.currentFrame = m_currentFrame,
-			.resourceManager = m_resourceManager,
-			.materialManager = m_materialManager,
-			.scene = scene,
-		};
-		m_execInfo.initializationTask(context);
+
+		writeBarrier(
+			commandBuffer,
+			m_execInfo.initializationBarriers,
+			m_images,
+			m_buffers,
+			m_resourceManager
+		);
 	}
 
-	uint32_t timestampOffset = 2;
+	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
+		uint32_t taskIndex = m_execInfo.tasks[i];
+		GraphData::TaskData taskData = m_data.taskData[taskIndex];
 
-	for (auto taskIndex : m_execInfo.tasks) {
-		auto taskData = taskIndex < totalTaskCount
-		                    ? m_data.taskData[taskIndex]
-		                    : m_execInfo.data[taskIndex - totalTaskCount];
 		auto inputs = std::span<const ResourceDependency>(
 			m_data.taskDependencies.data() + taskData.inputs.offset,
 			m_data.taskDependencies.data() + taskData.inputs.offset +
@@ -407,10 +465,20 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			.scene = scene,
 		};
 
-		if (taskIndex >= totalTaskCount) {  // Is a barrier task
-			m_execInfo.barriers[taskIndex - totalTaskCount](context);
-			continue;
-		}
+		uint32_t barrierOffset = m_execInfo.barrierOffsets[i * 2];
+		uint32_t barrierCount =
+			m_execInfo.barrierOffsets[i * 2 + 1] - barrierOffset;
+
+		if (barrierCount > 0)
+			writeBarrier(
+				commandBuffer,
+				std::span<const ExecutionInfo::Barrier>(
+					m_execInfo.barriers.data() + barrierOffset, barrierCount
+				),
+				m_images,
+				m_buffers,
+				m_resourceManager
+			);
 
 		commandBuffer.beginDebugUtilsLabelEXT(
 			{
@@ -421,7 +489,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			commandBuffer.writeTimestamp(
 				vk::PipelineStageFlagBits::eTopOfPipe,
 				m_debugQueryPool,
-				timestampOffset + timestampsCount * currentFrameInFlight
+				i * 2 + timestampsCount * currentFrameInFlight
 			);
 
 		m_data.tasks[taskIndex](context);
@@ -430,11 +498,9 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			commandBuffer.writeTimestamp(
 				vk::PipelineStageFlagBits::eBottomOfPipe,
 				m_debugQueryPool,
-				timestampOffset + timestampsCount * currentFrameInFlight + 1
+				i * 2 + timestampsCount * currentFrameInFlight + 1
 			);
 		commandBuffer.endDebugUtilsLabelEXT();
-
-		timestampOffset += 2;
 	}
 
 	outputToSwapchain(commandBuffer, m_output, imageIndex);

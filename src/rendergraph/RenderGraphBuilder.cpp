@@ -12,28 +12,13 @@
 
 #include "GraphData.hpp"
 #include "ResourceUsage.hpp"
-#include "tasks/MemoryBarrier.hpp"
 #include "tasks/Task.hpp"
 #include "tasks/TaskContext.hpp"
 
 using namespace rendergraph::internal;
 
-struct RenderGraphBuilder::Barrier {
-	std::optional<GraphData::TaskData> taskData;
-	std::optional<Task> task;
-	std::unordered_set<uint32_t> previousTasks;
-};
-
 struct RenderGraphBuilder::ResourceAccess {
-	struct Barrier {
-		vk::PipelineStageFlags2 dstStageMask;
-		vk::AccessFlags2 dstAccessMask;
-		vk::ImageLayout newLayout;
-		vk::PipelineStageFlags2 srcStageMask;
-		vk::AccessFlags2 srcAccessMask;
-		vk::ImageLayout oldLayout;
-	};
-	std::optional<Barrier> barrier;
+	std::optional<ExecutionInfo::Barrier> barrier;
 	uint32_t task;
 	bool isTaskPreviousSubmission;
 };
@@ -57,9 +42,6 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 	ResourceUsage::Type currentUsage =
 		resourceDependencies[currentUsageIndex].usage;
 
-	auto [currentStage, currentAccess, currentLayout] =
-		ResourceUsage::GetAccess(currentUsage);
-
 	for (int i = 1; i <= taskCount; i++) {
 		int previousUsageIndex =
 			(taskCount + (currentUsageIndex - i)) % taskCount;
@@ -71,21 +53,14 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 		    ResourceUsage::IsReadAccess(currentUsage))
 			continue;
 
-		auto [previousStage, previousAccess, previousLayout] =
-			ResourceUsage::GetAccess(
-				resourceDependencies[previousUsageIndex].usage
-			);
+		ExecutionInfo::Barrier barrier = {
+			.lastUsage = previousUsage,
+			.currentUsage = currentUsage,
+			.index = resourceIndex,
+		};
 
 		return ResourceAccess {
-			.barrier =
-				ResourceAccess::Barrier {
-										 .dstStageMask = currentStage,
-										 .dstAccessMask = currentAccess,
-										 .newLayout = currentLayout,
-										 .srcStageMask = previousStage,
-										 .srcAccessMask = previousAccess,
-										 .oldLayout = previousLayout,
-										 },
+			.barrier = barrier,
 			.task = resourceDependencies[previousUsageIndex].taskIndex,
 			.isTaskPreviousSubmission = previousUsageIndex >= currentUsageIndex,
 		};
@@ -97,12 +72,9 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 	};
 }
 
-RenderGraphBuilder::Barrier RenderGraphBuilder::getBarrier(
-	uint32_t taskIndex
-) const {
-	std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2> imageBarriers;
-	std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2> bufferBarriers;
-
+std::pair<std::vector<ExecutionInfo::Barrier>, std::unordered_set<uint32_t>>
+RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
+	std::vector<ExecutionInfo::Barrier> barriers;
 	std::unordered_set<uint32_t> previousTasks;
 
 	auto [inputOffset, inputCount] = m_data.taskData[taskIndex].inputs;
@@ -115,24 +87,7 @@ RenderGraphBuilder::Barrier RenderGraphBuilder::getBarrier(
 
 		if (!access.isTaskPreviousSubmission && access.task != taskIndex)
 			previousTasks.insert(access.task);
-
-		if (m_data.images.contains(index)) {
-			imageBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-				.oldLayout = access.barrier->oldLayout,
-				.newLayout = access.barrier->newLayout,
-			};
-		} else {
-			bufferBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-			};
-		}
+		barriers.push_back(*access.barrier);
 	}
 	auto [outputOffset, outputCount] = m_data.taskData[taskIndex].outputs;
 	for (int i = outputOffset; i < outputOffset + outputCount; i++) {
@@ -144,44 +99,11 @@ RenderGraphBuilder::Barrier RenderGraphBuilder::getBarrier(
 
 		if (!access.isTaskPreviousSubmission && access.task != taskIndex)
 			previousTasks.insert(access.task);
-
-		if (m_data.images.contains(index)) {
-			imageBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-				.oldLayout = access.barrier->oldLayout,
-				.newLayout = access.barrier->newLayout,
-			};
-		} else {
-			bufferBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-			};
-		}
+		barriers.push_back(*access.barrier);
 	}
-	bool isBarrier = (!imageBarriers.empty() || !bufferBarriers.empty());
 	return {
-		.taskData = isBarrier ? std::optional<GraphData::TaskData>({
-									.type = TaskType::Graphic,
-									.name = "",
-									.inputs = {},
-									.outputs = {},
-								})
-		                      : std::nullopt,
-		.task = isBarrier ? std::optional<Task>([imageBarriers =
-		                                             std::move(imageBarriers),
-		                                         bufferBarriers = std::move(
-													 bufferBarriers
-												 )](TaskContext& context) {
-			MemoryBarrier(context, bufferBarriers, imageBarriers);
-		})
-		                  : std::nullopt,
-
-		.previousTasks = std::move(previousTasks),
+		barriers,
+		previousTasks,
 	};
 }
 
@@ -221,33 +143,26 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 	assert(m_dependencies.contains(outputImage));
 
 	std::stack<uint32_t> taskStack;
-	std::stack<std::string> debugStack;
 	std::unordered_set<uint32_t> visitedTasks;
 
 	std::unordered_set<ResourceIndex> referencedImages;
 
 	std::vector<TaskIndex> tasks;
-	std::vector<std::string> tasksDebug;
 
-	std::vector<GraphData::TaskData> barriersData;
-	std::vector<Task> barrierTasks;
-
-	uint32_t baseTaskOffset = m_data.tasks.size();
+	std::vector<ExecutionInfo::Barrier> barriers;
+	std::vector<std::size_t> barrierOffsets;
 
 	for (auto& taskDependency : m_dependencies.at(outputImage)) {
 		taskStack.push(taskDependency.taskIndex);
-		debugStack.push(m_data.taskData[taskDependency.taskIndex].name);
 	}
 
 	while (!taskStack.empty()) {
 		uint32_t taskIndex = taskStack.top();
 		taskStack.pop();
-		debugStack.pop();
 
 		if (visitedTasks.contains(taskIndex)) continue;
 
-		auto [barrierData, barrierTask, referencedTasks] =
-			getBarrier(taskIndex);
+		auto [taskBarriers, referencedTasks] = getBarriers(taskIndex);
 
 		auto notVisitedTasks =
 			referencedTasks |
@@ -257,31 +172,21 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 
 		if (!notVisitedTasks.empty()) {
 			taskStack.push(taskIndex);
-			debugStack.push(m_data.taskData[taskIndex].name);
 
 			for (uint32_t index : notVisitedTasks) {
 				taskStack.push(index);
-				debugStack.push(m_data.taskData[index].name);
 			}
 			continue;
 		}
 
-		tasks.push_back(taskIndex);
-		tasksDebug.push_back(m_data.taskData[taskIndex].name);
-		visitedTasks.insert(taskIndex);
+		barrierOffsets.push_back(barriers.size());
+		barrierOffsets.push_back(barriers.size() + taskBarriers.size());
+		barriers.insert(
+			barriers.end(), taskBarriers.begin(), taskBarriers.end()
+		);
 
-		if (barrierData.has_value()) {
-			std::string barrier;
-			for (auto& task : referencedTasks) {
-				barrier += "|" + m_data.taskData[task].name;
-			};
-			tasksDebug.push_back(
-				m_data.taskData[taskIndex].name + " " + barrier
-			);
-			tasks.push_back(baseTaskOffset + barrierTasks.size());
-			barrierTasks.push_back(std::move(barrierTask.value()));
-			barriersData.push_back(barrierData.value());
-		}
+		tasks.push_back(taskIndex);
+		visitedTasks.insert(taskIndex);
 
 		auto& taskData = m_data.taskData[taskIndex];
 		for (int i = taskData.inputs.offset;
@@ -328,11 +233,8 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 
 	return {
 		.tasks = tasks,
-		.data = barriersData,
-		.barriers = barrierTasks,
-		.initializationTask = [imageBarriers = std::move(imageBarriers)](
-								  TaskContext& context
-							  ) { MemoryBarrier(context, {}, imageBarriers); },
+		.barriers = barriers,
+		.barrierOffsets = barrierOffsets,
 		.finalUsages = finalUsages,
 	};
 }

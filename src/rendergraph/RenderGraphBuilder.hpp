@@ -26,8 +26,8 @@ private:
 		uint32_t taskIndex, ResourceIndex resourceIndex
 	) const;
 
-	struct Barrier;
-	Barrier getBarrier(uint32_t taskIndex) const;
+	std::pair<std::vector<ExecutionInfo::Barrier>, std::unordered_set<uint32_t>>
+	getBarriers(uint32_t taskIndex) const;
 
 public:
 	RenderGraphBuilder(const GraphData& data) : m_data(data) {}
