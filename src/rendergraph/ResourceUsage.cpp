@@ -28,7 +28,8 @@ Access ResourceUsage::GetAccess(Type type) {
 	switch (type) {
 		case Type::SampledRead:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eFragmentShader,
+				.stage = vk::PipelineStageFlagBits2::eFragmentShader |
+				         vk::PipelineStageFlagBits2::eComputeShader,
 				.access = vk::AccessFlagBits2::eShaderSampledRead,
 				.layout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
