@@ -25,9 +25,6 @@ private:
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
-	bool m_baseImagesInitialized = false;
-	bool m_swapchainImagesInitialized = false;
-
 	ResourceManager::DeviceAllocationIndex m_frameDataAllocation;
 	ResourceManager::DeviceAllocationIndex m_sharedDataAllocation;
 	std::optional<ResourceManager::HostAllocationIndex> m_hostDataAllocation;
@@ -51,9 +48,6 @@ private:
 	double m_lastCpuFrameTime;
 
 	void build();
-	void writeMemoryBarrier(
-		vk::CommandBuffer& commandBuffer, GraphData::TaskData& task
-	) const;
 
 	void initializeImages(vk::CommandBuffer& commandBuffer);
 

@@ -28,8 +28,6 @@ private:
 
 	ResourceIndex m_outputImage = UINT32_MAX;
 
-	std::unordered_map<std::string_view, FeatureIndex> m_features;
-	std::unordered_set<FeatureIndex> m_enabledFeatures;
 	bool m_graphUpdated = true;
 
 public:
@@ -56,26 +54,18 @@ public:
 	ResourceIndex registerImage(std::string name, ImageHandle handle);
 	ResourceIndex registerBuffer(std::string name, BufferHandle handle);
 
-	void addTask(
+	TaskIndex addTask(
 		std::string name,
 		TaskType type,
 		std::vector<ResourceDependency> inputResources,
 		std::vector<ResourceDependency> outputResources,
-		Task task,
-		FeatureIndex feature = 0
+		Task task
 	);
 
 	void setOutputImage(ResourceIndex image) {
 		m_outputImage = image;
 		m_graphUpdated = true;
 	}
-
-	FeatureIndex addFeatureFlag(
-		std::string_view name, bool defaultValue = true
-	);
-
-	void setFeatureFlag(std::string_view name, bool value);
-	void setFeatureFlag(FeatureIndex index, bool value);
 
 	void submit(const Scene& scene);
 };

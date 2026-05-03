@@ -17,46 +17,28 @@ class RenderGraphBuilder {
 private:
 	const GraphData& m_data;
 
-	std::vector<FeatureIndex> m_taskFeatures;
 	struct TaskResourceDependency;
 	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
 		m_dependencies;
 
-	struct ResourceAccess;
-	ResourceAccess getResourceBarrier(
-		uint32_t taskIndex,
-		ResourceIndex resourceIndex,
-		std::unordered_set<FeatureIndex>& enabledFeatures,
-		bool readOnly
+	struct TaskReference;
+	TaskReference getPreviousTask(
+		uint32_t taskIndex, ResourceIndex resourceIndex
 	) const;
 
-	struct Barrier;
-	Barrier getBarrier(
-		uint32_t taskIndex, std::unordered_set<FeatureIndex>& enabledFeatures
-	) const;
+	std::unordered_set<uint32_t> getReferencedTasks(uint32_t taskIndex) const;
 
 public:
 	RenderGraphBuilder(const GraphData& data) : m_data(data) {}
 
-	ResourceIndex createImage(
-		std::string_view name,
-		ResourceManager::ImageDescription desc,
-		uint8_t swapchainRatio = 0
-	);
-	ResourceIndex createBuffer(
-		std::string_view name, ResourceManager::BufferDescription desc
-	);
-
 	void addTask(
 		TaskIndex task,
 		std::vector<ResourceDependency>& inputResources,
-		std::vector<ResourceDependency>& outputResources,
-		FeatureIndex feature
+		std::vector<ResourceDependency>& outputResources
 	);
 
 	rendergraph::internal::ExecutionInfo getTasks(
-		ResourceIndex outputImage,
-		std::unordered_set<FeatureIndex>& enabledFeatures
+		ResourceIndex outputImage
 	) const;
 };
 struct RenderGraphBuilder::TaskResourceDependency {

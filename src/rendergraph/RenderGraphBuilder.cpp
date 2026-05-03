@@ -1,8 +1,8 @@
 #include "RenderGraphBuilder.hpp"
 
-#include <algorithm>
 #include <cassert>
 #include <optional>
+#include <ranges>
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,190 +12,93 @@
 
 #include "GraphData.hpp"
 #include "ResourceUsage.hpp"
-#include "tasks/MemoryBarrier.hpp"
 #include "tasks/Task.hpp"
 #include "tasks/TaskContext.hpp"
 
 using namespace rendergraph::internal;
 
-struct RenderGraphBuilder::Barrier {
-	std::optional<GraphData::TaskData> taskData;
-	std::optional<Task> task;
-	std::unordered_set<uint32_t> previousTasks;
-};
-
-struct RenderGraphBuilder::ResourceAccess {
-	struct Barrier {
-		vk::PipelineStageFlags2 dstStageMask;
-		vk::AccessFlags2 dstAccessMask;
-		vk::ImageLayout newLayout;
-		vk::PipelineStageFlags2 srcStageMask;
-		vk::AccessFlags2 srcAccessMask;
-		vk::ImageLayout oldLayout;
-	};
-	std::optional<Barrier> barrier;
+struct RenderGraphBuilder::TaskReference {
 	uint32_t task;
+	bool isTaskPreviousSubmission;
 };
 
-RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
-	uint32_t taskIndex,
-	ResourceIndex resourceIndex,
-	std::unordered_set<FeatureIndex>& enabledFeatures,
-	bool readOnly
+RenderGraphBuilder::TaskReference RenderGraphBuilder::getPreviousTask(
+	uint32_t taskIndex, ResourceIndex resourceIndex
 ) const {
 	uint8_t taskCount = m_dependencies.at(resourceIndex).size();
-	std::vector<TaskResourceDependency> resourceDependencies =
+	const std::vector<TaskResourceDependency>& resourceDependencies =
 		m_dependencies.at(resourceIndex);
 
-	int i;
-	for (i = 0; i < taskCount; i++) {
-		if (resourceDependencies[i].taskIndex != taskIndex) continue;
-		break;
-	}
-	assert(i != taskCount);
-
-	int usageIndex = i;
-	i = (taskCount + i - 1) % taskCount;
-
-	ResourceUsage::Type currentUsage = resourceDependencies[usageIndex].usage;
-
-	if (currentUsage == ResourceUsage::Type::Undefined)
-		return {
-			.barrier = std::nullopt,
-			.task = resourceDependencies[i].taskIndex,
-		};
-
-	auto [currentStage, currentAccess, currentLayout] =
-		ResourceUsage::GetAccess(currentUsage);
-
-	while (usageIndex != i) {
-		FeatureIndex feature =
-			m_taskFeatures[resourceDependencies[i].taskIndex];
-
-		if (!enabledFeatures.contains(feature)) {
-			i = (taskCount + i - 1) % taskCount;
-			continue;
+	int currentUsageIndex = -1;
+	for (int i = 0; i < taskCount; i++) {
+		if (resourceDependencies[i].taskIndex == taskIndex) {
+			currentUsageIndex = i;
+			break;
 		}
-		ResourceUsage::Type previousUsage = resourceDependencies[i].usage;
+	}
+	assert(currentUsageIndex != -1);
 
-		if ((readOnly && (currentUsage == previousUsage)) ||  // Read after read
-		    previousUsage == ResourceUsage::Type::Undefined)
-			return {
-				.barrier = std::nullopt,
-				.task = resourceDependencies[i].taskIndex,
-			};
+	ResourceUsage::Type currentUsage =
+		resourceDependencies[currentUsageIndex].usage;
 
-		auto [previousStage, previousAccess, previousLayout] =
-			ResourceUsage::GetAccess(resourceDependencies[i].usage);
+	for (int i = 1; i <= taskCount; i++) {
+		int previousUsageIndex =
+			(taskCount + (currentUsageIndex - i)) % taskCount;
 
-		return ResourceAccess {
-			.barrier =
-				ResourceAccess::Barrier {
-										 .dstStageMask = currentStage,
-										 .dstAccessMask = currentAccess,
-										 .newLayout = currentLayout,
-										 .srcStageMask = previousStage,
-										 .srcAccessMask = previousAccess,
-										 .oldLayout = previousLayout,
-										 },
-			.task = resourceDependencies[i].taskIndex,
+		ResourceUsage::Type previousUsage =
+			resourceDependencies[previousUsageIndex].usage;
+
+		if ((currentUsage == previousUsage) &&
+		    ResourceUsage::IsReadAccess(currentUsage))
+			continue;
+
+		return TaskReference {
+			.task = resourceDependencies[previousUsageIndex].taskIndex,
+			.isTaskPreviousSubmission = previousUsageIndex >= currentUsageIndex,
 		};
 	}
-	return { {}, taskIndex };
+	return {
+		.task = resourceDependencies[currentUsageIndex].taskIndex,
+		.isTaskPreviousSubmission = true,
+	};
 }
 
-RenderGraphBuilder::Barrier RenderGraphBuilder::getBarrier(
-	uint32_t taskIndex, std::unordered_set<FeatureIndex>& enabledFeatures
+std::unordered_set<uint32_t> RenderGraphBuilder::getReferencedTasks(
+	uint32_t taskIndex
 ) const {
-	std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2> imageBarriers;
-	std::unordered_map<ResourceIndex, vk::BufferMemoryBarrier2> bufferBarriers;
-
+	std::vector<ExecutionInfo::Barrier> barriers;
 	std::unordered_set<uint32_t> previousTasks;
 
 	auto [inputOffset, inputCount] = m_data.taskData[taskIndex].inputs;
 	for (int i = inputOffset; i < inputOffset + inputCount; i++) {
 		auto [index, dependency] = m_data.taskDependencies[i];
 
-		auto access =
-			getResourceBarrier(taskIndex, index, enabledFeatures, true);
+		auto access = getPreviousTask(taskIndex, index);
+
+		if (access.task == taskIndex || access.isTaskPreviousSubmission)
+			continue;
 
 		previousTasks.insert(access.task);
-		if (!access.barrier.has_value()) continue;
-		if (m_data.images.contains(index)) {
-			imageBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-				.oldLayout = access.barrier->oldLayout,
-				.newLayout = access.barrier->newLayout,
-			};
-		} else {
-			bufferBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-			};
-		}
 	}
 	auto [outputOffset, outputCount] = m_data.taskData[taskIndex].outputs;
 	for (int i = outputOffset; i < outputOffset + outputCount; i++) {
 		auto [index, dependency] = m_data.taskDependencies[i];
 
-		auto access =
-			getResourceBarrier(taskIndex, index, enabledFeatures, true);
+		auto access = getPreviousTask(taskIndex, index);
+
+		if (access.task == taskIndex || access.isTaskPreviousSubmission)
+			continue;
 
 		previousTasks.insert(access.task);
-		if (!access.barrier.has_value()) continue;
-		if (m_data.images.contains(index)) {
-			imageBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-				.oldLayout = access.barrier->oldLayout,
-				.newLayout = access.barrier->newLayout,
-			};
-		} else {
-			bufferBarriers[index] = {
-				.srcStageMask = access.barrier->srcStageMask,
-				.srcAccessMask = access.barrier->srcAccessMask,
-				.dstStageMask = access.barrier->dstStageMask,
-				.dstAccessMask = access.barrier->dstAccessMask,
-			};
-		}
 	}
-	bool isBarrier = (!imageBarriers.empty() || !bufferBarriers.empty());
-	return {
-		.taskData = isBarrier ? std::optional<GraphData::TaskData>({
-									.type = TaskType::Graphic,
-									.name = "",
-									.inputs = {},
-									.outputs = {},
-								})
-		                      : std::nullopt,
-		.task = isBarrier ? std::optional<Task>([imageBarriers =
-		                                             std::move(imageBarriers),
-		                                         bufferBarriers = std::move(
-													 bufferBarriers
-												 )](TaskContext& context) {
-			MemoryBarrier(context, bufferBarriers, imageBarriers);
-		})
-		                  : std::nullopt,
-
-		.previousTasks = std::move(previousTasks),
-	};
+	return previousTasks;
 }
 
 void RenderGraphBuilder::addTask(
 	TaskIndex task,
 	std::vector<ResourceDependency>& inputResources,
-	std::vector<ResourceDependency>& outputResources,
-	FeatureIndex featureIndex
+	std::vector<ResourceDependency>& outputResources
 ) {
-	m_taskFeatures.push_back(featureIndex);
-
 	for (auto& [index, dependency] : inputResources) {
 		if (!m_dependencies.contains(index))
 			m_dependencies[index] = std::vector<TaskResourceDependency>();
@@ -221,103 +124,136 @@ void RenderGraphBuilder::addTask(
 			}
 		);
 	}
-
-	m_taskFeatures.push_back(featureIndex);
 }
 
-ExecutionInfo RenderGraphBuilder::getTasks(
-	ResourceIndex outputImage, std::unordered_set<FeatureIndex>& enabledFeatures
-) const {
+ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 	assert(m_dependencies.contains(outputImage));
+	std::vector<TaskIndex> tasks;
 
-	std::stack<uint32_t> taskQueue;
-	std::unordered_set<uint32_t> visitedTasks;
-
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> resourceUsages;
 	std::unordered_set<ResourceIndex> referencedImages;
 
-	std::vector<TaskIndex> tasks;
-	std::vector<GraphData::TaskData> barriersData;
-	std::vector<Task> barrierTasks;
-
-	uint32_t baseTaskOffset = m_data.tasks.size();
+	std::stack<uint32_t> taskStack;
+	std::unordered_set<uint32_t> visitedTasks;
 
 	for (auto& taskDependency : m_dependencies.at(outputImage)) {
-		taskQueue.push(taskDependency.taskIndex);
+		taskStack.push(taskDependency.taskIndex);
 	}
-	while (!taskQueue.empty()) {
-		uint32_t taskIndex = taskQueue.top();
-		taskQueue.pop();
+
+	while (!taskStack.empty()) {
+		uint32_t taskIndex = taskStack.top();
+		taskStack.pop();
 
 		if (visitedTasks.contains(taskIndex)) continue;
-		if (!enabledFeatures.contains(m_taskFeatures[taskIndex])) continue;
+
+		std::unordered_set<uint32_t> referencedTasks =
+			getReferencedTasks(taskIndex);
+
+		auto notVisitedTasks =
+			referencedTasks |
+			std::views::filter([&visitedTasks](uint32_t task) {
+				return !visitedTasks.contains(task);
+			});
+
+		if (!notVisitedTasks.empty()) {
+			taskStack.push(taskIndex);
+
+			for (uint32_t index : notVisitedTasks) {
+				taskStack.push(index);
+			}
+			continue;
+		}
 
 		tasks.push_back(taskIndex);
-
-		auto [barrierData, barrierTask, referencedTasks] =
-			getBarrier(taskIndex, enabledFeatures);
-		if (barrierData.has_value()) {
-			tasks.push_back(baseTaskOffset + barrierTasks.size());
-			barrierTasks.push_back(std::move(barrierTask.value()));
-			barriersData.push_back(barrierData.value());
-		}
-
-		for (uint32_t index : referencedTasks) {
-			taskQueue.push(index);
-		}
 		visitedTasks.insert(taskIndex);
 
 		auto& taskData = m_data.taskData[taskIndex];
 		for (int i = taskData.inputs.offset;
 		     i < taskData.inputs.offset + taskData.inputs.count;
 		     i++) {
-			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
 			if (m_data.images.contains(resourceIndex))
 				referencedImages.insert(resourceIndex);
+
+			resourceUsages[resourceIndex] = usage;
 		}
 		for (int i = taskData.outputs.offset;
 		     i < taskData.outputs.offset + taskData.outputs.count;
 		     i++) {
-			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
+
 			if (m_data.images.contains(resourceIndex))
 				referencedImages.insert(resourceIndex);
+
+			resourceUsages[resourceIndex] = usage;
 		}
 	}
 
-	std::ranges::reverse(tasks.begin(), tasks.end());
+	std::vector<ExecutionInfo::Barrier> barriers;
+	std::vector<std::size_t> barrierOffsets;
 
-	std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2> imageBarriers;
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
-	for (ResourceIndex image : referencedImages) {
-		// Start from the last image reference, we go backward until we have an
-		// active task, if the layout is different from the last build we
-		// syncronize with a new initialization barrier
-		for (int i = m_dependencies.at(image).size() - 1; i >= 0; i--) {
-			const TaskResourceDependency& dep = m_dependencies.at(image)[i];
+	for (TaskIndex task : tasks) {
+		std::vector<ExecutionInfo::Barrier> taskBarriers;
 
-			if (!visitedTasks.contains(dep.taskIndex)) continue;
+		auto& taskData = m_data.taskData[task];
 
-			ResourceUsage::Type pastLastUsage = m_data.finalUsages.at(image);
+		barrierOffsets.push_back(barriers.size());
 
-			finalUsages[image] = dep.usage;
-			if (dep.usage == pastLastUsage) break;
+		for (int i = taskData.inputs.offset;
+		     i < taskData.inputs.offset + taskData.inputs.count;
+		     i++) {
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
 
-			imageBarriers[image] = {
-				.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
-				.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-				.oldLayout = ResourceUsage::GetAccess(pastLastUsage).layout,
-				.newLayout = ResourceUsage::GetAccess(dep.usage).layout,
-			};
-			break;
+			barriers.push_back(
+				{
+					.previousUsage = resourceUsages[resourceIndex],
+					.currentUsage = usage,
+					.index = resourceIndex,
+				}
+			);
+
+			resourceUsages[resourceIndex] = usage;
 		}
+		for (int i = taskData.outputs.offset;
+		     i < taskData.outputs.offset + taskData.outputs.count;
+		     i++) {
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
+
+			barriers.push_back(
+				{
+					.previousUsage = resourceUsages[resourceIndex],
+					.currentUsage = usage,
+					.index = resourceIndex,
+				}
+			);
+
+			resourceUsages[resourceIndex] = usage;
+		}
+
+		barrierOffsets.push_back(barriers.size());
+	}
+
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
+	std::vector<ExecutionInfo::Barrier> initializationBarriers;
+	for (ResourceIndex image : referencedImages) {
+		finalUsages[image] = resourceUsages[image];
+
+		if (resourceUsages[image] == m_data.finalUsages.at(image)) continue;
+
+		initializationBarriers.push_back(
+			{
+				.previousUsage = m_data.finalUsages.at(image),
+				.currentUsage = resourceUsages[image],
+				.index = image,
+			}
+		);
 	}
 
 	return {
 		.tasks = tasks,
-		.data = barriersData,
-		.barriers = barrierTasks,
-		.initializationTask = [imageBarriers = std::move(imageBarriers)](
-								  TaskContext& context
-							  ) { MemoryBarrier(context, {}, imageBarriers); },
+		.barriers = barriers,
+		.barrierOffsets = barrierOffsets,
+		.initializationBarriers = initializationBarriers,
 		.finalUsages = finalUsages,
 	};
 }
