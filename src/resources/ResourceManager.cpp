@@ -678,6 +678,13 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
 	);
 
 	vk::Device &device = Instance::Get().device;
+	vk::PhysicalDeviceLimits limits =
+		Instance::Get().physicalDevice.getProperties().limits;
+
+	uint32_t minAlignment = std::max(
+		limits.minStorageBufferOffsetAlignment,
+		limits.minUniformBufferOffsetAlignment
+	);
 
 	uint32_t requiredSize = 0;
 	uint32_t resourceCount = 0;
@@ -693,9 +700,15 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
 	for (int i = 0; i < bufferDescriptions.size(); i++) {
 		auto &description = bufferDescriptions[i];
 
+		uint32_t size = ceil(description.size / 3);
+		if (minAlignment > 0)
+			size = (size + minAlignment - 1) & ~(minAlignment - 1);
+
+		size *= 3;
+
 		vk::Buffer buffer = device.createBuffer(
 			vk::BufferCreateInfo {
-				.size = description.size,
+				.size = size,
 				.usage = description.usage,
 			}
 		);
@@ -705,7 +718,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
 
 		requiredSize = (requiredSize + requirements.alignment - 1) &
 		               ~(requirements.alignment - 1);
-		requiredSize += requirements.size;
+		requiredSize += size;
 
 		resourcesRequirements.push_back(requirements);
 
@@ -714,7 +727,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createSharedAllocation(
 		buffers[resourceCount++] = handle;
 		m_buffers[handle.value] = Buffer {
 			.buffer = buffer,
-			.size = description.size,
+			.size = size,
 		};
 		m_deviceAllocatedBuffers[allocIndex].push_back(handle);
 	}

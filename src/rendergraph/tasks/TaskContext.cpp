@@ -67,9 +67,12 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 				}
 			);
 
-			if (buffer.data != nullptr)
+			if (buffer.data != nullptr) {
 				resources._bufferInfo.back().offset =
 					(buffer.allocation.size / 3) * (currentFrame % 3);
+
+				resources._bufferInfo.back().range /= 3;
+			}
 
 			resources.descriptors.push_back(
 				vk::WriteDescriptorSet {
@@ -119,9 +122,12 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.range = buffer.size,
 				}
 			);
-			if (buffer.data != nullptr)
+			if (buffer.data != nullptr) {
 				resources._bufferInfo.back().offset =
 					(buffer.allocation.size / 3) * (currentFrame % 3);
+
+				resources._bufferInfo.back().range /= 3;
+			}
 
 			resources.descriptors.push_back(
 				vk::WriteDescriptorSet {
