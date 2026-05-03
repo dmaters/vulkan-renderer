@@ -6,9 +6,6 @@
 #include <span>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
 #include "Swapchain.hpp"
@@ -79,38 +76,103 @@ void RenderGraphRunner::buildSwapchainResources() {
 		i++;
 	}
 }
+
+void writeBarrier(
+	vk::CommandBuffer commandBuffer,
+	std::span<const ExecutionInfo::Barrier> barriers,
+	std::unordered_map<ResourceIndex, ImageHandle>& images,
+	std::unordered_map<ResourceIndex, BufferHandle>& buffers,
+	ResourceManager& resourceManager
+) {
+	if (barriers.size() == 0) return;
+
+	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
+	imageBarriers.reserve(barriers.size());
+	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
+	bufferBarriers.reserve(barriers.size());
+
+	for (ExecutionInfo::Barrier barrier : barriers) {
+		ResourceUsage::Access previousAccess =
+			ResourceUsage::GetAccess(barrier.previousUsage);
+
+		ResourceUsage::Access currentAccess =
+			ResourceUsage::GetAccess(barrier.currentUsage);
+
+		if (images.contains(barrier.index)) {
+			Image& image = resourceManager.getImage(images.at(barrier.index));
+
+			imageBarriers.push_back(
+			    {
+					.srcStageMask = previousAccess.stage,
+					.srcAccessMask = previousAccess.access,
+					.dstStageMask = currentAccess.stage,
+					.dstAccessMask = currentAccess.access,
+					.oldLayout = previousAccess.layout,
+					.newLayout = currentAccess.layout,
+					.image = image.image,
+					.subresourceRange = {
+										 .aspectMask = image.getAspectFlags(),
+										 .levelCount = 1,
+										 .layerCount = 1,
+					},
+                }
+			);
+		} else {
+			Buffer& buffer =
+				resourceManager.getBuffer(buffers.at(barrier.index));
+
+			bufferBarriers.push_back(
+				{
+					.srcStageMask = previousAccess.stage,
+					.srcAccessMask = previousAccess.access,
+					.dstStageMask = currentAccess.stage,
+					.dstAccessMask = currentAccess.access,
+					.buffer = buffer.buffer,
+					.offset = 0,
+					.size = static_cast<uint32_t>(buffer.size),
+				}
+			);
+		}
+	}
+	commandBuffer.pipelineBarrier2(
+		vk::DependencyInfo {
+			.bufferMemoryBarrierCount =
+				static_cast<uint32_t>(bufferBarriers.size()),
+			.pBufferMemoryBarriers = bufferBarriers.data(),
+			.imageMemoryBarrierCount =
+				static_cast<uint32_t>(imageBarriers.size()),
+			.pImageMemoryBarriers = imageBarriers.data(),
+
+		}
+	);
+}
+
 void RenderGraphRunner::rebuildSwapchain() {
 	m_swapchain.rebuild();
 	if (m_swapchain.getResolution() == vk::Extent2D(0)) return;
 	m_oldResolutionDependentAllocation = m_resolutionDependentAllocation;
 	buildSwapchainResources();
 	m_swapchainFlushCounter = 4;
-	m_swapchainImagesInitialized = false;
 }
+
 void RenderGraphRunner::outputToSwapchain(
 	vk::CommandBuffer& commandBuffer, ResourceIndex output, uint32_t imageIndex
 ) {
-	Image& resultImage = m_resourceManager.getImage(m_images[output]);
-
-	Image& swapchainImage = m_swapchain.getImage(imageIndex);
-
-	vk::ImageMemoryBarrier2 sourceBarrier = {
-		.srcStageMask =  vk::PipelineStageFlagBits2::eComputeShader,
-		.srcAccessMask =vk::AccessFlagBits2::eShaderStorageWrite,
-		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
-		.dstAccessMask = vk::AccessFlagBits2::eTransferRead,
-		.oldLayout = vk::ImageLayout::eGeneral,
-		.newLayout = vk::ImageLayout::eTransferSrcOptimal,
-		.image = resultImage.image,
-		.subresourceRange = {
-			.aspectMask = vk::ImageAspectFlagBits::eColor,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		}
+	ExecutionInfo::Barrier firstBarrier = {
+		.previousUsage = m_data.finalUsages.at(output),
+		.currentUsage = ResourceUsage::Type::TransferSrc,
+		.index = output,
 	};
 
+	writeBarrier(
+		commandBuffer,
+		std::span<const ExecutionInfo::Barrier>({ firstBarrier }),
+		m_images,
+		m_buffers,
+		m_resourceManager
+	);
+
+	Image& swapchainImage = m_swapchain.getImage(imageIndex);
 	vk::ImageMemoryBarrier2 swapchainBarrier = {
 		.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		.dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
@@ -129,14 +191,13 @@ void RenderGraphRunner::outputToSwapchain(
 
 	commandBuffer.pipelineBarrier2(
 		vk::DependencyInfo {
-			.imageMemoryBarrierCount = 2,
-			.pImageMemoryBarriers =
-				std::array<vk::ImageMemoryBarrier2, 2> {
-														sourceBarrier, swapchainBarrier,
-														}
-					.data()
-    }
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &swapchainBarrier,
+		}
 	);
+
+	Image& resultImage = m_resourceManager.getImage(m_images[output]);
+
 	commandBuffer.blitImage(
 		resultImage.image,
 		vk::ImageLayout::eTransferSrcOptimal,
@@ -179,12 +240,19 @@ void RenderGraphRunner::outputToSwapchain(
 		vk::Filter::eLinear
 	);
 
-	sourceBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-	sourceBarrier.newLayout = vk::ImageLayout::eGeneral;
-	sourceBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferRead;
-	sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
-	sourceBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-	sourceBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+	ExecutionInfo::Barrier secondBarrier = {
+		.previousUsage = ResourceUsage::Type::TransferSrc,
+		.currentUsage = m_data.finalUsages.at(output),
+		.index = output,
+	};
+
+	writeBarrier(
+		commandBuffer,
+		std::span<const ExecutionInfo::Barrier>({ secondBarrier }),
+		m_images,
+		m_buffers,
+		m_resourceManager
+	);
 
 	swapchainBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 	swapchainBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
@@ -195,84 +263,10 @@ void RenderGraphRunner::outputToSwapchain(
 
 	commandBuffer.pipelineBarrier2(
 		vk::DependencyInfo {
-			.imageMemoryBarrierCount = 2,
-			.pImageMemoryBarriers =
-				std::array<vk::ImageMemoryBarrier2, 2> { sourceBarrier,
-                                                        swapchainBarrier }
-					.data()
-    }
-	);
-}
-
-void writeBarrier(
-	vk::CommandBuffer commandBuffer,
-	std::span<const ExecutionInfo::Barrier> barriers,
-	std::unordered_map<ResourceIndex, ImageHandle>& images,
-	std::unordered_map<ResourceIndex, BufferHandle>& buffers,
-	ResourceManager& resourceManager
-) {
-	if (barriers.size() == 0) return;
-
-	std::vector<vk::ImageMemoryBarrier2> imageBarriers;
-	imageBarriers.reserve(barriers.size());
-	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
-	bufferBarriers.reserve(barriers.size());
-
-	for (ExecutionInfo::Barrier barrier : barriers) {
-		ResourceUsage::Access previousAccess =
-			ResourceUsage::GetAccess(barrier.lastUsage);
-
-		ResourceUsage::Access currentAccess =
-			ResourceUsage::GetAccess(barrier.lastUsage);
-
-		if (images.contains(barrier.index)) {
-			Image& image = resourceManager.getImage(images.at(barrier.index));
-
-			imageBarriers.push_back(
-			    {
-					.srcStageMask = previousAccess.stage,
-					.srcAccessMask = previousAccess.access,
-					.dstStageMask = currentAccess.stage,
-					.dstAccessMask = currentAccess.access,
-					.oldLayout = previousAccess.layout,
-					.newLayout = currentAccess.layout,
-					.image = image.image,
-					.subresourceRange = {
-										 .aspectMask = image.getAspectFlags(),
-										 .levelCount = 1,
-										 .layerCount = 1,
-					},
-                }
-			);
-		} else {
-			Buffer& buffer =
-				resourceManager.getBuffer(buffers.at(barrier.index));
-
-			bufferBarriers.push_back(
-				{
-					.srcStageMask = previousAccess.stage,
-					.srcAccessMask = previousAccess.access,
-					.dstStageMask = currentAccess.stage,
-					.dstAccessMask = currentAccess.access,
-					.buffer = buffer.buffer,
-					.offset = 0,
-					.size = static_cast<uint32_t>(buffer.size),
-				}
-			);
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &swapchainBarrier,
 		}
-
-		commandBuffer.pipelineBarrier2(
-			vk::DependencyInfo {
-				.bufferMemoryBarrierCount =
-					static_cast<uint32_t>(bufferBarriers.size()),
-				.pBufferMemoryBarriers = bufferBarriers.data(),
-				.imageMemoryBarrierCount =
-					static_cast<uint32_t>(imageBarriers.size()),
-				.pImageMemoryBarriers = imageBarriers.data(),
-
-			}
-		);
-	}
+	);
 }
 
 void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
@@ -489,7 +483,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			commandBuffer.writeTimestamp(
 				vk::PipelineStageFlagBits::eTopOfPipe,
 				m_debugQueryPool,
-				i * 2 + timestampsCount * currentFrameInFlight
+				i * 2 + timestampsCount * currentFrameInFlight + 2
 			);
 
 		m_data.tasks[taskIndex](context);
@@ -498,7 +492,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 			commandBuffer.writeTimestamp(
 				vk::PipelineStageFlagBits::eBottomOfPipe,
 				m_debugQueryPool,
-				i * 2 + timestampsCount * currentFrameInFlight + 1
+				i * 2 + timestampsCount * currentFrameInFlight + 1 + 2
 			);
 		commandBuffer.endDebugUtilsLabelEXT();
 	}

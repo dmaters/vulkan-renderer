@@ -17,13 +17,12 @@
 
 using namespace rendergraph::internal;
 
-struct RenderGraphBuilder::ResourceAccess {
-	std::optional<ExecutionInfo::Barrier> barrier;
+struct RenderGraphBuilder::TaskReference {
 	uint32_t task;
 	bool isTaskPreviousSubmission;
 };
 
-RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
+RenderGraphBuilder::TaskReference RenderGraphBuilder::getPreviousTask(
 	uint32_t taskIndex, ResourceIndex resourceIndex
 ) const {
 	uint8_t taskCount = m_dependencies.at(resourceIndex).size();
@@ -53,27 +52,20 @@ RenderGraphBuilder::ResourceAccess RenderGraphBuilder::getResourceBarrier(
 		    ResourceUsage::IsReadAccess(currentUsage))
 			continue;
 
-		ExecutionInfo::Barrier barrier = {
-			.lastUsage = previousUsage,
-			.currentUsage = currentUsage,
-			.index = resourceIndex,
-		};
-
-		return ResourceAccess {
-			.barrier = barrier,
+		return TaskReference {
 			.task = resourceDependencies[previousUsageIndex].taskIndex,
 			.isTaskPreviousSubmission = previousUsageIndex >= currentUsageIndex,
 		};
 	}
 	return {
-		.barrier = std::nullopt,
 		.task = resourceDependencies[currentUsageIndex].taskIndex,
 		.isTaskPreviousSubmission = true,
 	};
 }
 
-std::pair<std::vector<ExecutionInfo::Barrier>, std::unordered_set<uint32_t>>
-RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
+std::unordered_set<uint32_t> RenderGraphBuilder::getReferencedTasks(
+	uint32_t taskIndex
+) const {
 	std::vector<ExecutionInfo::Barrier> barriers;
 	std::unordered_set<uint32_t> previousTasks;
 
@@ -81,30 +73,25 @@ RenderGraphBuilder::getBarriers(uint32_t taskIndex) const {
 	for (int i = inputOffset; i < inputOffset + inputCount; i++) {
 		auto [index, dependency] = m_data.taskDependencies[i];
 
-		auto access = getResourceBarrier(taskIndex, index);
+		auto access = getPreviousTask(taskIndex, index);
 
-		if (!access.barrier.has_value()) continue;
+		if (access.task == taskIndex || access.isTaskPreviousSubmission)
+			continue;
 
-		if (!access.isTaskPreviousSubmission && access.task != taskIndex)
-			previousTasks.insert(access.task);
-		barriers.push_back(*access.barrier);
+		previousTasks.insert(access.task);
 	}
 	auto [outputOffset, outputCount] = m_data.taskData[taskIndex].outputs;
 	for (int i = outputOffset; i < outputOffset + outputCount; i++) {
 		auto [index, dependency] = m_data.taskDependencies[i];
 
-		auto access = getResourceBarrier(taskIndex, index);
+		auto access = getPreviousTask(taskIndex, index);
 
-		if (!access.barrier.has_value()) continue;
+		if (access.task == taskIndex || access.isTaskPreviousSubmission)
+			continue;
 
-		if (!access.isTaskPreviousSubmission && access.task != taskIndex)
-			previousTasks.insert(access.task);
-		barriers.push_back(*access.barrier);
+		previousTasks.insert(access.task);
 	}
-	return {
-		barriers,
-		previousTasks,
-	};
+	return previousTasks;
 }
 
 void RenderGraphBuilder::addTask(
@@ -141,16 +128,13 @@ void RenderGraphBuilder::addTask(
 
 ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 	assert(m_dependencies.contains(outputImage));
+	std::vector<TaskIndex> tasks;
+
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> resourceUsages;
+	std::unordered_set<ResourceIndex> referencedImages;
 
 	std::stack<uint32_t> taskStack;
 	std::unordered_set<uint32_t> visitedTasks;
-
-	std::unordered_set<ResourceIndex> referencedImages;
-
-	std::vector<TaskIndex> tasks;
-
-	std::vector<ExecutionInfo::Barrier> barriers;
-	std::vector<std::size_t> barrierOffsets;
 
 	for (auto& taskDependency : m_dependencies.at(outputImage)) {
 		taskStack.push(taskDependency.taskIndex);
@@ -162,7 +146,8 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 
 		if (visitedTasks.contains(taskIndex)) continue;
 
-		auto [taskBarriers, referencedTasks] = getBarriers(taskIndex);
+		std::unordered_set<uint32_t> referencedTasks =
+			getReferencedTasks(taskIndex);
 
 		auto notVisitedTasks =
 			referencedTasks |
@@ -179,12 +164,6 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 			continue;
 		}
 
-		barrierOffsets.push_back(barriers.size());
-		barrierOffsets.push_back(barriers.size() + taskBarriers.size());
-		barriers.insert(
-			barriers.end(), taskBarriers.begin(), taskBarriers.end()
-		);
-
 		tasks.push_back(taskIndex);
 		visitedTasks.insert(taskIndex);
 
@@ -192,49 +171,89 @@ ExecutionInfo RenderGraphBuilder::getTasks(ResourceIndex outputImage) const {
 		for (int i = taskData.inputs.offset;
 		     i < taskData.inputs.offset + taskData.inputs.count;
 		     i++) {
-			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
 			if (m_data.images.contains(resourceIndex))
 				referencedImages.insert(resourceIndex);
+
+			resourceUsages[resourceIndex] = usage;
 		}
 		for (int i = taskData.outputs.offset;
 		     i < taskData.outputs.offset + taskData.outputs.count;
 		     i++) {
-			ResourceIndex resourceIndex = m_data.taskDependencies[i].first;
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
+
 			if (m_data.images.contains(resourceIndex))
 				referencedImages.insert(resourceIndex);
+
+			resourceUsages[resourceIndex] = usage;
 		}
 	}
 
-	std::unordered_map<ResourceIndex, vk::ImageMemoryBarrier2> imageBarriers;
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
-	for (ResourceIndex image : referencedImages) {
-		// Start from the last image reference, we go backward until we have an
-		// active task, if the layout is different from the last build we
-		// syncronize with a new initialization barrier
-		for (int i = m_dependencies.at(image).size() - 1; i >= 0; i--) {
-			const TaskResourceDependency& dep = m_dependencies.at(image)[i];
+	std::vector<ExecutionInfo::Barrier> barriers;
+	std::vector<std::size_t> barrierOffsets;
 
-			if (!visitedTasks.contains(dep.taskIndex)) continue;
+	for (TaskIndex task : tasks) {
+		std::vector<ExecutionInfo::Barrier> taskBarriers;
 
-			ResourceUsage::Type pastLastUsage = m_data.finalUsages.at(image);
+		auto& taskData = m_data.taskData[task];
 
-			finalUsages[image] = dep.usage;
-			if (dep.usage == pastLastUsage) break;
+		barrierOffsets.push_back(barriers.size());
 
-			imageBarriers[image] = {
-				.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
-				.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-				.oldLayout = ResourceUsage::GetAccess(pastLastUsage).layout,
-				.newLayout = ResourceUsage::GetAccess(dep.usage).layout,
-			};
-			break;
+		for (int i = taskData.inputs.offset;
+		     i < taskData.inputs.offset + taskData.inputs.count;
+		     i++) {
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
+
+			barriers.push_back(
+				{
+					.previousUsage = resourceUsages[resourceIndex],
+					.currentUsage = usage,
+					.index = resourceIndex,
+				}
+			);
+
+			resourceUsages[resourceIndex] = usage;
 		}
+		for (int i = taskData.outputs.offset;
+		     i < taskData.outputs.offset + taskData.outputs.count;
+		     i++) {
+			auto [resourceIndex, usage] = m_data.taskDependencies[i];
+
+			barriers.push_back(
+				{
+					.previousUsage = resourceUsages[resourceIndex],
+					.currentUsage = usage,
+					.index = resourceIndex,
+				}
+			);
+
+			resourceUsages[resourceIndex] = usage;
+		}
+
+		barrierOffsets.push_back(barriers.size());
+	}
+
+	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
+	std::vector<ExecutionInfo::Barrier> initializationBarriers;
+	for (ResourceIndex image : referencedImages) {
+		finalUsages[image] = resourceUsages[image];
+
+		if (resourceUsages[image] == m_data.finalUsages.at(image)) continue;
+
+		initializationBarriers.push_back(
+			{
+				.previousUsage = m_data.finalUsages.at(image),
+				.currentUsage = resourceUsages[image],
+				.index = image,
+			}
+		);
 	}
 
 	return {
 		.tasks = tasks,
 		.barriers = barriers,
 		.barrierOffsets = barrierOffsets,
+		.initializationBarriers = initializationBarriers,
 		.finalUsages = finalUsages,
 	};
 }

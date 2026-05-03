@@ -21,25 +21,15 @@ private:
 	std::unordered_map<ResourceIndex, std::vector<TaskResourceDependency>>
 		m_dependencies;
 
-	struct ResourceAccess;
-	ResourceAccess getResourceBarrier(
+	struct TaskReference;
+	TaskReference getPreviousTask(
 		uint32_t taskIndex, ResourceIndex resourceIndex
 	) const;
 
-	std::pair<std::vector<ExecutionInfo::Barrier>, std::unordered_set<uint32_t>>
-	getBarriers(uint32_t taskIndex) const;
+	std::unordered_set<uint32_t> getReferencedTasks(uint32_t taskIndex) const;
 
 public:
 	RenderGraphBuilder(const GraphData& data) : m_data(data) {}
-
-	ResourceIndex createImage(
-		std::string_view name,
-		ResourceManager::ImageDescription desc,
-		uint8_t swapchainRatio = 0
-	);
-	ResourceIndex createBuffer(
-		std::string_view name, ResourceManager::BufferDescription desc
-	);
 
 	void addTask(
 		TaskIndex task,

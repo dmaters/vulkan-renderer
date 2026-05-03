@@ -46,7 +46,7 @@ struct ExecutionInfo {
 	std::vector<TaskIndex> tasks;
 
 	struct Barrier {
-		ResourceUsage::Type lastUsage;
+		ResourceUsage::Type previousUsage;
 		ResourceUsage::Type currentUsage;
 		ResourceIndex index;
 	};
