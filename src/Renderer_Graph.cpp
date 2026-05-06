@@ -23,6 +23,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 	m_graph.registerBuffer("index_buffer", buffers[2]);
 	m_graph.registerBuffer("instance_buffer", buffers[3]);
 
+	std::vector<TaskIndex> passes;
+
 	ResourceIndex pbrMaterialData =
 		m_graph.registerBuffer("pbr_data_buffer", buffers[4]);
 	ResourceIndex pbrMaterialInstances =
@@ -44,7 +46,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 	                 vk::BufferUsageFlagBits::eUniformBuffer,
 		}
 	);
-	m_graph.addTask(
+	TaskIndex sceneUpdate = m_graph.addTask(
 		"scene_update",
 		TaskType::Transfer,
 		{
@@ -55,6 +57,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		},
 		SceneUpdatePass
 	);
+	passes.push_back(sceneUpdate);
 
 	ResourceIndex computeScratchBuffer = m_graph.createDeviceBuffer(
 		"compute_scratch_buffer",
@@ -78,7 +81,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	m_graph.addTask(
+	TaskIndex transmittanceLUTPass = m_graph.addTask(
 		"transmittanceLUT",
 		TaskType::Compute,
 		{
@@ -90,6 +93,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			TaskContext& context
 		) { ComputePass(context, material, { 256, 64, 1 }); }
 	);
+	passes.push_back(transmittanceLUTPass);
 
 	ResourceIndex multiscatteringLUT = m_graph.createImage(
 		"multiscatteringLUT",
@@ -105,7 +109,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		}
 	);
 
-	m_graph.addTask(
+	TaskIndex multiscatteringLUTPass = m_graph.addTask(
 		"multiscatteringLUT",
 		TaskType::Compute,
 		{
@@ -120,6 +124,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 		) { ComputePass(context, material, { 64, 64, 1 }); }
 	);
 
+	passes.push_back(multiscatteringLUTPass);
+
 	ResourceIndex skyviewLUT = m_graph.createImage(
 		"skyviewLUT",
 		{
@@ -133,7 +139,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 		}
 	);
-	m_graph.addTask(
+	TaskIndex skyviewLUTPass = m_graph.addTask(
 		"skyviewLUT",
 		TaskType::Compute,
 		{
@@ -148,6 +154,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			TaskContext& context
 		) { ComputePass(context, material, { 200, 100, 1 }); }
 	);
+	passes.push_back(skyviewLUTPass);
 
 	ResourceIndex skyLightingSH = m_graph.createDeviceBuffer(
 		"skyLightingSH",
@@ -157,7 +164,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 	                 vk::BufferUsageFlagBits::eUniformBuffer,
 		}
 	);
-	m_graph.addTask(
+	TaskIndex skyLighting = m_graph.addTask(
 		"skyLighting",
 		TaskType::Compute,
 		{
@@ -170,6 +177,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			TaskContext& context
 		) { ComputePass(context, material, { 1, 1, 1 }); }
 	);
+	passes.push_back(skyLighting);
 
 	ResourceIndex shadowAtlas = m_graph.createImage(
 		"shadow_atlas",
@@ -215,7 +223,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			true
 		);
 
-		m_graph.addTask(
+		TaskIndex shadowmapPass = m_graph.addTask(
 			"shadowmap_cascade_" + std::to_string(i),
 			TaskType::Graphic,
 			{
@@ -253,6 +261,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 				RenderPassEnd(context);
 			}
 		);
+		passes.push_back(shadowmapPass);
 
 		uint32_t atShadowedPrimitiveCount =
 			m_currentScene
@@ -284,7 +293,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			true
 		);
 
-		m_graph.addTask(
+		TaskIndex shadowmapATpass = m_graph.addTask(
 			"shadowmap_cascade_" + std::to_string(i) + "_alphatested",
 			TaskType::Graphic,
 			{
@@ -326,6 +335,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 				RenderPassEnd(context);
 			}
 		);
+		passes.push_back(shadowmapATpass);
 	}
 
 	ResourceIndex indirectGPassBuffer = m_graph.createDeviceBuffer(
@@ -424,7 +434,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		1
 	);
 
-	m_graph.addTask(
+	TaskIndex gbuffer = m_graph.addTask(
 		"gbuffer",
 		TaskType::Graphic,
 		{
@@ -461,6 +471,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
+	passes.push_back(gbuffer);
 
 	uint32_t atPrimitiveCount =
 		m_currentScene.buckets
@@ -490,7 +501,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 				},
 				true
 			);
-		m_graph.addTask(
+		TaskIndex gbufferAT = m_graph.addTask(
 			"gbuffer_alphatested",
 			TaskType::Graphic,
 			{
@@ -531,6 +542,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 				RenderPassEnd(context);
 			}
 		);
+
+		passes.push_back(gbufferAT);
 	}
 
 	ResourceIndex hdr_output = m_graph.createImage(
@@ -547,7 +560,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		},
 		1
 	);
-	m_graph.addTask(
+	TaskIndex lightingDeferred = m_graph.addTask(
 		"lighting_deferred",
 		TaskType::Graphic,
 		{
@@ -574,8 +587,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
+	passes.push_back(lightingDeferred);
 
-	m_graph.addTask(
+	TaskIndex skyboxPass = m_graph.addTask(
 		"skybox",
 		TaskType::Graphic,
 		{
@@ -597,6 +611,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
+	passes.push_back(skyboxPass);
 
 	ResourceIndex tonemapped = m_graph.createImage(
 		"tonemapped",
@@ -626,7 +641,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		},
 		1
 	);
-	m_graph.addTask(
+	TaskIndex compositionPass = m_graph.addTask(
 		"composition",
 		TaskType::Compute,
 		{
@@ -638,7 +653,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 		[composition = m_materialManager.getMaterialIndex("composition")](
 			TaskContext& context
 		) {
-			ImageHandle input = context.images[context.inputs[0].first];
+			ImageHandle input = context.images[context.inputs[0].resource];
 			auto dispatch = context.resourceManager.getImage(input).size;
 
 			ComputePass(
@@ -648,7 +663,10 @@ void Renderer::createRenderGraph(Scene& scene) {
 			);
 		}
 	);
-	m_graph.addTask(
+
+	passes.push_back(compositionPass);
+
+	TaskIndex fxaa = m_graph.addTask(
 		"fxaa",
 		TaskType::Graphic,
 		{
@@ -666,7 +684,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
-	m_graph.addTask(
+	passes.push_back(fxaa);
+
+	TaskIndex ui = m_graph.addTask(
 		"UI",
 		TaskType::Graphic,
 		{
@@ -682,5 +702,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassEnd(context);
 		}
 	);
-	m_graph.setOutputImage(final);
+	passes.push_back(ui);
+
+	m_graph.update(passes, final);
 }

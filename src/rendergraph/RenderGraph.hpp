@@ -15,7 +15,6 @@
 #include "rendergraph/tasks/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
-
 class RenderGraph {
 private:
 	Swapchain& m_swapchain;
@@ -27,6 +26,7 @@ private:
 	std::optional<rendergraph::internal::RenderGraphRunner> m_runner;
 
 	ResourceIndex m_outputImage = UINT32_MAX;
+	std::vector<TaskIndex> m_tasks;
 
 	bool m_graphUpdated = true;
 
@@ -62,8 +62,9 @@ public:
 		Task task
 	);
 
-	void setOutputImage(ResourceIndex image) {
-		m_outputImage = image;
+	void update(std::vector<TaskIndex> tasks, ResourceIndex output) {
+		m_outputImage = output;
+		m_tasks = tasks;
 		m_graphUpdated = true;
 	}
 

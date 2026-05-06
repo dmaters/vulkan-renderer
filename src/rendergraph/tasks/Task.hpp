@@ -17,4 +17,7 @@ enum class TaskType {
 
 struct TaskContext;
 using Task = std::function<void(TaskContext&)>;
-using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
+struct ResourceDependency {
+	ResourceIndex resource;
+	ResourceUsage::Type usage;
+};

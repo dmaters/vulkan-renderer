@@ -436,14 +436,14 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		GraphData::TaskData taskData = m_data.taskData[taskIndex];
 
 		auto inputs = std::span<const ResourceDependency>(
-			m_data.taskDependencies.data() + taskData.inputs.offset,
-			m_data.taskDependencies.data() + taskData.inputs.offset +
+			m_data.taskResources.data() + taskData.inputs.offset,
+			m_data.taskResources.data() + taskData.inputs.offset +
 				taskData.inputs.count
 		);
 
 		auto outputs = std::span<const ResourceDependency>(
-			m_data.taskDependencies.data() + taskData.outputs.offset,
-			m_data.taskDependencies.data() + taskData.outputs.offset +
+			m_data.taskResources.data() + taskData.outputs.offset,
+			m_data.taskResources.data() + taskData.outputs.offset +
 				taskData.outputs.count
 		);
 

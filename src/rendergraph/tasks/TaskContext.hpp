@@ -41,12 +41,12 @@ struct TaskContext {
 template <typename T>
 T TaskContext::getInput(uint32_t index) {
 	if constexpr (std::same_as<T, Buffer&>) {
-		return resourceManager.getBuffer(buffers[inputs[index].first]);
+		return resourceManager.getBuffer(buffers[inputs[index].resource]);
 	} else if constexpr (std::same_as<T, Image&>) {
-		return resourceManager.getImage(images[inputs[index].first]);
+		return resourceManager.getImage(images[inputs[index].resource]);
 	} else {
 		Buffer& buffer =
-			resourceManager.getBuffer(buffers[inputs[index].first]);
+			resourceManager.getBuffer(buffers[inputs[index].resource]);
 
 		return static_cast<T>(buffer.data);
 	}
@@ -54,7 +54,7 @@ T TaskContext::getInput(uint32_t index) {
 
 template <typename T>
 std::span<T> TaskContext::getInputSpan(uint32_t index) {
-	Buffer& buffer = resourceManager.getBuffer(buffers[inputs[index].first]);
+	Buffer& buffer = resourceManager.getBuffer(buffers[inputs[index].resource]);
 	if (buffer.data != nullptr)
 		return std::span<T>(
 			reinterpret_cast<T*>(
@@ -74,12 +74,12 @@ std::span<T> TaskContext::getInputSpan(uint32_t index) {
 template <typename T>
 T TaskContext::getOutput(ResourceIndex index) {
 	if constexpr (std::same_as<T, Buffer&>) {
-		return resourceManager.getBuffer(buffers[outputs[index].first]);
+		return resourceManager.getBuffer(buffers[outputs[index].resource]);
 	} else if constexpr (std::same_as<T, Image&>) {
-		return resourceManager.getImage(images[outputs[index].first]);
+		return resourceManager.getImage(images[outputs[index].resource]);
 	} else {
 		Buffer& buffer =
-			resourceManager.getBuffer(buffers[outputs[index].first]);
+			resourceManager.getBuffer(buffers[outputs[index].resource]);
 
 		return static_cast<T>(buffer.data);
 	}
@@ -87,7 +87,8 @@ T TaskContext::getOutput(ResourceIndex index) {
 
 template <typename T>
 std::span<T> TaskContext::getOutputSpan(uint32_t index) {
-	Buffer& buffer = resourceManager.getBuffer(buffers[outputs[index].first]);
+	Buffer& buffer =
+		resourceManager.getBuffer(buffers[outputs[index].resource]);
 
 	if (buffer.data != nullptr)
 		return std::span<T>(

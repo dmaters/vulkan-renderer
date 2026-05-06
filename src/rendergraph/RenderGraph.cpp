@@ -30,7 +30,7 @@ ResourceIndex RenderGraph::createImage(
 	ResourceManager::ImageDescription desc,
 	uint8_t swapchainRatio
 ) {
-	ResourceIndex index = m_data.resourceNames.size();
+	ResourceIndex index = m_data.resourceCount++;
 	m_data.images[index] = desc;
 
 	if (swapchainRatio != 0) m_data.swapchainImageRatio[index] = swapchainRatio;
@@ -42,7 +42,7 @@ ResourceIndex RenderGraph::createImage(
 }
 
 ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
-	ResourceIndex index = m_data.resourceNames.size();
+	ResourceIndex index = m_data.resourceCount++;
 
 	m_data.resourceNames.push_back(name);
 	m_data.externalImages[index] = image;
@@ -56,7 +56,7 @@ ResourceIndex RenderGraph::createDeviceBuffer(
 	std::string name, ResourceManager::BufferDescription desc, bool shared
 ) {
 	assert(desc.size > 0);
-	ResourceIndex index = m_data.resourceNames.size();
+	ResourceIndex index = m_data.resourceCount++;
 	m_data.buffers[index] = desc;
 	m_data.resourceNames.push_back(name);
 
@@ -66,7 +66,7 @@ ResourceIndex RenderGraph::createDeviceBuffer(
 }
 
 ResourceIndex RenderGraph::createHostBuffer(std::string name, uint32_t size) {
-	ResourceIndex index = m_data.resourceNames.size();
+	ResourceIndex index = m_data.resourceCount++;
 	m_data.localBufferSizes[index] = size;
 	m_data.resourceNames.push_back(name);
 
@@ -76,7 +76,7 @@ ResourceIndex RenderGraph::createHostBuffer(std::string name, uint32_t size) {
 ResourceIndex RenderGraph::registerBuffer(
 	std::string name, BufferHandle buffer
 ) {
-	ResourceIndex index = m_data.resourceNames.size();
+	ResourceIndex index = m_data.resourceCount++;
 
 	m_data.resourceNames.push_back(name);
 	m_data.externalBuffers[index] = buffer;
@@ -93,7 +93,7 @@ TaskIndex RenderGraph::addTask(
 ) {
 	TaskIndex index = m_data.tasks.size();
 
-	uint32_t offset = m_data.taskDependencies.size();
+	uint32_t offset = m_data.taskResources.size();
 	uint8_t inputSize = inputResources.size();
 	m_data.taskData.push_back(
 		{
@@ -111,18 +111,14 @@ TaskIndex RenderGraph::addTask(
 	);
 	m_data.tasks.push_back(std::move(task));
 
-	m_data.taskDependencies.insert(
-		m_data.taskDependencies.end(),
-		inputResources.begin(),
-		inputResources.end()
+	m_data.taskResources.insert(
+		m_data.taskResources.end(), inputResources.begin(), inputResources.end()
 	);
-	m_data.taskDependencies.insert(
-		m_data.taskDependencies.end(),
+	m_data.taskResources.insert(
+		m_data.taskResources.end(),
 		outputResources.begin(),
 		outputResources.end()
 	);
-
-	m_builder.addTask(index, inputResources, outputResources);
 
 	return index;
 }
@@ -138,7 +134,7 @@ void RenderGraph::submit(const Scene& scene) {
 	if (m_graphUpdated) {
 		m_graphUpdated = false;
 		rendergraph::internal::ExecutionInfo executionInfo =
-			m_builder.getTasks(m_outputImage);
+			m_builder.getTasks(m_tasks, m_outputImage);
 
 		m_data.finalUsages = std::move(executionInfo.finalUsages);
 

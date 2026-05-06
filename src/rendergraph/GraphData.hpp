@@ -9,8 +9,6 @@
 #include "tasks/Task.hpp"
 namespace rendergraph::internal {
 
-using ResourceDependency = std::pair<ResourceIndex, ResourceUsage::Type>;
-
 struct GraphData {
 	struct TaskData {
 		TaskType type;
@@ -39,7 +37,10 @@ struct GraphData {
 	std::vector<std::string> resourceNames;
 	std::vector<Task> tasks;
 	std::vector<TaskData> taskData;
-	std::vector<ResourceDependency> taskDependencies;
+
+	std::vector<ResourceDependency> taskResources;
+
+	std::size_t resourceCount = 0;
 };
 
 struct ExecutionInfo {
