@@ -27,8 +27,12 @@ private:
 
 public:
 	void rotate(glm::vec2 rotation);
-	void translate(glm::vec3 deltaPos) { m_position += deltaPos; }
+	void translate(glm::vec3 deltaPos) {
+		m_position += getOrientation() * deltaPos;
+	}
 	void setResolution(glm::ivec2 resolution);
+	glm::ivec2 getResolution() const { return m_resolution; }
+
 	void setFov(float fov) {
 		m_fov = {
 			.horizontal = fov * m_resolution.x / m_resolution.y,
@@ -37,7 +41,7 @@ public:
 	}
 
 	glm::mat3 getOrientation() const;
-	glm::vec3 getPosition() const { return getOrientation() * m_position; };
+	glm::vec3 getPosition() const { return m_position; };
 
 	glm::mat4 getViewMatrix() const;
 	glm::mat4 getProjectionMatrix() const;

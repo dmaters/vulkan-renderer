@@ -22,6 +22,13 @@ void UI::Render(vk::CommandBuffer commandBuffer) {
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 
+	ImGui::Begin("Controls", &Data._utils.showControlsWindow);
+	ImGui::Text("Right click for camera control");
+	ImGui::Text("WASD for movement");
+	ImGui::Text("LShift + WASD for faster movement");
+	ImGui::Text("LCTRL + WASD for slower movement");
+	ImGui::End();
+
 	ImGui::SeparatorText("System Info");
 	ImGui::LabelText("Current GPU", Data.systemData.currentGpu.c_str());
 

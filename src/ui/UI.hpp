@@ -42,6 +42,12 @@ struct UIData {
 	};
 
 	System systemData;
+
+	struct Utils {
+		bool showControlsWindow = true;
+	};
+
+	Utils _utils;
 };
 
 void Setup();

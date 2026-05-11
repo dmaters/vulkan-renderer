@@ -55,9 +55,10 @@ glm::mat3 Camera::getOrientation() const {
 }
 
 glm::mat4 Camera::getViewMatrix() const {
-	glm::mat4 view = glm::lookAtRH(
-		getOrientation() * m_position, glm::vec3(0), glm::vec3(0, 1, 0)
-	);
+	glm::mat3 orientation = getOrientation();
+	orientation = glm::transpose(orientation);
+	glm::mat4 view = orientation;
+	view[3] = glm::vec4(-orientation * m_position, 1);
 
 	return view;
 };

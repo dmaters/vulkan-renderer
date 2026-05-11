@@ -110,47 +110,57 @@ int Application::run() {
 		uint64_t currentTime = SDL_GetTicks();
 		float deltaTime = static_cast<float>(currentTime - lastFrameTime) / 1e3;
 		lastFrameTime = currentTime;
+		Camera& camera = m_renderer->getScene().camera;
+		glm::vec2 centerCoords =
+			glm::vec2(camera.getResolution()) / glm::vec2(2.0);
 
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
 				running = false;
 			}
-			if (event.type == SDL_EVENT_KEY_DOWN) {
-				auto keysympressed = event.key.key;
-				if (event.key.key == SDLK_ESCAPE) {
-					running = false;
-				}
-			}
+
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
 			    event.button.button == SDL_BUTTON_RIGHT) {
 				SDL_GetMouseState(&prelockCoordinates.x, &prelockCoordinates.y);
 				SDL_SetWindowRelativeMouseMode(m_window, true);
-				SDL_WarpMouseInWindow(nullptr, 400, 300);
+				SDL_HideCursor();
+				SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
 				cameraLocked = true;
 			}
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
 			    event.button.button == SDL_BUTTON_RIGHT) {
 				SDL_SetWindowRelativeMouseMode(m_window, false);
+				SDL_ShowCursor();
 				SDL_WarpMouseInWindow(
 					nullptr, prelockCoordinates.x, prelockCoordinates.y
 				);
 				cameraLocked = false;
 			}
-			if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-				m_renderer->getScene().camera.translate(
-					glm::vec3(0, 0, -1) * event.wheel.y
-				);
-			}
-			if (cameraLocked) {
-				glm::vec2 coordinates;
-				SDL_GetMouseState(&coordinates.x, &coordinates.y);
-				m_renderer->getScene().camera.rotate(
-					(glm::vec2(400., 300.) - coordinates) * deltaTime
+		}
 
-				);
-				SDL_WarpMouseInWindow(nullptr, 400, 300);
-			}
+		const bool* keyStates = SDL_GetKeyboardState(NULL);
+		glm::vec3 direction = glm::vec3(0);
+		float accel = 1.0;
+		if (keyStates[SDL_SCANCODE_W]) direction += glm::vec3(0, 0, -1);
+		if (keyStates[SDL_SCANCODE_S]) direction += glm::vec3(0, 0, 1);
+		if (keyStates[SDL_SCANCODE_D]) direction += glm::vec3(1, 0, 0);
+		if (keyStates[SDL_SCANCODE_A]) direction += glm::vec3(-1, 0, 0);
+		if (keyStates[SDL_SCANCODE_LSHIFT]) accel = 10.0;
+		if (keyStates[SDL_SCANCODE_LCTRL]) accel = 0.2;
+
+		glm::vec3 dir2 = direction * direction;
+		if ((dir2.x + dir2.y + dir2.z) > 0)
+			camera.translate(
+				glm::normalize(direction) * deltaTime * accel * 150.0f
+			);
+
+		if (cameraLocked) {
+			glm::vec2 coordinates;
+			SDL_GetMouseState(&coordinates.x, &coordinates.y);
+
+			camera.rotate((centerCoords - coordinates) * deltaTime);
+			SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
 		}
 
 		m_renderer->render();
