@@ -16,7 +16,7 @@ private:
 	float m_yaw = 0;
 	Fov m_fov;
 
-	std::array<float, 4> m_frustumPlanesDistances { 0.1, 125, 700, 2500 };
+	std::array<float, 4> m_frustumPlanesDistances { 0.1, 125, 700, 4000 };
 
 	glm::ivec2 m_resolution = glm::ivec2(1280, 720);
 

@@ -5,7 +5,7 @@
 
 namespace Shadow {
 
-static const float CASCADE_BOUNDS[3] = { 125, 700, 2500 };
+static const float CASCADE_BOUNDS[3] = { 125, 700, 4000 };
 float getValue(
 	Texture2D shadowMap,
 	float3 worldPos,
