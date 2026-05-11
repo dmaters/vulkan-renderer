@@ -73,7 +73,7 @@ Application::Application(const std::filesystem::path& path) {
 	imguiWindow.Surface = instance.surface;
 	imguiWindow.Swapchain = instance.swapchain.getSwapchain();
 
-	VkFormat outputFormat = VkFormat::VK_FORMAT_R8G8B8A8_SNORM;
+	VkFormat outputFormat = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
 	ImGui_ImplVulkan_InitInfo init_info = {
 		.Instance = instance.instance,
 		.PhysicalDevice = instance.physicalDevice,
