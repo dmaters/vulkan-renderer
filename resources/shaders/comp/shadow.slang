@@ -43,23 +43,25 @@ float shadowPercentage(
 	Camera camera,
 	LightData light
 ) {
-	float distance = abs(mul(camera.view, float4(worldPos, 1)).z);
+	float distance = -mul(camera.view, float4(worldPos, 1)).z;
 	if (distance > CASCADE_BOUNDS[2]) return 1;
 
-	uint cascade = distance < CASCADE_BOUNDS[1] ? 1 : 2;
-	cascade = distance < (CASCADE_BOUNDS[0]) ? 0 : cascade;
+	uint cascade = 2;
 
-	float blendStart =  CASCADE_BOUNDS[cascade] - light.paddings[cascade + 1];
-	float blendEnd = CASCADE_BOUNDS[cascade] + light.paddings[cascade];
+	if(distance < (CASCADE_BOUNDS[1] + light.paddings[1])) cascade = 1;
+	if(distance < (CASCADE_BOUNDS[0] + light.paddings[0])) cascade = 0;
 
-	float weight = saturate((distance - blendStart) / (blendEnd - blendStart));
-	weight = weight * weight * (3 - 2 * weight);
+    //We use the padding of the stabilization alignment for the blending
+    //This way we access the full cascade resolution before using the next
+	float weight = saturate((distance - CASCADE_BOUNDS[cascade]) / light.paddings[cascade]);
+    float shadow = getValue(shadowmap, worldPos, normal, cascade, camera, light);
 
-	float depth = lerp(
-		getValue(shadowmap, worldPos, normal, cascade, camera, light),
-		getValue(shadowmap, worldPos, normal, cascade + 1, camera, light),
-		weight
-	);
-	return depth;
+    if(weight > 0 && cascade < 2)
+    {
+        float nextCascadeShadow = getValue(shadowmap, worldPos, normal, cascade + 1, camera, light);
+        shadow = lerp(shadow, nextCascadeShadow, weight);
+    }
+
+	return shadow;
 }
 }  // namespace Shadow

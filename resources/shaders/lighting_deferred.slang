@@ -55,7 +55,7 @@ struct VertexOutput {
 		roughnessMetallic.x,
 		roughnessMetallic.y
 	);
-	material += (1 - shadowPercentage.x) * brdf * _lightData.intensity *
+	material += (1 - shadowPercentage) * brdf * _lightData.intensity *
 	            _lightData.color;
 	material += skylight * 2.7;  // Arbitrary value for better visuals
 	return float4(material, 1);
