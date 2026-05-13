@@ -52,7 +52,4 @@ public:
 		return m_frustumPlanesDistances;
 	}
 	std::array<glm::vec4, 6> getFrustumPlanes() const;
-
-	using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
-	FrustumPoints getFrustumPoints(const Camera& camera);
 };

@@ -4,15 +4,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
-std::array<glm::float3, 4> computeFrustumDirections(Camera::Fov fov) {
+std::array<glm::vec3, 4> computeFrustumDirections(Camera::Fov fov) {
 	float tanV = tan(glm::radians(fov.vertical / 2.0));
 	float tanH = tan(glm::radians(fov.horizontal / 2.0));
 
-	std::array<glm::float3, 4> directions;
-	directions[0] = glm::normalize(glm::vec3(tanH, tanV, -1.0f));
-	directions[1] = glm::normalize(glm::vec3(-tanH, tanV, -1.0f));
-	directions[2] = glm::normalize(glm::vec3(-tanH, -tanV, -1.0f));
-	directions[3] = glm::normalize(glm::vec3(tanH, -tanV, -1.0f));
+	std::array<glm::vec3, 4> directions;
+	directions[0] = glm::vec3(tanH, tanV, -1.0f);
+	directions[1] = glm::vec3(-tanH, tanV, -1.0f);
+	directions[2] = glm::vec3(-tanH, -tanV, -1.0f);
+	directions[3] = glm::vec3(tanH, -tanV, -1.0f);
 	return directions;
 }
 
@@ -85,20 +85,4 @@ std::array<glm::vec4, 6> Camera::getFrustumPlanes() const {
 		glm::vec4(orientation * -direction, m_frustumPlanesDistances[0]);
 	planes[5] = glm::vec4(orientation * direction, m_frustumPlanesDistances[3]);
 	return planes;
-}
-
-using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
-FrustumPoints Camera::getFrustumPoints(const Camera& camera) {
-	std::array<std::array<glm::vec4, 4>, 4> points;
-	glm::mat4 invView = glm::inverse(camera.getViewMatrix());
-	for (int pl = 0; pl < 4; pl++) {
-		for (int pi = 0; pi < 4; pi++) {
-			float distance = camera.getCascadeDistances()[pl];
-			points[pl][pi] =
-				invView *
-				glm::vec4(m_frustumEdgeDirections[pi] * distance, 1.0);
-		}
-	}
-
-	return points;
 }
