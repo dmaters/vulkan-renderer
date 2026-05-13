@@ -18,7 +18,6 @@ float getValue(
 		mul(mul(light.cascadeProjections[cascade], light.view),
 	        float4(worldPos, 1));
 
-	lightSpacePos.y = -lightSpacePos.y;
 
 	float2 uv = lightSpacePos.xy * 0.5 + 0.5;
 

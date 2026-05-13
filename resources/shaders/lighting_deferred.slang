@@ -22,7 +22,6 @@ struct VertexOutput {
 
 [shader("fragment")] float4 main(VertexOutput input) : SV_Target {
 	float3 cameraPos = (_camera.view[3].xyz) * float3(1, 1, -1);
-	input.frag_position.y = 1 - input.frag_position.y;
 	float4 fragPos = _world_position.Sample(
 		_samplers[SamplerType::LinearClamp], input.frag_position
 	);
@@ -44,8 +43,8 @@ struct VertexOutput {
 	float shadowPercentage = Shadow::shadowPercentage(
 		_shadow_map, fragPos.xyz, normal.xyz, _camera, _lightData
 	);
-	float3 light_dir = -transpose(_lightData.view)[2].xyz;
-	float3 skylight = _envSH.getValue(normal * float3(1, -1, 1));
+	float3 light_dir = transpose(_lightData.view)[2].xyz;
+	float3 skylight = _envSH.getValue(normal);
 	float3 brdf = PBR::microfacetBRDF(
 		input.frag_position,
 		view_dir,

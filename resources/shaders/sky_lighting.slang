@@ -53,7 +53,7 @@ void main(uint3 dispatch : SV_GroupID) {
 		for (uint y = 0; y < _subSamples; y++) {
 			float3 direction = fibonacciSampling<true>(y, _subSamples);
 			direction = mul(rotation, direction);
-			color += readSkyViewLUT(_skyviewLUT, direction * float3(1, -1, 1)) *
+			color += readSkyViewLUT(_skyviewLUT, direction) *
 			         saturate(dot(direction, up));
 		}
 

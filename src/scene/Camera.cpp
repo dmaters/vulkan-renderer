@@ -70,6 +70,7 @@ glm::mat4 Camera::getProjectionMatrix() const {
 		0.1f,
 		m_frustumPlanesDistances[3]
 	);
+	proj[1][1] *= -1;
 	return proj;
 }
 std::array<glm::vec4, 6> Camera::getFrustumPlanes() const {

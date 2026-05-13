@@ -56,14 +56,12 @@ void Renderer::render() {
 		}
 	);
 
-	glm::mat3 orientation = glm::mat3(1);
-	orientation[0] = glm::vec3(1, 0, 0);
-	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, 1, 0);
-	orientation = glm::rotate_slow(
-		glm::mat4(orientation),
-		(-glm::pi<float>() / 2.0f) + UI::Data.lightingData.sunAngleRad,
-		glm::vec3(1, 0, 0)
+	glm::mat3 orientation = glm::mat3(
+		glm::rotate(
+			glm::mat4(1.0f),
+			-UI::Data.lightingData.sunAngleRad,
+			glm::vec3(1, 0, 0)
+		)
 	);
 
 	m_currentScene.lights[0].orientation = orientation;

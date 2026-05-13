@@ -6,7 +6,6 @@ static const float3 cLUMA =  float3(0.2126, 0.7152, 0.0722);
 
 
 [shader("fragment")] float4 main(float2 uv){
-    uv.y = 1 - uv.y;
     uint3 imageRes;
     _image.GetDimensions(0,imageRes.x,imageRes.y,imageRes.z);
     float2 texSize = 1.0 / imageRes.xy;

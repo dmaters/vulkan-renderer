@@ -10,7 +10,6 @@
 
 void main(uint3 dispatch : SV_GroupID) {
 	float3 sunDirection = -transpose(_lightData.view)[2].xyz;
-	sunDirection.y = -sunDirection.y;
 	writeSkyViewLUT(
 		_skyviewLUT,
 		_transmittanceLUT,

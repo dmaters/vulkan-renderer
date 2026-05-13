@@ -53,10 +53,6 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 
 	std::vector<slang::CompilerOptionEntry> compilerOptions = {
 		{
-         .name = slang::CompilerOptionName::VulkanInvertY,
-         .value = slang::CompilerOptionValue { .intValue0 = true },
-		 },
-		{
          .name = slang::CompilerOptionName::VulkanUseEntryPointName,
          .value = slang::CompilerOptionValue { .intValue0 = true },
 		 }
