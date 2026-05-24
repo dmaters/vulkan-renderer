@@ -95,7 +95,7 @@ FragmentOutput output<bool ALPHA_TEST>(VertexOutput input, uint primitiveID) {
 	output.metallic_roughness =
 		_staticTextures[instance.metallic_roughness_texture]
 			.Sample(_samplers[SamplerType::LinearClamp], input.texcoord)
-			.gb *
+			.rg *
 		float2(instance.roughness_value, instance.metallic_value);
 
 	return output;

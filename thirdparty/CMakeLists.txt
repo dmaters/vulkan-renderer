@@ -27,7 +27,11 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/nothings/stb
 )
 
-FetchContent_MakeAvailable(glm sdl assimp stb)
+FetchContent_Declare(
+    texture-compressor
+    GIT_REPOSITORY https://github.com/dmaters/texture-compressor
+)
+FetchContent_MakeAvailable(glm sdl assimp stb texture-compressor)
 
 include(slang.cmake)
 include(imgui.cmake)
@@ -48,4 +52,5 @@ target_link_libraries(
     assimp
     slang
     imgui
+    texture-compressor
 )

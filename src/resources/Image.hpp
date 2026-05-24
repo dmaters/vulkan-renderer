@@ -12,6 +12,7 @@ struct Image {
 	vk::ImageView view = {};
 	vk::Format format;
 	vk::Extent3D size;
+	uint32_t mipLevels = 1;
 	std::optional<SubAllocation> allocation;
 
 	vk::ImageAspectFlags getAspectFlags() const {

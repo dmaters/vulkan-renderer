@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <texture_compressor/compression.hpp>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -174,7 +175,7 @@ void ResourceManager::copyBuffers(std::vector<BufferCopy> &info) {
 void copyToImage(
 	vk::Buffer origin,
 	vk::Image destination,
-	vk::BufferImageCopy offset,
+	std::vector<vk::BufferImageCopy> offsets,
 	vk::CommandBuffer &commandBuffer
 ) {
 	vk::ImageMemoryBarrier2 barrier {
@@ -186,7 +187,7 @@ void copyToImage(
         .subresourceRange = {
             .aspectMask = vk::ImageAspectFlagBits::eColor,
             .baseMipLevel = 0,
-            .levelCount = 1,
+            .levelCount = (uint32_t)offsets.size(),
             .baseArrayLayer = 0,
             .layerCount = 1,
         }
@@ -198,10 +199,7 @@ void copyToImage(
 		}
 	);
 	commandBuffer.copyBufferToImage(
-		origin,
-		destination,
-		vk::ImageLayout::eTransferDstOptimal,
-		{ { offset } }
+		origin, destination, vk::ImageLayout::eTransferDstOptimal, { offsets }
 	);
 }
 
@@ -228,101 +226,6 @@ vk::Image createImage(const ResourceManager::ImageDescription &description) {
 	return image;
 }
 
-void writeMipMaps(
-	vk::Image image,
-	vk::Extent3D baseResolution,
-	uint32_t mipLevels,
-	vk::CommandBuffer &commandBuffer
-) {
-	vk::ImageMemoryBarrier2 sourceBarrier {
-		.image = image, .subresourceRange = {
-			.aspectMask = vk::ImageAspectFlagBits::eColor,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	};
-	vk::ImageMemoryBarrier2 destinationBarrier = {
-		.dstStageMask = vk::PipelineStageFlagBits2::eBlit,
-		.dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-		.oldLayout = vk::ImageLayout::eUndefined,
-		.newLayout = vk::ImageLayout::eTransferDstOptimal,
-		.image = image,
-	 	.subresourceRange = {
-			.aspectMask = vk::ImageAspectFlagBits::eColor,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-
-	};
-
-	vk::Extent3D res = baseResolution;
-	for (uint32_t i = 1; i < mipLevels; i++) {
-		destinationBarrier.subresourceRange.baseMipLevel = i;
-
-		sourceBarrier.subresourceRange.baseMipLevel = i - 1;
-		sourceBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-		sourceBarrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-		sourceBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-		sourceBarrier.srcStageMask = vk::PipelineStageFlagBits2::eBlit;
-		sourceBarrier.dstAccessMask = vk::AccessFlagBits2::eTransferRead;
-		sourceBarrier.dstStageMask = vk::PipelineStageFlagBits2::eBlit;
-
-		std::array<vk::ImageMemoryBarrier2, 2> barriers = {
-			sourceBarrier,
-			destinationBarrier,
-		};
-		commandBuffer.pipelineBarrier2(
-			vk::DependencyInfo {
-				.imageMemoryBarrierCount = 2,
-				.pImageMemoryBarriers = barriers.data(),
-			}
-		);
-
-		vk::ImageBlit blit {
-			.srcSubresource = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = i - 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-			},
-			.dstSubresource = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = i,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-			},
-		};
-		blit.srcOffsets[0] = vk::Offset3D { 0, 0, 0 };
-		blit.srcOffsets[1] =
-			vk::Offset3D { (int32_t)res.width, (int32_t)res.height, 1 };
-		blit.dstOffsets[0] = vk::Offset3D { 0, 0, 0 };
-		blit.dstOffsets[1] =
-			vk::Offset3D { (int32_t)res.width / 2, (int32_t)res.height / 2, 1 };
-
-		commandBuffer.blitImage(
-			image,
-			vk::ImageLayout::eTransferSrcOptimal,
-			image,
-			vk::ImageLayout::eTransferDstOptimal,
-			1,
-			&blit,
-			vk::Filter::eLinear
-		);
-
-		sourceBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-		sourceBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-		commandBuffer.pipelineBarrier2(
-			vk::DependencyInfo {
-				.imageMemoryBarrierCount = 1,
-				.pImageMemoryBarriers = &sourceBarrier,
-			}
-		);
-
-		res.width /= 2;
-		res.height /= 2;
-	}
-}
 enum ChannelsValues : uint8_t {
 	R = 1 << 0,
 	G = 1 << 1,
@@ -332,8 +235,29 @@ enum ChannelsValues : uint8_t {
 typedef uint8_t Channels;
 
 void loadImage(
-	std::filesystem::path &path, std::byte *stagingAddress, Channels channels
+	std::filesystem::path &path,
+	std::byte *stagingAddress,
+	ResourceManager::TextureInfo::TextureType textureType,
+	uint32_t mipLevels
 ) {
+	Channels channels = 0;
+	switch (textureType) {
+		case ResourceManager::TextureInfo::TextureType::Albedo:
+			channels = (ChannelsValues::R) | (ChannelsValues::G) |
+			           (ChannelsValues::B) | (ChannelsValues::A);
+			break;
+		case ResourceManager::TextureInfo::TextureType::Normal:
+			channels = (ChannelsValues::R) | (ChannelsValues::G);
+			break;
+		case ResourceManager::TextureInfo::TextureType::MetallicRoughness:
+			channels = (ChannelsValues::G) | (ChannelsValues::B);
+			break;
+		default:
+			channels = (ChannelsValues::R) | (ChannelsValues::G) |
+			           (ChannelsValues::B) | (ChannelsValues::A);
+			break;
+	}
+
 	int x, y, c;
 
 	std::byte *data =
@@ -346,27 +270,84 @@ void loadImage(
 	if (channels & ChannelsValues::B) channelCount++;
 	if (channels & ChannelsValues::A) channelCount++;
 
+	std::vector<std::byte> uncompressedData(x * y * channelCount);
+
 	for (int i = 0; i < x * y; i++) {
 		uint8_t texelOffset = 0;
 		if (channels & ChannelsValues::R) {
-			stagingAddress[i * channelCount] = data[i * 4];
+			uncompressedData[i * channelCount] = data[i * 4];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::G) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 1];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 1];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::B) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 2];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 2];
 			texelOffset++;
 		}
 		if (channels & ChannelsValues::A) {
-			stagingAddress[i * channelCount + texelOffset] = data[i * 4 + 3];
+			uncompressedData[i * channelCount + texelOffset] = data[i * 4 + 3];
 			texelOffset++;
 		}
 	}
 
+	texture_compressor::Format format;
+	if (textureType == ResourceManager::TextureInfo::TextureType::Normal ||
+	    textureType ==
+	        ResourceManager::TextureInfo::TextureType::MetallicRoughness)
+		format = texture_compressor::Format::BC5;
+	else
+		format = texture_compressor::Format::BC1_ALPHA;
+
+	texture_compressor::compress(
+		x, y, format, uncompressedData.data(), stagingAddress, mipLevels
+	);
+
 	stbi_image_free(data);
+}
+
+std::vector<vk::BufferImageCopy> getImageCopyInfo(
+	const Image &image,
+	ResourceManager::TextureInfo::TextureType textureType,
+	uint32_t stagingOffset
+) {
+	std::vector<vk::BufferImageCopy> copyInfos;
+	uint32_t baseOffset = 0;
+
+	for (uint32_t m = 0; m < image.mipLevels; m++) {
+		uint32_t mipWidth = std::max(1u, image.size.width >> m);
+		uint32_t mipHeight = std::max(1u, image.size.height >> m);
+
+		uint32_t blockWidth = (mipWidth + 3) / 4;
+		uint32_t blockHeight = (mipHeight + 3) / 4;
+
+		uint8_t blockSize = 0;
+		if (textureType == ResourceManager::TextureInfo::TextureType::Albedo)
+			blockSize = 8;
+		else
+			blockSize = 16;
+
+		uint32_t mipSize = blockWidth * blockHeight * blockSize;
+
+		copyInfos.push_back({
+      			.bufferOffset = stagingOffset + baseOffset,
+      			.bufferRowLength  = 0,
+      			.imageSubresource = {
+            	        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                      .mipLevel = m,
+      				.layerCount = 1,
+                  },
+      	        .imageExtent = {
+					.width = mipWidth,
+					.height = mipHeight,
+					.depth = 1
+				},
+      		 });
+
+		baseOffset += mipSize;
+	}
+	return copyInfos;
 }
 
 ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
@@ -383,14 +364,16 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 		int32_t x, y, channels;
 		stbi_info(info.path.string().c_str(), &x, &y, &channels);
 
+		uint32_t mipLevels = std::floor(std::log2(std::min(x, y))) + 1;
+		mipLevels = mipLevels < 3 ? 1 : mipLevels - 2;
+
 		textureDesc.push_back(
 			{
 				.width = (uint32_t)x,
 				.height = (uint32_t)y,
 				.depth = 1,
-				.miplevels =
-					(uint32_t)(std::floor(std::log2(std::max(x, y))) + 1),
-				.format = info.expectedFormat,
+				.miplevels = mipLevels,
+				.format = info.getFormat(),
 				.usage = vk::ImageUsageFlagBits::eSampled |
 		                 vk::ImageUsageFlagBits::eTransferSrc |
 		                 vk::ImageUsageFlagBits::eTransferDst,
@@ -427,21 +410,12 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 
 		}
 	)[0];
-	vk::CommandBuffer mipmapBuffer = device.allocateCommandBuffers(
-		{
-			.commandPool = m_graphicPool,
-			.level = vk::CommandBufferLevel::ePrimary,
-			.commandBufferCount = 1,
-		}
-	)[0];
-	vk::CommandBufferInheritanceInfo inheritanceInfo {};
+
 	vk::CommandBufferBeginInfo beginInfo {
 		.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-		.pInheritanceInfo = &inheritanceInfo,
 	};
 
 	transferBuffer.begin(beginInfo);
-	mipmapBuffer.begin(beginInfo);
 
 	std::vector<std::thread> threads;
 
@@ -451,10 +425,6 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 
 		vk::MemoryRequirements requirements =
 			device.getImageMemoryRequirements(image.image);
-		Channels expectedChannels =
-			image.format == vk::Format::eR8G8Unorm
-				? (ChannelsValues::R | ChannelsValues::G)
-				: (0xff);
 
 		SubAllocation stagingAllocation = stagingAllocator.subAllocate(
 			{
@@ -465,54 +435,29 @@ ResourceManager::DeviceAllocationIndex ResourceManager::loadSceneTextures(
 
 		std::byte *address =
 			stagingAllocator.getAllocation().address + stagingAllocation.offset;
-		threads.emplace_back(
-			[&path = textures[i].path, address, expectedChannels]() {
-				loadImage(path, address, expectedChannels);
-			}
+
+		threads.emplace_back([&textures,
+		                      i,
+		                      address,
+		                      mipLevels = image.mipLevels]() {
+			loadImage(
+				textures[i].path, address, textures[i].textureType, mipLevels
+			);
+		});
+
+		auto imageCopyInfos = getImageCopyInfo(
+			image, textures[i].textureType, stagingAllocation.offset
 		);
 
-		copyToImage(
-			stagingBuffer,
-			image.image,
-			{
-				.bufferOffset = stagingAllocation.offset,
-				.bufferRowLength  = (uint32_t)image.size.width,
-				.imageSubresource = { .aspectMask =
-		                                vk::ImageAspectFlagBits::eColor,
-									.layerCount = 1,
-									},
-		      .imageExtent = image.size,
-			 },
-			 transferBuffer
-		);
-
-		writeMipMaps(
-			image.image, image.size, textureDesc[i].miplevels, mipmapBuffer
-		);
+		copyToImage(stagingBuffer, image.image, imageCopyInfos, transferBuffer);
 	}
-	transferBuffer.end();
-	m_stagingCommandBuffer.executeCommands(transferBuffer);
 
-	mipmapBuffer.end();
+	transferBuffer.end();
+
 	for (auto &thread : threads) thread.join();
 
+	m_stagingCommandBuffer.executeCommands(transferBuffer);
 	sync();
-
-	vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eTransfer;
-	vk::TimelineSemaphoreSubmitInfo waitSemaphoreInfo {
-		.waitSemaphoreValueCount = 1,
-		.pWaitSemaphoreValues = &m_transferCount,
-	};
-
-	vk::SubmitInfo mipmapSubmitInfo {
-		.pNext = &waitSemaphoreInfo,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &m_semaphore,
-		.pWaitDstStageMask = &waitStage,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &mipmapBuffer,
-	};
-	Instance::Get().graphicQueue.submit({ mipmapSubmitInfo });
 
 	m_stagingAdditionalAllocators.push_back(stagingAllocator);
 
@@ -584,6 +529,7 @@ ResourceManager::DeviceAllocationIndex ResourceManager::createResources(
                      description.height,
                      description.depth,
 					},
+			.mipLevels = description.miplevels,
 		};
 
 		m_deviceAllocatedImages[allocIndex].push_back(handle);
