@@ -50,10 +50,20 @@ Instance& Instance::Create(SDL_Window* window) {
 	else
 		transferQueue = graphicQueue;
 
+	vk::SurfaceFormatKHR format = formats[0];
+	for (vk::SurfaceFormatKHR f : formats) {
+		if ((f.format == vk::Format::eB8G8R8A8Srgb ||
+		     f.format == vk::Format::eB8G8R8A8Srgb) &&
+		    f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+			format = f;
+			break;
+		}
+	}
+
 	Instance::_instance = {
 		.device = device,
 		.surface = surface,
-		.surfaceFormat = formats[0],
+		.surfaceFormat = format,
 		.physicalDevice = physicalDevice,
 		.instance = instance,
 		.graphicQueue = graphicQueue,
