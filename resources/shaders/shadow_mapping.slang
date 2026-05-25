@@ -66,6 +66,6 @@ struct PrimitiveInstance {
 
     clip(
         _staticTextures[instance.albedo_texture].Sample(
-        _samplers[SamplerType::LinearClamp], input.texcoord).w - 0.5
+        _samplers[SamplerType::LinearRepeat], input.texcoord).w - 0.5
     );
 }

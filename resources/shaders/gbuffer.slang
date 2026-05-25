@@ -23,10 +23,10 @@ struct VertexOutput {
 
 	output.frag_position =
 		mul(input.transformation, float4(input.position, 1.0));
-	output.normal = input.normal;
+	output.normal = mul(input.transformation ,float4(input.normal,1)).xyz;
 	output.texcoord = input.texCoord;
-	output.tangent = input.tangent;
-	output.bitangent = input.bitangent;
+	output.tangent = mul(input.transformation ,float4(input.tangent,1)).xyz;
+	output.bitangent = mul(input.transformation ,float4(input.bitangent,1)).xyz;
 	output.drawIndex = drawIndex;
 	return output;
 }
@@ -55,7 +55,7 @@ struct PrimitiveInstance {
 
 
 float3 reconstructNormal(float2 xy) {
-	float z = sqrt(max(0.0, 1.0 - xy.x * xy.x - xy.y * xy.y));
+	float z = sqrt(1 - dot(xy,xy));
 	return normalize(float3(xy, z));
 }
 
@@ -74,27 +74,27 @@ FragmentOutput output<bool ALPHA_TEST>(VertexOutput input, uint primitiveID) {
 	if(ALPHA_TEST)
        clip(
             _staticTextures[instance.albedo_texture].Sample(
-            _samplers[SamplerType::LinearClamp], input.texcoord).w - 0.5
+            _samplers[SamplerType::LinearRepeat], input.texcoord).w - 0.5
        );
 
 	output.color = _staticTextures[instance.albedo_texture].Sample(
-					   _samplers[SamplerType::LinearClamp], input.texcoord
+					   _samplers[SamplerType::LinearRepeat], input.texcoord
 				   ) *
 	               float4(instance.albedo_value, 1);
 	output.world_space = input.frag_position;
 
-	float3 normal = reconstructNormal(
-		_staticTextures[instance.normal_texture]
-			.Sample(_samplers[SamplerType::LinearClamp], input.texcoord)
-			.rg
-	);
-	float3x3 TBN = float3x3(input.tangent, input.bitangent, -input.normal);
-	float3 localNormal = normalize(normal * 2.0 - 1.0);
-	float3 transformedNormal = mul(localNormal, TBN);
+	float2 sampledNormal = 	_staticTextures[instance.normal_texture]
+		.Sample(_samplers[SamplerType::LinearRepeat], input.texcoord)
+		.rg;
+	float2 localNormal = sampledNormal * 2.0 - 1.0;
+	float3 normal = reconstructNormal(localNormal);
+	float3x3 TBN = transpose(float3x3(input.tangent, input.bitangent, input.normal));
+	float3 transformedNormal = normalize(mul(TBN,normal));
 	output.normal = float4(transformedNormal, 1);
+
 	output.metallic_roughness =
 		_staticTextures[instance.metallic_roughness_texture]
-			.Sample(_samplers[SamplerType::LinearClamp], input.texcoord)
+			.Sample(_samplers[SamplerType::LinearRepeat], input.texcoord)
 			.rg *
 		float2(instance.roughness_value, instance.metallic_value);
 
