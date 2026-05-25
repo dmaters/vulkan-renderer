@@ -59,7 +59,7 @@ void Renderer::render() {
 	glm::mat3 orientation = glm::mat3(
 		glm::rotate(
 			glm::mat4(1.0f),
-			-UI::Data.lightingData.sunAngleRad,
+			UI::Data.lightingData.sunAngleRad,
 			glm::vec3(1, 0, 0)
 		)
 	);

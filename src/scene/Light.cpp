@@ -35,8 +35,9 @@ FrustumPoints getFrustumPoints(const Camera& camera) {
 	return points;
 }
 glm::mat4 getViewMatrix(glm::mat3 orientation, glm::vec3 position) {
+	orientation[2] = -orientation[2];
 	glm::mat4 view = glm::transpose(orientation);
-	view[3] = glm::vec4(-orientation * position, 1);
+	view[3] = glm::vec4(-glm::mat3(view) * position, 1);
 
 	return view;
 };
@@ -125,12 +126,11 @@ MaterialDefinitions::Light Light::getShaderObject(
 		glm::mat4 proj = glm::orthoRH_ZO(
 			bounds.left,
 			bounds.right,
-			bounds.top,
 			bounds.bottom,
+			bounds.top,
 			bounds.near,
 			bounds.far
 		);
-
 		shadowProjections[i] = proj;
 		shadowPaddings[i] = bounds.padding;
 	}
