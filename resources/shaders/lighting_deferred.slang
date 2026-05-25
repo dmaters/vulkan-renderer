@@ -44,7 +44,7 @@ struct VertexOutput {
 		_shadow_map, fragPos.xyz, normal.xyz, _camera, _lightData
 	);
 	float3 light_dir = transpose(_lightData.view)[2].xyz;
-	float3 skylight = _envSH.getValue(normal);
+	float3 skylight = _envSH.getValue(-normal);//Improve coordinate handling
 	float3 brdf = PBR::microfacetBRDF(
 		input.frag_position,
 		view_dir,
@@ -56,6 +56,7 @@ struct VertexOutput {
 	);
 	material += (1 - shadowPercentage) * brdf * _lightData.intensity *
 	            _lightData.color;
-	material += skylight * 2.7;  // Arbitrary value for better visuals
+	material += brdf * skylight * 400;  // Arbitrary value for better visuals
+
 	return float4(material, 1);
 }
