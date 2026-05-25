@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         assimp
         GIT_REPOSITORY https://github.com/assimp/assimp
-        GIT_TAG v6.0.2
+        GIT_TAG v6.0.5
 )
 
 FetchContent_Declare(
