@@ -26,9 +26,9 @@ void Renderer::createRenderGraph(Scene& scene) {
 	std::vector<TaskIndex> passes;
 
 	ResourceIndex pbrMaterialData =
-		m_graph.registerBuffer("pbr_data_buffer", buffers[4]);
+		m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
 	ResourceIndex pbrMaterialInstances =
-		m_graph.registerBuffer("pbr_instances_buffer", buffers[5]);
+		m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
 
 	ResourceIndex cameraBuffer = m_graph.createDeviceBuffer(
 		"camera_buffer",

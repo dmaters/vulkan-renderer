@@ -249,7 +249,7 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 void MaterialManager::update() { m_shaderEngine->flushRetiredPipelines(); }
 
 uint32_t MaterialManager::registerTextureGroup(
-	ResourceManager::DeviceAllocationIndex index
+	ResourceManager::AllocationIndex index
 ) {
 	auto& textures = m_resourceManager.getImages(index);
 

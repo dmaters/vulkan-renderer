@@ -21,6 +21,6 @@ struct Scene {
 	std::vector<PrimitiveBound> primitiveBounds;
 	float size;
 
-	ResourceManager::DeviceAllocationIndex allocation;
+	ResourceManager::AllocationIndex allocation;
 	std::unordered_map<MaterialIndex, std::vector<uint32_t>> buckets;
 };

@@ -1,10 +1,8 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -13,10 +11,7 @@
 
 #include "Buffer.hpp"
 #include "Image.hpp"
-#include "Instance.hpp"
-#include "memory/Allocation.hpp"
 #include "memory/LinearAllocator.hpp"
-#include "memory/RingAllocator.hpp"
 #include "resources/Buffer.hpp"
 
 struct BufferHandle {
@@ -31,68 +26,24 @@ class ResourceManager {
 public:
 	struct ImageDescription;
 	struct BufferDescription;
-	struct BufferCopy;
 
-	using DeviceAllocationIndex = uint32_t;
-	using HostAllocationIndex = uint32_t;
-
-	struct TextureInfo {
-		std::filesystem::path path;
-
-		enum class TextureType {
-			Albedo,
-			Normal,
-			MetallicRoughness
-		};
-		TextureType textureType;
-
-		vk::Format getFormat() const {
-			switch (textureType) {
-				case TextureType::Albedo:
-					return vk::Format::eBc1RgbaSrgbBlock;
-				case TextureType::Normal:
-				case TextureType::MetallicRoughness:
-					return vk::Format::eBc5UnormBlock;
-			}
-		}
-	};
+	using AllocationIndex = uint32_t;
 
 private:
+	std::vector<Image> m_images;
+	std::vector<Buffer> m_buffers;
+
+	std::vector<LinearAllocator> m_allocations;
+	std::unordered_map<AllocationIndex, std::vector<ImageHandle>>
+		m_allocationImages;
+	std::unordered_map<AllocationIndex, std::vector<BufferHandle>>
+		m_allocationBuffers;
+
+	vk::CommandPool m_commandPool;
 	vk::Semaphore m_semaphore;
-	uint64_t m_transferCount = 0;
-	uint32_t m_resourceCounter = 0;
-
-	vk::CommandPool m_transferPool;
-	vk::CommandPool m_graphicPool;
-
-	std::unordered_map<uint32_t, Image> m_images;
-	std::unordered_map<uint32_t, Buffer> m_buffers;
-
-	std::unordered_map<std::string, ImageHandle> m_imageNames;
-	std::unordered_map<std::string, BufferHandle> m_bufferNames;
-
-	std::vector<LinearAllocator> m_stagingAdditionalAllocators;
-	vk::CommandBuffer m_stagingCommandBuffer;
-	RingAllocator m_stagingAllocation;
-	vk::Buffer m_stagingBuffer;
-
-	std::unordered_map<DeviceAllocationIndex, LinearAllocator>
-		m_deviceAllocations;
-	std::unordered_map<DeviceAllocationIndex, std::vector<ImageHandle>>
-		m_deviceAllocatedImages;
-	std::unordered_map<DeviceAllocationIndex, std::vector<BufferHandle>>
-		m_deviceAllocatedBuffers;
-
-	std::unordered_map<HostAllocationIndex, Allocation> m_hostAllocations;
-	std::unordered_map<HostAllocationIndex, std::vector<BufferHandle>>
-		m_hostAllocationBuffers;
-
-	uint32_t m_allocationCount = 0;
+	std::size_t m_transferCount = 0;
 
 	ImageHandle registerImage(Image image, ImageHandle handle = { 0 });
-
-	void copyToBuffer(const std::vector<std::byte>& bytes);
-	void copyBuffers(std::vector<BufferCopy>& info);
 
 public:
 	ResourceManager();
@@ -101,62 +52,40 @@ public:
 		return m_buffers.at(handle.value);
 	}
 
-	const std::vector<ImageHandle>& getImages(
-		DeviceAllocationIndex index
-	) const {
-		return m_deviceAllocatedImages.at(index);
+	const std::vector<ImageHandle>& getImages(AllocationIndex index) const {
+		return m_allocationImages.at(index);
 	}
-	const std::vector<BufferHandle>& getBuffers(
-		DeviceAllocationIndex index
-	) const {
-		return m_deviceAllocatedBuffers.at(index);
+	const std::vector<BufferHandle>& getBuffers(AllocationIndex index) const {
+		return m_allocationBuffers.at(index);
 	}
-	const std::vector<BufferHandle>& getHostBuffers(
-		HostAllocationIndex index
-	) const {
-		return m_hostAllocationBuffers.at(index);
-	}
-
-	ImageHandle getNamedImageIndex(std::string_view name) const {
-		return m_imageNames.at(std::string(name));
-	}
-	BufferHandle getNamedBufferIndex(std::string_view name) const {
-		return m_bufferNames.at(std::string(name));
-	}
-
-	Image& getNamedImage(std::string_view name) {
-		return m_images.at(m_imageNames.at(std::string(name)).value);
-	}
-	Buffer& getNamedBuffer(std::string_view name) {
-		return m_buffers.at(m_bufferNames.at(std::string(name)).value);
-	}
-
 	void setName(std::string name, ImageHandle image);
 	void setName(std::string name, BufferHandle buffer);
 
-	DeviceAllocationIndex loadSceneTextures(std::vector<TextureInfo> textures);
-	DeviceAllocationIndex createResources(
-		std::vector<ImageDescription> images,
-		std::vector<BufferDescription> buffers
+	enum class MemoryLocation {
+		Device,
+		HostVisible,
+		Host,
+	};
+	AllocationIndex createResources(
+		const std::vector<ImageDescription>& images,
+		const std::vector<BufferDescription>& buffers,
+		MemoryLocation location
 	);
-	DeviceAllocationIndex createSharedAllocation(
-		std::vector<BufferDescription> buffers
-	);
-	HostAllocationIndex createHostAllocation(std::vector<uint32_t> sizes);
+	void freeAllocation(AllocationIndex index);
 
-	void freeDeviceAllocation(DeviceAllocationIndex index);
-	void freeHostAllocation(HostAllocationIndex index);
+	struct ResourceCopyInfo;
+	void copyResources(const std::vector<ResourceCopyInfo>& info);
 
-	template <typename T, typename F>
-		requires std::invocable<F, T&>
-	void queueBufferUpdate(BufferHandle handle, F updateFunction);
-
-	template <typename F>
-		requires std::invocable<F, std::byte*>
-	void queueBufferUpdate(BufferHandle handle, F updateFunction);
-
-	const vk::Semaphore& getSemaphore() const { return m_semaphore; }
-	uint64_t sync();
+	struct SemaphoreInfo {
+		vk::Semaphore semaphore;
+		std::size_t expectedValue;
+	};
+	SemaphoreInfo getSemaphoreInfo() const {
+		return {
+			.semaphore = m_semaphore,
+			.expectedValue = m_transferCount,
+		};
+	}
 };
 
 struct ResourceManager::ImageDescription {
@@ -172,66 +101,21 @@ struct ResourceManager::BufferDescription {
 	vk::BufferUsageFlags usage;
 };
 
-struct ResourceManager::BufferCopy {
-	vk::Buffer origin;
-	vk::Buffer destination;
-	vk::BufferCopy copy;
-};
-
-template <typename T, typename F>
-	requires std::invocable<F, T&>
-void ResourceManager::queueBufferUpdate(BufferHandle handle, F updateFunction) {
-	Buffer& buffer = getBuffer(handle);
-	// assert(buffer.size == sizeof(T));
-
-	vk::Device& device = Instance::Get().device;
-	vk::MemoryRequirements requirements =
-		device.getBufferMemoryRequirements(buffer.buffer);
-	requirements.alignment = 0;
-
-	SubAllocation stagingAllocation =
-		m_stagingAllocation.subAllocate(requirements);
-
-	updateFunction(*(T*)(m_stagingAllocation.getAllocation().address +
-	                     stagingAllocation.offset));
-
-	std::vector<ResourceManager::BufferCopy> info = {
-			{
-				.origin = m_stagingBuffer,
-				.destination = m_buffers[handle.value].buffer,
-				.copy = {
-					.srcOffset = stagingAllocation.offset,
-					.size = buffer.size,
-				 },
-			}
-		};
-
-	copyBuffers(info);
-}
-
-template <typename F>
-	requires std::invocable<F, std::byte*>
-void ResourceManager::queueBufferUpdate(BufferHandle handle, F updateFunction) {
-	Buffer& buffer = getBuffer(handle);
-
-	vk::Device& device = Instance::Get().device;
-	vk::MemoryRequirements requirements =
-		device.getBufferMemoryRequirements(buffer.buffer);
-	requirements.alignment = 0;
-	SubAllocation stagingAllocation =
-		m_stagingAllocation.subAllocate(requirements);
-
-	updateFunction(
-		(m_stagingAllocation.getAllocation().address + stagingAllocation.offset)
-	);
-
-	std::vector<ResourceManager::BufferCopy> info = {
-		{
-         .origin = m_stagingBuffer,
-         .destination = m_buffers[handle.value].buffer,
-         .copy = { .srcOffset= stagingAllocation.offset, .size = buffer.size, },
-		 }
+struct ResourceManager::ResourceCopyInfo {
+	struct BufferReference {
+		BufferHandle handle;
+		uint32_t size;
+		uint32_t offset;
+	};
+	struct ImageReference {
+		ImageHandle handle;
+		uint32_t mipLevel = 0;
+		vk::ImageLayout initialLayout;
+		vk::ImageLayout finalLayout;
 	};
 
-	copyBuffers(info);
-}
+	using ResourceReference = std::variant<ImageReference, BufferReference>;
+
+	ResourceReference source;
+	ResourceReference destination;
+};

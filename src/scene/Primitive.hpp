@@ -8,5 +8,4 @@ struct Primitive {
 	uint32_t baseVertex;
 	uint32_t baseIndex;
 	uint32_t indexCount;
-	float size;
 };

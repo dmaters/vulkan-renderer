@@ -72,6 +72,49 @@ void Renderer::render() {
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
+
+	glm::mat3 orientation = glm::mat3(1);
+	orientation[0] = glm::vec3(1, 0, 0);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, 1, 0);
+	orientation = glm::rotate_slow(
+		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
+	);
+
+	m_currentScene.lights.push_back(
+		{
+			.position = glm::vec3(0, 0, 600),
+			.orientation = orientation,
+			.intensity = 25.0f,
+		}
+	);
+
+	m_currentScene.primitives.push_back(
+		{
+			.baseVertex = 0,
+			.baseIndex = 0,
+			.indexCount = 3,
+		}
+	);
+
+	MaterialIndex lighting =
+		m_materialManager.getMaterialIndex("lighting_deferred");
+	m_currentScene.buckets[lighting].push_back(
+		m_currentScene.primitives.size() - 1
+	);
+
+	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
+	m_currentScene.buckets[skybox].push_back(
+		m_currentScene.primitives.size() - 1
+	);
+
+	MaterialIndex fxaa = m_materialManager.getMaterialIndex("fxaa");
+	m_currentScene.buckets[fxaa].push_back(
+		m_currentScene.primitives.size() - 1
+	);
+
+	m_currentScene.camera.setFov(70);
+
 	UI::Data.sceneData.scenePath = path.string();
 	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();
 

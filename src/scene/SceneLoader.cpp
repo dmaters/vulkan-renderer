@@ -1,405 +1,764 @@
 #include "SceneLoader.hpp"
 
-#include <assimp/GltfMaterial.h>
-#include <assimp/material.h>
-#include <assimp/matrix4x4.h>
-#include <assimp/mesh.h>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <assimp/types.h>
-#include <assimp/vector3.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
-#include <assimp/Importer.hpp>
-#include <cassert>
-#include <cstdint>
-#include <cstring>
-#include <glm/glm.hpp>
-#include <iostream>
-#include <vector>
-#include <vulkan/vulkan_enums.hpp>
+#include <fastgltf/core.hpp>
+#include <fastgltf/glm_element_traits.hpp>
+#include <fastgltf/tools.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <texture_compressor/common.hpp>
+#include <texture_compressor/compression.hpp>
+#include <texture_compressor/utils.hpp>
 
-#include "Primitive.hpp"
-#include "material/MaterialDefinitions.hpp"
-#include "material/MaterialManager.hpp"
-#include "resources/ResourceManager.hpp"
+struct VertexAttributes {
+	glm::vec3 normal;
+	glm::vec3 tangent;
+	glm::vec3 bitangent;
+	glm::vec2 texcoord;
+};
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/ext/matrix_float4x4.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
+struct Sizes {
+	std::size_t vertex = 0;
+	std::size_t vertexAttributes = 0;
+	std::size_t indices = 0;
+	std::size_t transforms = 0;
+	std::size_t materialInstances = 0;
+	std::size_t materials = 0;
+	std::size_t textures = 0;
 
-#include "PrimitiveManager.hpp"
-#include "material/MaterialManager.hpp"
+	std::vector<ResourceManager::ImageDescription> imageDescriptions;
+	std::vector<std::size_t> imageBaseSizes;
 
-SceneLoader::SceneLoader(
-	ResourceManager& resourceManager, MaterialManager& materialManager
-) :
-	m_resourceManager(resourceManager),
-	m_materialManager(materialManager),
-	m_primitiveManager() {}
+	std::size_t total = 0;
+};
 
-void loadMaterials() {}
-
-glm::mat4 getBaseTransform(aiNode& node, const aiScene& scene) {
-	glm::mat4 transform;
-	aiMatrix4x4 base = node.mTransformation;
-
-	transform[0][0] = base.a1;
-	transform[1][0] = base.a2;
-	transform[2][0] = base.a3;
-	transform[3][0] = base.a4;
-	transform[0][1] = base.b1;
-	transform[1][1] = base.b2;
-	transform[2][1] = base.b3;
-	transform[3][1] = base.b4;
-	transform[0][2] = base.c1;
-	transform[1][2] = base.c2;
-	transform[2][2] = base.c3;
-	transform[3][2] = base.c4;
-	transform[0][3] = base.d1;
-	transform[1][3] = base.d2;
-	transform[2][3] = base.d3;
-	transform[3][3] = base.d4;
-
-	if (node.mParent == nullptr) return transform;
-
-	return transform * getBaseTransform(*node.mParent, scene);
+vk::Format getFormat(texture_compressor::Format format) {
+	switch (format) {
+		case texture_compressor::Format::BC1:
+		case texture_compressor::Format::BC1_ALPHA:
+			return vk::Format::eBc1RgbaSrgbBlock;
+		case texture_compressor::Format::BC5:
+			return vk::Format::eBc5UnormBlock;
+		default:
+			return vk::Format::eUndefined;
+	}
+	return vk::Format::eUndefined;
 }
 
-SceneLoader::MeshData SceneLoader::loadMesh(aiMesh& mesh) {
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
+std::vector<texture_compressor::Format> getSceneTexturesFormats(
+	const fastgltf::Asset& asset
+) {
+	std::vector<texture_compressor::Format> formats(asset.images.size());
 
-	float size = 0;
+	for (auto& material : asset.materials) {
+		if (material.pbrData.baseColorTexture.has_value()) {
+			std::size_t baseColor =
+				asset.textures[material.pbrData.baseColorTexture->textureIndex]
+					.imageIndex.value();
 
-	for (unsigned int i = 0; i < mesh.mNumFaces; i++) {
-		auto face = mesh.mFaces[i];
+			if (material.alphaMode == fastgltf::AlphaMode::Mask)
+				formats[baseColor] = texture_compressor::Format::BC1_ALPHA;
+			else
+				formats[baseColor] = texture_compressor::Format::BC1;
+		}
 
-		indices.push_back(face.mIndices[0]);
-		indices.push_back(face.mIndices[1]);
-		indices.push_back(face.mIndices[2]);
+		if (material.normalTexture.has_value()) {
+			std::size_t normal =
+				asset.textures[material.normalTexture->textureIndex]
+					.imageIndex.value();
+
+			formats[normal] = texture_compressor::Format::BC5;
+		}
+
+		if (material.pbrData.metallicRoughnessTexture.has_value()) {
+			std::size_t roughnessMetallic =
+				asset
+					.textures[material.pbrData.metallicRoughnessTexture
+			                      ->textureIndex]
+					.imageIndex.value();
+
+			formats[roughnessMetallic] = texture_compressor::Format::BC5;
+		}
 	}
-	glm::vec3 boundsCenter = glm::vec3(0);
-	for (unsigned int i = 0; i < mesh.mNumVertices; i++) {
-		auto vertex = mesh.mVertices[i];
-		auto normal = mesh.mNormals[i];
-		auto tangent = mesh.mTangents[i];
-		auto bitangent = mesh.mBitangents[i];
 
-		auto texcoord = mesh.mTextureCoords[0][i];
-		size = fmax(size, vertex.Length());
-		vertices.push_back(
-			Vertex {
-				{ vertex.x,                        vertex.y, vertex.z },
-				{
-                 { normal.x, normal.y, normal.z },
-                 { tangent.x, tangent.y, tangent.z },
-                 { bitangent.x, bitangent.y, bitangent.z },
-                 { texcoord.x, texcoord.y },
-				 }
-        }
+	return formats;
+}
+
+uint8_t getMipLevels(int width, int height) {
+	uint32_t mipLevels = std::floor(std::log2(std::min(width, height))) + 1;
+	mipLevels = mipLevels <= 3 ? 1 : mipLevels - 3;
+	return mipLevels;
+}
+
+Sizes getStagingAllocationSize(
+	const fastgltf::Asset& asset,
+	const std::vector<texture_compressor::Format>& formats,
+	const std::filesystem::path& assetPath
+) {
+	// Size
+
+	Sizes sizes;
+
+	for (auto& mesh : asset.nodes) {
+		if (!mesh.meshIndex.has_value()) continue;
+
+		for (auto& primitive :
+		     asset.meshes[mesh.meshIndex.value()].primitives) {
+			std::size_t vertexCount =
+				asset
+					.accessors[primitive.findAttribute("POSITION")
+			                       ->accessorIndex]
+					.count;
+
+			sizes.vertex += vertexCount * sizeof(glm::vec3);
+			sizes.vertexAttributes += vertexCount * sizeof(VertexAttributes);
+
+			if (primitive.indicesAccessor.has_value()) {
+				sizes.indices +=
+					asset.accessors[primitive.indicesAccessor.value()].count *
+					sizeof(uint32_t);
+			} else {
+				sizes.indices += vertexCount * sizeof(uint32_t);
+			}
+
+			sizes.transforms += sizeof(glm::mat4);
+			sizes.materialInstances += sizeof(uint32_t);
+		}
+	}
+
+	sizes.materials =
+		asset.materials.size() * sizeof(MaterialDefinitions::PBRInstance);
+
+	for (int i = 0; i < 3; i++) {
+		sizes.imageBaseSizes.push_back(4);
+		sizes.imageDescriptions.push_back(
+			{
+				.width = 1,
+				.height = 1,
+				.format = vk::Format::eR8G8B8A8Unorm,
+				.usage = vk::ImageUsageFlagBits::eTransferDst |
+		                 vk::ImageUsageFlagBits::eSampled,
+			}
+		);
+	}
+	sizes.textures += 16;
+
+	for (int i = 0; i < asset.images.size(); i++) {
+		auto& image = asset.images[i];
+		auto* uri = std::get_if<fastgltf::sources::URI>(&image.data);
+		if (!uri) continue;
+
+		int width, height, channels;
+		stbi_info(
+			(assetPath / uri->uri.fspath()).c_str(), &width, &height, &channels
 		);
 
-		boundsCenter += glm::vec3(vertex.x, vertex.y, vertex.z) /
-		                static_cast<float>(mesh.mNumVertices);
-	};
+		uint8_t mipLevels = getMipLevels(width, height);
+		std::size_t imageSize =
+			texture_compressor::query_size(width, height, formats[i]);
 
-	uint32_t vertexOffset;
-	uint32_t indexOffset;
-	m_primitiveManager.addPrimitive(
-		vertices, indices, vertexOffset, indexOffset
+		sizes.imageDescriptions.push_back(
+			{
+				.width = static_cast<uint32_t>(width),
+				.height = static_cast<uint32_t>(height),
+				.miplevels = mipLevels,
+				.format = getFormat(formats[i]),
+				.usage = vk::ImageUsageFlagBits::eTransferDst |
+		                 vk::ImageUsageFlagBits::eSampled,
+			}
+		);
+		sizes.imageBaseSizes.push_back(imageSize);
+		for (int i = 0; i < mipLevels; i++) {
+			sizes.textures += imageSize >> (i * 2);
+		}
+	}
+
+	sizes.total = sizes.vertex + sizes.vertexAttributes + sizes.indices +
+	              sizes.transforms + sizes.materials + sizes.materialInstances +
+	              sizes.textures;
+	return sizes;
+}
+
+struct PrimitiveData {
+	Scene::PrimitiveBound primitiveBounds;
+	std::size_t vertexCount;
+	std::size_t indexCount;
+};
+
+PrimitiveData loadPrimitiveData(
+	const fastgltf::Asset& asset,
+	const Sizes& offsets,
+	const fastgltf::Primitive& primitive,
+	std::size_t vertexOffset,
+	std::size_t indexOffset,
+	void* stagingAddress
+) {
+	glm::vec3* vertices = reinterpret_cast<glm::vec3*>(
+							  ((std::byte*)stagingAddress) + offsets.vertex
+						  ) +
+	                      vertexOffset;
+
+	VertexAttributes* vertexAttributes =
+		reinterpret_cast<VertexAttributes*>(
+			((std::byte*)stagingAddress) + offsets.vertexAttributes
+		) +
+		vertexOffset;
+
+	uint32_t* indices = reinterpret_cast<uint32_t*>(
+							((std::byte*)stagingAddress) + offsets.indices
+						) +
+	                    indexOffset;
+
+	auto& vertexAccessor =
+		asset.accessors[primitive.findAttribute("POSITION")->accessorIndex];
+	float size2 = 0;
+	glm::vec3 averageVertexPosition = glm::vec3(0);
+	fastgltf::iterateAccessorWithIndex<glm::vec3>(
+		asset, vertexAccessor, [&](glm::vec3 vertex, std::size_t index) {
+			vertices[index] = vertex;
+			size2 = std::max(size2, glm::dot(vertex, vertex));
+			averageVertexPosition += vertex;
+		}
+	);
+	averageVertexPosition /= vertexAccessor.count;
+
+	std::size_t indexCount = 0;
+	if (primitive.indicesAccessor.has_value()) {
+		auto& indexAccessor =
+			asset.accessors[primitive.indicesAccessor.value()];
+
+		fastgltf::iterateAccessorWithIndex<uint32_t>(
+			asset, indexAccessor, [&](uint32_t vertexIndex, std::size_t index) {
+				indices[index] = vertexIndex;
+			}
+		);
+		indexCount = indexAccessor.count;
+	} else {
+		for (int i = 0; i < vertexAccessor.count; i++) {
+			indices[indexOffset + i] = vertexOffset + i;
+		}
+		indexCount = vertexAccessor.count;
+	}
+
+	if (primitive.findAttribute("NORMAL") != primitive.attributes.end()) {
+		auto& normalAccessor =
+			asset.accessors[primitive.findAttribute("NORMAL")->accessorIndex];
+
+		fastgltf::iterateAccessorWithIndex<glm::vec3>(
+			asset, normalAccessor, [&](glm::vec3 normal, std::size_t index) {
+				vertexAttributes[index].normal = normal;
+			}
+		);
+	} else {
+		for (int i = 0; i < indexCount; i += 3) {
+			glm::vec3 v1 = vertices[indices[indexOffset + i + 0]];
+			glm::vec3 v2 = vertices[indices[indexOffset + i + 1]];
+			glm::vec3 v3 = vertices[indices[indexOffset + i + 2]];
+
+			vertexAttributes[indices[indexOffset + i + 0]].normal =
+				glm::normalize(glm::cross(v2 - v1, v3 - v1));
+			vertexAttributes[indices[indexOffset + i + 1]].normal =
+				glm::normalize(glm::cross(v2 - v1, v3 - v1));
+			vertexAttributes[indices[indexOffset + i + 2]].normal =
+				glm::normalize(glm::cross(v2 - v1, v3 - v1));
+		}
+	}
+
+	for (int i = 0; i < vertexAccessor.count; i++) {
+		// Pixar - Building an Orthonormal Basis, Revisited
+		// (2017)
+
+		glm::vec3 normal = vertexAttributes[i].normal;
+
+		float sign = copysign(1.0f, normal.z);
+		float a = -1.0f / (sign + normal.z);
+		float b = normal.x * normal.y * a;
+		vertexAttributes[i].tangent = glm::vec3(
+			1.0f + sign * normal.x * normal.x * a, sign * b, -sign * normal.x
+		);
+		vertexAttributes[i].bitangent =
+			glm::vec3(b, sign + normal.y * normal.y * a, -normal.y);
+	}
+
+	auto& texcoordAccessor =
+		asset.accessors[primitive.findAttribute("TEXCOORD_0")->accessorIndex];
+	fastgltf::iterateAccessorWithIndex<glm::vec2>(
+		asset, texcoordAccessor, [&](glm::vec2 texcoord, std::size_t index) {
+			vertexAttributes[index].texcoord = texcoord;
+		}
 	);
 
 	return {
-		.primitive =
-			Primitive {
-					   .baseVertex = vertexOffset,
-					   .baseIndex = indexOffset,
-					   .indexCount = (uint32_t)indices.size(),
-					   .size = size,
-					   },
-		.bounds = { boundsCenter, size - glm::length(boundsCenter) }
+	    .primitiveBounds = {
+			.position = averageVertexPosition,
+			.size = sqrt(size2) - glm::length(averageVertexPosition),
+		},
+		.vertexCount = vertexAccessor.count,
+		.indexCount = indexCount ,
 	};
 }
 
-void SceneLoader::loadNode(aiNode& root, const aiScene& importedScene) {
-	if (root.mNumMeshes > 0) {
-		glm::mat4 transform = getBaseTransform(root, importedScene);
+struct MeshData {
+	std::vector<Primitive> primitives;
+	std::vector<Scene::PrimitiveBound> primitivesBounds;
+	float sceneSize;
 
-		for (uint32_t i = 0; i < root.mNumMeshes; i++) {
-			m_instanceCache[root.mMeshes[i]].push_back(transform);
-		}
-	}
+	std::vector<uint32_t> opaquePrimitives;
+	std::vector<uint32_t> alphaTestedPrimitives;
+};
 
-	for (int i = 0; i < root.mNumChildren; i++) {
-		loadNode(*root.mChildren[i], importedScene);
-	}
-}
-
-void loadPrimitives() {}
-
-SceneLoader::MaterialData SceneLoader::loadMaterials(
-	const aiScene& scene, std::filesystem::path& texturePath
+MeshData loadMeshes(
+	const fastgltf::Asset& asset, const Sizes& offsets, void* stagingAddress
 ) {
-	uint32_t imageCount = 3;
-	std::vector<uint32_t> imageIndices;
+	MeshData meshData;
+	meshData.primitives.reserve(asset.meshes.size());
+	meshData.primitivesBounds.reserve(asset.meshes.size());
 
-	std::vector<ResourceManager::TextureInfo> textures;
-	std::vector<MaterialDefinitions::PBRInstance> instances;
-
-	textures.push_back(
-		{
-			"resources/textures/default_albedo.png",
-			ResourceManager::TextureInfo::TextureType::Albedo,
-		}
+	glm::mat4* transforms = reinterpret_cast<glm::mat4*>(
+		((std::byte*)stagingAddress) + offsets.transforms
 	);
 
-	textures.push_back(
-		{
-			"resources/textures/default_normal.png",
-			ResourceManager::TextureInfo::TextureType::Normal,
-		}
+	uint32_t* materialInstances = reinterpret_cast<uint32_t*>(
+		((std::byte*)stagingAddress) + offsets.materialInstances
 	);
 
-	textures.push_back(
-		{
-			"resources/textures/default_metallicRoughness.png",
-			ResourceManager::TextureInfo::TextureType::MetallicRoughness,
-		}
-	);
+	std::size_t vertexOffset = 0, indexOffset = 0;
+	float sceneSize = 0;
+	fastgltf::iterateSceneNodes(
+		asset,
+		0,
+		fastgltf::math::fmat4x4(),
+		[&](const fastgltf::Node& node, const fastgltf::math::fmat4x4& matrix) {
+			if (!node.meshIndex.has_value()) return;
 
-	std::unordered_set<uint32_t> alphaTestedMaterialInstances;
+			const fastgltf::Mesh& mesh = asset.meshes[node.meshIndex.value()];
+			for (auto& primitive : mesh.primitives) {
+				PrimitiveData primitiveData = loadPrimitiveData(
+					asset,
+					offsets,
+					primitive,
+					vertexOffset,
+					indexOffset,
+					stagingAddress
+				);
 
-	for (uint32_t i = 0; i < scene.mNumMaterials; i++) {
-		aiMaterial* materialInstance = scene.mMaterials[i];
-		aiString path;
-		MaterialDefinitions::PBRInstance instance;
+				*materialInstances = primitive.materialIndex.value_or(0);
+				materialInstances += 1;
 
-		if (materialInstance->GetTexture(aiTextureType_DIFFUSE, 0, &path) ==
-		        aiReturn_SUCCESS &&
-		    path.length > 0) {
-			textures.push_back(
-				{
-					texturePath / std::filesystem::path(path.C_Str()),
-					ResourceManager::TextureInfo::TextureType::Albedo,
-				}
-			);
-			instance.albedoTexture = imageCount++;
-		}
+				*transforms = (glm::mat4&)matrix;
+				transforms += 1;
 
-		aiString alphaMode;
-		if (materialInstance->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) ==
-		    AI_SUCCESS) {
-			if (std::string(alphaMode.C_Str()) == "MASK") {
-				alphaTestedMaterialInstances.insert(i);
+				meshData.primitives.push_back(
+					{
+						.baseVertex = static_cast<uint32_t>(vertexOffset),
+						.baseIndex = static_cast<uint32_t>(indexOffset),
+						.indexCount =
+							static_cast<uint32_t>(primitiveData.indexCount),
+					}
+				);
+				meshData.primitivesBounds.push_back(
+					primitiveData.primitiveBounds
+				);
+				sceneSize =
+					std::max(primitiveData.primitiveBounds.size, sceneSize);
+
+				vertexOffset += primitiveData.vertexCount;
+				indexOffset += primitiveData.indexCount;
+
+				if (asset.materials[primitive.materialIndex.value()]
+			            .alphaMode == fastgltf::AlphaMode::Mask)
+					meshData.alphaTestedPrimitives.push_back(
+						meshData.primitives.size() - 1
+					);
+				else
+					meshData.opaquePrimitives.push_back(
+						meshData.primitives.size() - 1
+					);
 			}
 		}
+	);
+	meshData.sceneSize = sceneSize;
+	return meshData;
+}
 
-		aiColor4D diffuseColor;
-		if (materialInstance->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) ==
-		    AI_SUCCESS)
-			instance.albedoValue =
-				glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b);
+std::vector<bool> loadMaterialInstances(
+	const fastgltf::Asset& asset, const Sizes& offsets, void* stagingAddress
+) {
+	MaterialDefinitions::PBRInstance* materials =
+		reinterpret_cast<MaterialDefinitions::PBRInstance*>(
+			((std::byte*)stagingAddress) + offsets.materials
+		);
+	std::vector<bool> roughnessMetallicImageMap(asset.images.size());
 
-		if (materialInstance->GetTexture(aiTextureType_NORMALS, 0, &path) ==
-		        aiReturn_SUCCESS &&
-		    path.length > 0) {
-			textures.push_back(
-				{
-					texturePath / std::filesystem::path(path.C_Str()),
-					ResourceManager::TextureInfo::TextureType::Normal,
-				}
-			);
-			instance.normalTexture = imageCount++;
-		} else {
-			imageIndices.push_back(1);
+	for (int i = 0; i < asset.materials.size(); i++) {
+		auto& material = asset.materials[i];
+		materials[i] = {};
+
+		if (material.pbrData.baseColorTexture.has_value()) {
+			materials[i].albedoTexture =
+				asset
+					.textures[material.pbrData.baseColorTexture.value()
+			                      .textureIndex]
+					.imageIndex.value() +
+				3;
 		}
-		if (materialInstance->GetTexture(
-				aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &path
-			) == aiReturn_SUCCESS &&
-		    path.length > 0) {
-			textures.push_back(
-				{
-					texturePath / std::filesystem::path(path.C_Str()),
-					ResourceManager::TextureInfo::TextureType::
-						MetallicRoughness,
-				}
-			);
-			instance.roughnessMetallicTexture = imageCount++;
+		materials[i].albedoValue = (glm::vec3&)material.pbrData.baseColorFactor;
+
+		if (material.normalTexture.has_value())
+			materials[i].normalTexture =
+				asset.textures[material.normalTexture.value().textureIndex]
+					.imageIndex.value() +
+				3;
+
+		if (material.pbrData.metallicRoughnessTexture.has_value()) {
+			materials[i].roughnessMetallicTexture =
+				asset
+					.textures[material.pbrData.metallicRoughnessTexture.value()
+			                      .textureIndex]
+					.imageIndex.value() +
+				3;
+
+			roughnessMetallicImageMap
+				[materials[i].roughnessMetallicTexture - 3] = true;
 		}
-		float metallicValue;
-		if (materialInstance->Get(AI_MATKEY_METALLIC_FACTOR, metallicValue) ==
-		    AI_SUCCESS)
-			instance.metallicValue = metallicValue;
-
-		float roughnessValue;
-		if (materialInstance->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessValue) ==
-		    AI_SUCCESS)
-			instance.roughnessValue = roughnessValue;
-
-		instances.push_back(instance);
+		materials[i].roughnessValue = material.pbrData.roughnessFactor;
+		materials[i].metallicValue = material.pbrData.metallicFactor;
 	}
-	auto allocation = m_resourceManager.loadSceneTextures(textures);
-	m_materialManager.registerTextureGroup(allocation);
+	return roughnessMetallicImageMap;
+}
 
-	return {
-		.instances = instances,
-		.alphaTestedInstances = alphaTestedMaterialInstances,
-	};
+void loadImages(
+	const fastgltf::Asset& asset,
+	const Sizes& offsets,
+	const std::vector<texture_compressor::Format>& formats,
+	const std::vector<bool>& roughnessMetallicImageMap,
+	const std::filesystem::path& assetPath,
+	void* stagingAddress
+) {
+	std::byte* ptextures = ((std::byte*)stagingAddress) + offsets.textures;
+
+	// TODO: base images, only add them once
+	std::array<uint8_t, 4>* pTexturesAsTex =
+		reinterpret_cast<std::array<uint8_t, 4>*>(ptextures);
+	pTexturesAsTex[0] = { 255, 255, 255, 255 };  // Color
+	pTexturesAsTex[1] = { 128, 128, 255, 255 };  // Normal
+	pTexturesAsTex[2] = { 255, 0, 255, 255 };    // Roughness-metallic
+
+	ptextures += 16;  // Aligned
+
+	for (int i = 0; i < asset.images.size(); i++) {
+		auto& image = asset.images[i];
+		auto* uri = std::get_if<fastgltf::sources::URI>(&image.data);
+		assert(uri != nullptr);
+
+		int width, height, channels;
+		int expectedChannels = 0;
+		switch (formats[i]) {
+			case texture_compressor::Format::BC1:
+			case texture_compressor::Format::BC5:
+				expectedChannels = 3;
+				break;
+			case texture_compressor::Format::BC1_ALPHA:
+				expectedChannels = 4;
+				break;
+			default:
+				expectedChannels = 0;
+		}
+
+		std::byte* imageData = reinterpret_cast<std::byte*>(stbi_load(
+			(assetPath / uri->uri.path()).c_str(),
+			&width,
+			&height,
+			&channels,
+			expectedChannels
+		));
+
+		// Roughness/metallic compression
+		if (formats[i] == texture_compressor::Format::BC5) {
+			if (roughnessMetallicImageMap[i]) {
+				for (int i = 0; i < width * height; i++) {
+					imageData[i * 2 + 0] = imageData[i * 3 + 1];
+					imageData[i * 2 + 1] = imageData[i * 3 + 2];
+				}
+			} else {
+				for (int i = 0; i < width * height; i++) {
+					imageData[i * 2 + 0] = imageData[i * 3 + 0];
+					imageData[i * 2 + 1] = imageData[i * 3 + 1];
+				}
+			}
+		}
+		std::size_t mipLevels = getMipLevels(width, height);
+		texture_compressor::compress(
+			width, height, formats[i], imageData, ptextures, mipLevels
+		);
+		stbi_image_free(imageData);
+		ptextures += texture_compressor::query_size(
+			width, height, formats[i], mipLevels
+		);
+	}
+}
+
+std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
+	BufferHandle stagingBuffer,
+	const std::vector<BufferHandle>& sceneBuffers,
+	const std::vector<ImageHandle>& sceneImages,
+	const Sizes& sizes,
+	const Sizes& offsets
+) {
+	std::vector<ResourceManager::ResourceCopyInfo> copies;
+
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.vertex),
+																	.offset = static_cast<uint32_t>(offsets.vertex),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[0],
+																	.size = static_cast<uint32_t>(sizes.vertex),
+																	.offset = 0,
+
+																	}
+    }
+	);
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.vertexAttributes),
+																	.offset = static_cast<uint32_t>(offsets.vertexAttributes),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[1],
+																	.size = static_cast<uint32_t>(sizes.vertexAttributes),
+																	.offset = 0,
+
+																	}
+    }
+	);
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.indices),
+																	.offset = static_cast<uint32_t>(offsets.indices),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[2],
+																	.size = static_cast<uint32_t>(sizes.indices),
+																	.offset = 0,
+
+																	}
+    }
+	);
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.transforms),
+																	.offset = static_cast<uint32_t>(offsets.transforms),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[3],
+																	.size = static_cast<uint32_t>(sizes.transforms),
+																	.offset = 0,
+
+																	}
+    }
+	);
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.materialInstances),
+																	.offset = static_cast<uint32_t>(offsets.materialInstances),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[4],
+																	.size = static_cast<uint32_t>(sizes.materialInstances),
+																	.offset = 0,
+
+																	}
+    }
+	);
+	copies.push_back(
+		{
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = stagingBuffer,
+																	.size = static_cast<uint32_t>(sizes.materials),
+																	.offset = static_cast<uint32_t>(offsets.materials),
+																	},
+			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = sceneBuffers[5],
+																	.size = static_cast<uint32_t>(sizes.materials),
+																	.offset = 0,
+
+																	}
+    }
+	);
+
+	uint32_t textureBufferOffset = 0;
+	for (int i = 0; i < 3; i++) {
+		copies.push_back(
+			{
+				.source =
+					ResourceManager::ResourceCopyInfo::BufferReference {
+																		.handle = stagingBuffer,
+																		.size = 4,
+																		.offset = static_cast<uint32_t>(offsets.textures) +
+		                          textureBufferOffset, },
+				.destination =
+					ResourceManager::ResourceCopyInfo::ImageReference {
+																		.handle = sceneImages[i],
+																		.mipLevel = 0,
+																		.initialLayout = vk::ImageLayout::eUndefined,
+																		.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+																		}
+        }
+		);
+		textureBufferOffset += 4;
+	}
+	textureBufferOffset += 4;  // Alignment to 16
+	for (int i = 3; i < sizes.imageDescriptions.size(); i++) {
+		for (int mip = 0; mip < sizes.imageDescriptions[i].miplevels; mip++) {
+			std::size_t mipSize = sizes.imageBaseSizes[i] >> (mip * 2);
+			copies.push_back(
+				{
+					.source =
+						ResourceManager::ResourceCopyInfo::BufferReference {
+																			.handle = stagingBuffer,
+																			.size = static_cast<uint32_t>(mipSize),
+																			.offset = static_cast<uint32_t>(offsets.textures) +
+			                          textureBufferOffset, },
+					.destination =
+						ResourceManager::ResourceCopyInfo::ImageReference {
+																			.handle = sceneImages[i],
+																			.mipLevel = static_cast<uint32_t>(mip),
+																			.initialLayout = vk::ImageLayout::eUndefined,
+																			.finalLayout =
+								vk::ImageLayout::eShaderReadOnlyOptimal,
+																			}
+            }
+			);
+			textureBufferOffset += mipSize;
+		}
+	}
+	return copies;
 }
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
-	Assimp::Importer importer;
+	fastgltf::Parser parser;
 
-	auto import = importer.ReadFile(
-		path.string().c_str(),
-		aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals
+	auto data = fastgltf::GltfDataBuffer::FromPath(path);
+	auto asset = parser.loadGltf(
+		data.get(), path.parent_path(), fastgltf::Options::LoadExternalBuffers
 	);
+	auto formats = getSceneTexturesFormats(asset.get());
+	Sizes sizes =
+		getStagingAllocationSize(asset.get(), formats, path.parent_path());
 
-	if (import == nullptr) std::cerr << importer.GetErrorString() << std::endl;
-	assert(import != nullptr);
-
-	auto folderPath = path.parent_path();
-	MaterialData materialData = loadMaterials(*import, folderPath);
-
-	std::vector<glm::mat4> transforms;
-	m_instanceCache = std::vector<std::vector<glm::mat4>>(import->mNumMeshes);
-
-	loadNode(*import->mRootNode, *import);
-
-	std::vector<Primitive> primitives;
-	std::vector<Scene::PrimitiveBound> bounds;
-	std::vector<uint32_t> materialInstances;
-	primitives.reserve(import->mNumMeshes);
-
-	float sceneSize = 0;
-	for (int i = 0; i < import->mNumMeshes; i++) {
-		aiMesh* mesh = import->mMeshes[i];
-		auto [primitive, bound] = loadMesh(*mesh);
-
-		for (auto instance : m_instanceCache[i]) {
-			sceneSize = std::max(
-				sceneSize, glm::vec3(instance[3]).length() + primitive.size
-			);
-			transforms.push_back(instance);
-			primitives.push_back(primitive);
-			bounds.push_back(bound);
-			materialInstances.push_back(mesh->mMaterialIndex);
-		}
-	}
-
-	ResourceManager::DeviceAllocationIndex buffersAllocation =
-		m_resourceManager.createResources(
-			{
+	auto stagingAllocation = m_resourceManager.createResources(
+		{
     },
-			{
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						m_primitiveManager.m_positions.size() *
-						sizeof(glm::vec3)
-					),
-					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						m_primitiveManager.m_attributes.size() *
-						sizeof(Vertex::Attributes)
-					),
-					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						m_primitiveManager.m_indexBuffer.size() *
-						sizeof(uint32_t)
-					),
-					.usage = vk::BufferUsageFlagBits::eIndexBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						transforms.size() * sizeof(glm::mat4)
-					),
-					.usage = vk::BufferUsageFlagBits::eVertexBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						materialData.instances.size() *
-						sizeof(MaterialDefinitions::PBRInstance)
-					),
-					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-				ResourceManager::BufferDescription {
-					.size = static_cast<uint32_t>(
-						materialInstances.size() * sizeof(uint32_t)
-					),
-					.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-	                         vk::BufferUsageFlagBits::eTransferDst,
-				},
-			}
+		{ {
+			.size = static_cast<uint32_t>(sizes.total),
+			.usage = vk::BufferUsageFlagBits::eTransferSrc,
+		} },
+		ResourceManager::MemoryLocation::Host
+	);
+
+	Buffer& stagingBuffer = m_resourceManager.getBuffer(
+		m_resourceManager.getBuffers(stagingAllocation)[0]
+	);
+
+	Sizes offsets;
+	offsets.textures = 0;
+	offsets.vertex = offsets.textures + sizes.textures;
+	offsets.vertexAttributes = offsets.vertex + sizes.vertex;
+	offsets.indices = offsets.vertexAttributes + sizes.vertexAttributes;
+	offsets.transforms = offsets.indices + sizes.indices;
+	offsets.materialInstances = offsets.transforms + sizes.transforms;
+	offsets.materials = offsets.materialInstances + sizes.materialInstances;
+
+	auto roughnessMetallicImageMap =
+		loadMaterialInstances(asset.get(), offsets, stagingBuffer.data);
+
+	auto meshData = loadMeshes(asset.get(), offsets, stagingBuffer.data);
+
+	loadImages(
+		asset.get(),
+		offsets,
+		formats,
+		roughnessMetallicImageMap,
+		path.parent_path(),
+		stagingBuffer.data
+	);
+
+	std::vector<ResourceManager::BufferDescription> buffers {
+		{
+         .size = static_cast<uint32_t>(sizes.vertex),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eVertexBuffer,
+		 },
+		{
+         .size = static_cast<uint32_t>(sizes.vertexAttributes),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eVertexBuffer,
+		 },
+		{
+         .size = static_cast<uint32_t>(sizes.indices),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eIndexBuffer,
+		 },
+		{
+         .size = static_cast<uint32_t>(sizes.transforms),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eVertexBuffer,
+		 },
+		{
+         .size = static_cast<uint32_t>(sizes.materialInstances),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eStorageBuffer,
+		 },
+		{
+         .size = static_cast<uint32_t>(sizes.materials),
+         .usage = vk::BufferUsageFlagBits::eTransferDst |
+		             vk::BufferUsageFlagBits::eStorageBuffer,
+		 }
+	};
+
+	ResourceManager::AllocationIndex sceneAllocation =
+		m_resourceManager.createResources(
+			sizes.imageDescriptions,
+			buffers,
+			ResourceManager::MemoryLocation::Device
 		);
-
-	auto& buffers = m_resourceManager.getBuffers(buffersAllocation);
-
-	m_resourceManager.queueBufferUpdate(
-		buffers[0],
-		[positions = std::move(m_primitiveManager.m_positions)](void* ptr) {
-			std::memcpy(
-				ptr, positions.data(), positions.size() * sizeof(glm::vec3)
-			);
-		}
-	);
-	m_resourceManager.queueBufferUpdate(
-		buffers[1],
-		[attributes = std::move(m_primitiveManager.m_attributes)](void* ptr) {
-			std::memcpy(
-				ptr,
-				attributes.data(),
-				attributes.size() * sizeof(Vertex::Attributes)
-			);
-		}
-	);
-	m_resourceManager.queueBufferUpdate(
-		buffers[2],
-		[indices = std::move(m_primitiveManager.m_indexBuffer)](void* ptr) {
-			std::memcpy(ptr, indices.data(), indices.size() * sizeof(uint32_t));
-		}
-	);
-	m_resourceManager.queueBufferUpdate(
-		buffers[3], [transforms = std::move(transforms)](void* ptr) {
-			std::memcpy(
-				ptr, transforms.data(), transforms.size() * sizeof(glm::mat4)
-			);
-		}
-	);
-	m_resourceManager.queueBufferUpdate(
-		buffers[4], [data = std::move(materialData.instances)](void* ptr) {
-			std::memcpy(
-				ptr,
-				data.data(),
-				data.size() * sizeof(MaterialDefinitions::PBRInstance)
-			);
-		}
-	);
-	m_resourceManager.queueBufferUpdate(
-		buffers[5], [instances = materialInstances](void* ptr) {
-			std::memcpy(
-				ptr, instances.data(), instances.size() * sizeof(uint32_t)
-			);
-		}
+	auto copies = buildAllocationCopyInfo(
+		m_resourceManager.getBuffers(stagingAllocation)[0],
+		m_resourceManager.getBuffers(sceneAllocation),
+		m_resourceManager.getImages(sceneAllocation),
+		sizes,
+		offsets
 	);
 
-	m_resourceManager.sync();
+	m_resourceManager.copyResources(copies);
 
+	m_materialManager.registerTextureGroup(sceneAllocation);
 	Scene scene {
 		.camera = Camera(),
 		.lights = {},
-		.primitives = primitives,
-		.primitiveBounds = bounds,
-		.size = sceneSize,
-		.allocation = buffersAllocation,
+		.primitives = meshData.primitives,
+		.primitiveBounds = meshData.primitivesBounds,
+		.size = meshData.sceneSize,
+		.allocation = sceneAllocation,
 	};
 
 	MaterialIndex gbufferMaterial =
@@ -412,54 +771,12 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	MaterialIndex shadowMapAlphaTestedMaterial =
 		m_materialManager.getMaterialIndex("shadowmap_alphatested");
 
-	scene.buckets[gbufferAlphaTestedMaterial] = {};
-	scene.buckets[shadowMapAlphaTestedMaterial] = {};
+	scene.buckets[gbufferMaterial] = meshData.opaquePrimitives;
+	scene.buckets[shadowMapMaterial] = meshData.opaquePrimitives;
 
-	for (int i = 0; i < scene.primitives.size(); i++) {
-		if (materialData.alphaTestedInstances.contains(materialInstances[i])) {
-			scene.buckets[gbufferAlphaTestedMaterial].push_back(i);
-			scene.buckets[shadowMapAlphaTestedMaterial].push_back(i);
-		} else {
-			scene.buckets[shadowMapMaterial].push_back(i);
-			scene.buckets[gbufferMaterial].push_back(i);
-		}
-	}
-
-	glm::mat3 orientation = glm::mat3(1);
-	orientation[0] = glm::vec3(1, 0, 0);
-	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, 1, 0);
-	orientation = glm::rotate_slow(
-		glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0)
-	);
-
-	scene.lights.push_back(
-		{
-			.position = glm::vec3(0, 0, 600),
-			.orientation = orientation,
-			.intensity = 25.0f,
-		}
-	);
-
-	scene.primitives.push_back(
-		{
-			.baseVertex = 0,
-			.baseIndex = 0,
-			.indexCount = 3,
-			.size = 1,
-		}
-	);
-	MaterialIndex lighting =
-		m_materialManager.getMaterialIndex("lighting_deferred");
-	scene.buckets[lighting].push_back(scene.primitives.size() - 1);
-
-	MaterialIndex skybox = m_materialManager.getMaterialIndex("skybox");
-	scene.buckets[skybox].push_back(scene.primitives.size() - 1);
-
-	MaterialIndex fxaa = m_materialManager.getMaterialIndex("fxaa");
-	scene.buckets[fxaa].push_back(scene.primitives.size() - 1);
-
-	scene.camera.setFov(70);
+	scene.buckets[gbufferAlphaTestedMaterial] = meshData.alphaTestedPrimitives;
+	scene.buckets[shadowMapAlphaTestedMaterial] =
+		meshData.alphaTestedPrimitives;
 
 	return scene;
 }

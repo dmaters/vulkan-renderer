@@ -23,6 +23,11 @@ public:
 	vk::SurfaceFormatKHR surfaceFormat;
 
 	vk::PhysicalDevice physicalDevice;
+	struct PhysicalDeviceLimits {
+		std::size_t minStorageBufferOffsetAlignment;
+		std::size_t minUniformBufferOffsetAlignment;
+	};
+	PhysicalDeviceLimits physicalDeviceLimits;
 	vk::Instance instance;
 
 	vk::Queue graphicQueue;

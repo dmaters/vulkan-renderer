@@ -64,9 +64,7 @@ public:
 		return m_names.at(name);
 	}
 
-	uint32_t registerTextureGroup(
-		ResourceManager::DeviceAllocationIndex allocation
-	);
+	uint32_t registerTextureGroup(ResourceManager::AllocationIndex allocation);
 	vk::DescriptorSet getTextureSet() const { return m_textureSet; }
 	vk::DescriptorSet getEmptySet() const { return m_emptySet; }
 

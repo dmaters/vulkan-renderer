@@ -69,7 +69,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 
 			if (buffer.data != nullptr) {
 				resources._bufferInfo.back().offset =
-					(buffer.allocation.size / 3) * (currentFrame % 3);
+					(buffer.size / 3) * (currentFrame % 3);
 
 				resources._bufferInfo.back().range /= 3;
 			}
@@ -124,7 +124,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 			);
 			if (buffer.data != nullptr) {
 				resources._bufferInfo.back().offset =
-					(buffer.allocation.size / 3) * (currentFrame % 3);
+					(buffer.size / 3) * (currentFrame % 3);
 
 				resources._bufferInfo.back().range /= 3;
 			}

@@ -3,10 +3,9 @@
 #include <cassert>
 #include <optional>
 #include <vector>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_structs.hpp>
+#include <vulkan/vulkan.hpp>
 
+#include "Instance.hpp"
 #include "Swapchain.hpp"
 #include "material/Pipeline.hpp"
 #include "rendergraph/GraphData.hpp"

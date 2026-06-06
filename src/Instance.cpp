@@ -60,11 +60,21 @@ Instance& Instance::Create(SDL_Window* window) {
 		}
 	}
 
+	vk::PhysicalDeviceLimits physicalDeviceLimits =
+		physicalDevice.getProperties().limits;
+	Instance::PhysicalDeviceLimits limitCache {
+		.minStorageBufferOffsetAlignment =
+			physicalDeviceLimits.minStorageBufferOffsetAlignment,
+		.minUniformBufferOffsetAlignment =
+			physicalDeviceLimits.minUniformBufferOffsetAlignment,
+	};
+
 	Instance::_instance = {
 		.device = device,
 		.surface = surface,
 		.surfaceFormat = format,
 		.physicalDevice = physicalDevice,
+		.physicalDeviceLimits = limitCache,
 		.instance = instance,
 		.graphicQueue = graphicQueue,
 		.transferQueue = transferQueue,

@@ -25,13 +25,12 @@ private:
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
-	ResourceManager::DeviceAllocationIndex m_frameDataAllocation;
-	ResourceManager::DeviceAllocationIndex m_sharedDataAllocation;
-	std::optional<ResourceManager::HostAllocationIndex> m_hostDataAllocation;
+	ResourceManager::AllocationIndex m_frameDataAllocation;
+	ResourceManager::AllocationIndex m_sharedDataAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_hostDataAllocation;
 
-	ResourceManager::DeviceAllocationIndex m_resolutionDependentAllocation = 0;
-	ResourceManager::DeviceAllocationIndex m_oldResolutionDependentAllocation =
-		0;
+	ResourceManager::AllocationIndex m_resolutionDependentAllocation = 0;
+	ResourceManager::AllocationIndex m_oldResolutionDependentAllocation = 0;
 
 	uint8_t m_swapchainFlushCounter = 0;
 

@@ -113,14 +113,12 @@ void RenderPassBegin(
     }
 	);
 
-	Buffer& positionBuffer =
-		context.resourceManager.getNamedBuffer("vertex_positions_buffer");
-	Buffer& attributeBuffer =
-		context.resourceManager.getNamedBuffer("vertex_attributes_buffer");
-	Buffer& instanceBuffer =
-		context.resourceManager.getNamedBuffer("instance_buffer");
-	Buffer& indexBuffer =
-		context.resourceManager.getNamedBuffer("index_buffer");
+	auto& buffers =
+		context.resourceManager.getBuffers(context.scene.allocation);
+	Buffer& positionBuffer = context.resourceManager.getBuffer(buffers[0]);
+	Buffer& attributeBuffer = context.resourceManager.getBuffer(buffers[1]);
+	Buffer& indexBuffer = context.resourceManager.getBuffer(buffers[2]);
+	Buffer& instanceBuffer = context.resourceManager.getBuffer(buffers[3]);
 
 	context.commandBuffer.bindVertexBuffers(
 		0,

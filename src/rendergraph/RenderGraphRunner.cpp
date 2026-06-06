@@ -41,9 +41,7 @@ void RenderGraphRunner::clearUnusedResources() {
 	if (m_swapchainFlushCounter > 1)
 		m_swapchainFlushCounter--;
 	else if (m_swapchainFlushCounter == 1) {
-		m_resourceManager.freeDeviceAllocation(
-			m_oldResolutionDependentAllocation
-		);
+		m_resourceManager.freeAllocation(m_oldResolutionDependentAllocation);
 		m_swapchain.flush();
 		m_swapchainFlushCounter = 0;
 	}
@@ -65,7 +63,9 @@ void RenderGraphRunner::buildSwapchainResources() {
 	}
 
 	m_resolutionDependentAllocation = m_resourceManager.createResources(
-		resolutionDependentImagesDescription, {}
+		resolutionDependentImagesDescription,
+		{},
+		ResourceManager::MemoryLocation::Device
 	);
 
 	auto& images = m_resourceManager.getImages(m_resolutionDependentAllocation);
@@ -512,11 +512,12 @@ void RenderGraphRunner::submit(const Scene& scene) {
 
 	commandBuffer.end();
 	// End Frame
-
-	uint64_t semaphoreWaitValues[2] = { m_resourceManager.sync(), 0 };
+	auto [resourceSemaphore, expectedValue] =
+		m_resourceManager.getSemaphoreInfo();
+	uint64_t semaphoreWaitValues[2] = { expectedValue, 0 };
 
 	vk::Semaphore semaphores[2] = {
-		m_resourceManager.getSemaphore(),
+		resourceSemaphore,
 		frame.imageAvailable,
 	};
 	vk::TimelineSemaphoreSubmitInfo waitInfo {
@@ -582,7 +583,9 @@ void RenderGraphRunner::build() {
 	}
 
 	m_frameDataAllocation = m_resourceManager.createResources(
-		imageDescriptions, bufferDescriptions
+		imageDescriptions,
+		bufferDescriptions,
+		ResourceManager::MemoryLocation::Device
 	);
 	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
 
@@ -590,12 +593,13 @@ void RenderGraphRunner::build() {
 		m_images[imagesIndices[i]] = images[i];
 	}
 
-	auto& buffers = m_resourceManager.getBuffers(m_frameDataAllocation);
+	auto& frameDataBuffers =
+		m_resourceManager.getBuffers(m_frameDataAllocation);
 
 	for (int i = 0; i < bufferIndices.size(); i++) {
-		m_buffers[bufferIndices[i]] = buffers[i];
+		m_buffers[bufferIndices[i]] = frameDataBuffers[i];
 		m_resourceManager.setName(
-			m_data.resourceNames[bufferIndices[i]], buffers[i]
+			m_data.resourceNames[bufferIndices[i]], frameDataBuffers[i]
 		);
 	}
 
@@ -608,8 +612,9 @@ void RenderGraphRunner::build() {
 			bufferIndices.push_back(index);
 		}
 
-		m_sharedDataAllocation =
-			m_resourceManager.createSharedAllocation(bufferDescriptions);
+		m_sharedDataAllocation = m_resourceManager.createResources(
+			{}, bufferDescriptions, ResourceManager::MemoryLocation::HostVisible
+		);
 
 		auto buffers = m_resourceManager.getBuffers(m_sharedDataAllocation);
 		for (int i = 0; i < bufferIndices.size(); i++) {
@@ -621,18 +626,24 @@ void RenderGraphRunner::build() {
 	}
 
 	if (m_data.localBufferSizes.size() > 0) {
-		std::vector<uint32_t> sizes;
+		std::vector<ResourceManager::BufferDescription> bufferInfo;
 		bufferIndices.clear();
 
 		for (auto [index, size] : m_data.localBufferSizes) {
-			sizes.push_back(size);
+			bufferInfo.push_back(
+				{
+					.size = size,
+				}
+			);
 			bufferIndices.push_back(index);
 		}
 
 		// Return buffers so they can bound to resource index
-		m_hostDataAllocation = m_resourceManager.createHostAllocation(sizes);
+		m_hostDataAllocation = m_resourceManager.createResources(
+			{}, bufferInfo, ResourceManager::MemoryLocation::HostVisible
+		);
 
-		auto buffers = m_resourceManager.getHostBuffers(*m_hostDataAllocation);
+		auto buffers = m_resourceManager.getBuffers(*m_hostDataAllocation);
 		for (int i = 0; i < bufferIndices.size(); i++) {
 			m_buffers[bufferIndices[i]] = buffers[i];
 			m_resourceManager.setName(
