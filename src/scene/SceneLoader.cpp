@@ -10,6 +10,10 @@
 #include <texture_compressor/common.hpp>
 #include <texture_compressor/compression.hpp>
 #include <texture_compressor/utils.hpp>
+#include <thread>
+#include <vector>
+
+#include "utils/ConcurrentStack.hpp"
 
 struct VertexAttributes {
 	glm::vec3 normal;
@@ -99,7 +103,6 @@ Sizes getStagingAllocationSize(
 	// Size
 
 	Sizes sizes;
-
 	for (auto& mesh : asset.nodes) {
 		if (!mesh.meshIndex.has_value()) continue;
 
@@ -146,12 +149,49 @@ Sizes getStagingAllocationSize(
 
 	for (int i = 0; i < asset.images.size(); i++) {
 		auto& image = asset.images[i];
-		auto* uri = std::get_if<fastgltf::sources::URI>(&image.data);
-		if (!uri) continue;
-
 		int width, height, channels;
-		stbi_info(
-			(assetPath / uri->uri.fspath()).c_str(), &width, &height, &channels
+
+		std::visit(
+			fastgltf::visitor {
+				[&](const fastgltf::sources::URI& uri) {
+					stbi_info(
+						(assetPath / uri.uri.fspath()).c_str(),
+						&width,
+						&height,
+						&channels
+					);
+				},
+				[&](const fastgltf::sources::Array& vector) {
+					int width, height, channels;
+					stbi_info_from_memory(
+						(stbi_uc*)vector.bytes.data(),
+						vector.bytes.size_bytes(),
+						&width,
+						&height,
+						&channels
+					);
+				},
+				[&](const fastgltf::sources::BufferView& view) {
+					auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+					auto& buffer = asset.buffers[bufferView.bufferIndex];
+					std::visit(
+						fastgltf::visitor {
+							[](auto& arg) {},
+							[&](fastgltf::sources::Array& vector) {
+								stbi_info_from_memory(
+									(stbi_uc*)vector.bytes.data(),
+									vector.bytes.size_bytes(),
+									&width,
+									&height,
+									&channels
+								);
+							} },
+						buffer.data
+					);
+				},
+				[](auto& arg) {},
+			},
+			image.data
 		);
 
 		uint8_t mipLevels = getMipLevels(width, height);
@@ -168,6 +208,7 @@ Sizes getStagingAllocationSize(
 		                 vk::ImageUsageFlagBits::eSampled,
 			}
 		);
+		imageSize = std::max(imageSize, 16ul);
 		sizes.imageBaseSizes.push_back(imageSize);
 		for (int i = 0; i < mipLevels; i++) {
 			sizes.textures += imageSize >> (i * 2);
@@ -428,7 +469,119 @@ std::vector<bool> loadMaterialInstances(
 	return roughnessMetallicImageMap;
 }
 
-void loadImages(
+std::vector<std::byte> getRawImageData(
+	std::size_t image,
+	const fastgltf::Asset& asset,
+	const std::filesystem::path& assetPath
+) {
+	return std::visit(
+		fastgltf::visitor {
+			[&](const fastgltf::sources::URI& uri) {
+				auto file_size =
+					std::filesystem::file_size(assetPath / uri.uri.path());
+				std::ifstream file { assetPath / uri.uri.path(),
+			                         std::ios::binary | std::ios::ate };
+				assert(file.is_open());
+
+				std::vector<std::byte> rawData(file_size - uri.fileByteOffset);
+
+				file.seekg(uri.fileByteOffset);
+				file.read(
+					(char*)rawData.data(), file_size - uri.fileByteOffset
+				);
+				file.close();
+
+				return rawData;
+			},
+			[&](const fastgltf::sources::Array& vector) {
+				return std::vector<std::byte>(
+					vector.bytes.data(),
+					vector.bytes.data() + vector.bytes.size_bytes()
+				);
+			},
+			[&](fastgltf::sources::BufferView& view) {
+				auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+				auto& buffer = asset.buffers[bufferView.bufferIndex];
+				return std::visit(
+					fastgltf::visitor {
+						[&](const fastgltf::sources::Array& vector) {
+							return std::vector<std::byte>(
+								vector.bytes.data(),
+								vector.bytes.data() + vector.bytes.size_bytes()
+							);
+						},
+						[](auto& arg) { return std::vector<std::byte> {}; },
+					},
+					buffer.data
+				);
+			},
+			[](auto& arg) { return std::vector<std::byte> {}; },
+		},
+
+		asset.images[image].data
+	);
+}
+
+struct ProcessedImageData {
+	std::byte* ptr;
+	std::size_t width;
+	std::size_t height;
+};
+
+ProcessedImageData processImage(
+	std::size_t image,
+	const std::vector<texture_compressor::Format>& formats,
+	const std::vector<bool>& roughnessMetallicImageMap,
+	const std::vector<std::byte>& imageData
+) {
+	int width, height, channels;
+
+	int expectedChannels = 0;
+	switch (formats[image]) {
+		case texture_compressor::Format::BC1:
+		case texture_compressor::Format::BC5:
+			expectedChannels = 3;
+			break;
+		case texture_compressor::Format::BC1_ALPHA:
+			expectedChannels = 4;
+			break;
+		default:
+			expectedChannels = 0;
+	}
+
+	std::byte* imageProcessedData = (std::byte*)stbi_load_from_memory(
+		(stbi_uc*)imageData.data(),
+		imageData.size(),
+		&width,
+		&height,
+		&channels,
+		expectedChannels
+	);
+
+	assert(imageProcessedData);
+
+	// Roughness/metallic compression
+	if (formats[image] == texture_compressor::Format::BC5) {
+		if (roughnessMetallicImageMap[image]) {
+			for (int c = 0; c < width * height; c++) {
+				imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 1];
+				imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 2];
+			}
+		} else {
+			for (int c = 0; c < width * height; c++) {
+				imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 0];
+				imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 1];
+			}
+		}
+	}
+	return {
+		.ptr = imageProcessedData,
+		.width = static_cast<std::size_t>(width),
+		.height = static_cast<std::size_t>(height),
+	};
+}
+
+std::vector<std::size_t> loadImages(
 	const fastgltf::Asset& asset,
 	const Sizes& offsets,
 	const std::vector<texture_compressor::Format>& formats,
@@ -436,73 +589,102 @@ void loadImages(
 	const std::filesystem::path& assetPath,
 	void* stagingAddress
 ) {
-	std::byte* ptextures = ((std::byte*)stagingAddress) + offsets.textures;
+	auto stagingTextures = reinterpret_cast<std::array<uint8_t, 4>*>(
+		(std::byte*)stagingAddress + offsets.textures
+	);
 
-	// TODO: base images, only add them once
-	std::array<uint8_t, 4>* pTexturesAsTex =
-		reinterpret_cast<std::array<uint8_t, 4>*>(ptextures);
-	pTexturesAsTex[0] = { 255, 255, 255, 255 };  // Color
-	pTexturesAsTex[1] = { 128, 128, 255, 255 };  // Normal
-	pTexturesAsTex[2] = { 255, 0, 255, 255 };    // Roughness-metallic
+	stagingTextures[0] = { 255, 255, 255, 255 };
+	stagingTextures[1] = { 128, 128, 255, 255 };
+	stagingTextures[2] = { 255, 0, 0, 255 };
 
-	ptextures += 16;  // Aligned
+	using ImageIndex = std::size_t;
+	std::vector<std::vector<std::byte>> rawImageData(asset.images.size());
 
-	for (int i = 0; i < asset.images.size(); i++) {
-		auto& image = asset.images[i];
-		auto* uri = std::get_if<fastgltf::sources::URI>(&image.data);
-		assert(uri != nullptr);
+	std::vector<ProcessedImageData> processedImageData(asset.images.size());
+	std::vector<std::size_t> compressedImagesOffsets(asset.images.size());
 
-		int width, height, channels;
-		int expectedChannels = 0;
-		switch (formats[i]) {
-			case texture_compressor::Format::BC1:
-			case texture_compressor::Format::BC5:
-				expectedChannels = 3;
-				break;
-			case texture_compressor::Format::BC1_ALPHA:
-				expectedChannels = 4;
-				break;
-			default:
-				expectedChannels = 0;
-		}
+	ConcurrentStack<ImageIndex> rawDataStack;
+	ConcurrentStack<ImageIndex> processImageStack;
+	ConcurrentStack<ImageIndex> compressImageStack;
+	ConcurrentStack<ImageIndex> readyImages;
 
-		std::byte* imageData = reinterpret_cast<std::byte*>(stbi_load(
-			(assetPath / uri->uri.path()).c_str(),
-			&width,
-			&height,
-			&channels,
-			expectedChannels
-		));
+	for (int i = 0; i < asset.images.size(); i++)
+		rawDataStack.container().push_back(i);
 
-		// Roughness/metallic compression
-		if (formats[i] == texture_compressor::Format::BC5) {
-			if (roughnessMetallicImageMap[i]) {
-				for (int i = 0; i < width * height; i++) {
-					imageData[i * 2 + 0] = imageData[i * 3 + 1];
-					imageData[i * 2 + 1] = imageData[i * 3 + 2];
-				}
-			} else {
-				for (int i = 0; i < width * height; i++) {
-					imageData[i * 2 + 0] = imageData[i * 3 + 0];
-					imageData[i * 2 + 1] = imageData[i * 3 + 1];
-				}
+	for (int i = 0; i < 16; i++) {
+		std::jthread([&]() {
+			auto stackInserter = processImageStack.getInserter();
+			while (auto image = rawDataStack.pop()) {
+				rawImageData[image.value()] =
+					getRawImageData(image.value(), asset, assetPath);
+
+				stackInserter.push(image.value());
 			}
-		}
-		std::size_t mipLevels = getMipLevels(width, height);
-		texture_compressor::compress(
-			width, height, formats[i], imageData, ptextures, mipLevels
-		);
-		stbi_image_free(imageData);
-		ptextures += texture_compressor::query_size(
-			width, height, formats[i], mipLevels
-		);
+		}).detach();
 	}
+	for (int i = 0; i < 2; i++) {
+		std::jthread([&] {
+			auto stackInserter = compressImageStack.getInserter();
+
+			while (auto popValue = processImageStack.pop_wait()) {
+				auto image = popValue.value();
+				auto& data = rawImageData[image];
+
+				processedImageData[image] = processImage(
+					image, formats, roughnessMetallicImageMap, data
+				);
+
+				stackInserter.push(image);
+				rawImageData[image] = {};
+			}
+		}).detach();
+	}
+
+	std::atomic_uint stagingOffset = 16;
+
+	for (int i = 0; i < 4; i++) {
+		std::jthread([&] {
+			auto stackInserter = readyImages.getInserter();
+			while (auto workElement = compressImageStack.pop_wait()) {
+				auto image = workElement.value();
+
+				auto& data = processedImageData[image];
+
+				uint8_t mipLevels = getMipLevels(data.width, data.height);
+				std::size_t imageSize = texture_compressor::query_size(
+					data.width, data.height, formats[image], mipLevels
+				);
+				imageSize = std::max(imageSize, 16ul);
+				std::size_t loadOffset = stagingOffset.fetch_add(imageSize);
+				texture_compressor::compress(
+					data.width,
+					data.height,
+					formats[image],
+					data.ptr,
+					(std::byte*)stagingAddress + offsets.textures + loadOffset,
+					mipLevels
+				);
+
+				stbi_image_free(data.ptr);
+
+				compressedImagesOffsets[image] = loadOffset;
+				stackInserter.push(image);
+			}
+		}).detach();
+	}
+
+	while (
+		auto image = readyImages.pop_wait()
+	);  // Wait until all images have been processed
+
+	return compressedImagesOffsets;
 }
 
 std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 	BufferHandle stagingBuffer,
 	const std::vector<BufferHandle>& sceneBuffers,
 	const std::vector<ImageHandle>& sceneImages,
+	const std::vector<std::size_t>& imageOffsets,
 	const Sizes& sizes,
 	const Sizes& offsets
 ) {
@@ -605,7 +787,6 @@ std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
     }
 	);
 
-	uint32_t textureBufferOffset = 0;
 	for (int i = 0; i < 3; i++) {
 		copies.push_back(
 			{
@@ -613,8 +794,9 @@ std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 					ResourceManager::ResourceCopyInfo::BufferReference {
 																		.handle = stagingBuffer,
 																		.size = 4,
-																		.offset = static_cast<uint32_t>(offsets.textures) +
-		                          textureBufferOffset, },
+																		.offset =
+							static_cast<uint32_t>(offsets.textures) + 4 * i,
+																		},
 				.destination =
 					ResourceManager::ResourceCopyInfo::ImageReference {
 																		.handle = sceneImages[i],
@@ -624,10 +806,12 @@ std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 																		}
         }
 		);
-		textureBufferOffset += 4;
 	}
-	textureBufferOffset += 4;  // Alignment to 16
+
 	for (int i = 3; i < sizes.imageDescriptions.size(); i++) {
+		uint32_t mipOffset = 0;
+
+		uint32_t imageOffset = imageOffsets[i - 3];
 		for (int mip = 0; mip < sizes.imageDescriptions[i].miplevels; mip++) {
 			std::size_t mipSize = sizes.imageBaseSizes[i] >> (mip * 2);
 			copies.push_back(
@@ -637,7 +821,8 @@ std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 																			.handle = stagingBuffer,
 																			.size = static_cast<uint32_t>(mipSize),
 																			.offset = static_cast<uint32_t>(offsets.textures) +
-			                          textureBufferOffset, },
+			                          imageOffset + mipOffset,
+																			},
 					.destination =
 						ResourceManager::ResourceCopyInfo::ImageReference {
 																			.handle = sceneImages[i],
@@ -648,14 +833,20 @@ std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 																			}
             }
 			);
-			textureBufferOffset += mipSize;
+			mipOffset += mipSize;
 		}
 	}
+
 	return copies;
 }
 
 Scene SceneLoader::load(const std::filesystem::path& path) {
 	fastgltf::Parser parser;
+
+	if (!std::filesystem::exists(path)) {
+		std::printf("Selected file does not exist. Closing... \n");
+		exit(-1);
+	}
 
 	auto data = fastgltf::GltfDataBuffer::FromPath(path);
 	auto asset = parser.loadGltf(
@@ -687,13 +878,12 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 	offsets.transforms = offsets.indices + sizes.indices;
 	offsets.materialInstances = offsets.transforms + sizes.transforms;
 	offsets.materials = offsets.materialInstances + sizes.materialInstances;
-
 	auto roughnessMetallicImageMap =
 		loadMaterialInstances(asset.get(), offsets, stagingBuffer.data);
 
 	auto meshData = loadMeshes(asset.get(), offsets, stagingBuffer.data);
 
-	loadImages(
+	auto imageMap = loadImages(
 		asset.get(),
 		offsets,
 		formats,
@@ -745,6 +935,7 @@ Scene SceneLoader::load(const std::filesystem::path& path) {
 		m_resourceManager.getBuffers(stagingAllocation)[0],
 		m_resourceManager.getBuffers(sceneAllocation),
 		m_resourceManager.getImages(sceneAllocation),
+		imageMap,
 		sizes,
 		offsets
 	);
