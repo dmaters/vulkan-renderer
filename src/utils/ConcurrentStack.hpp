@@ -24,9 +24,16 @@ private:
 	std::mutex m_mutex;
 	std::condition_variable m_cv;
 	std::vector<T> m_values;
-	std::atomic_uint m_providerCount;
+	std::atomic_uint m_providerCount = 0;
 
-	void registerProvider() { m_providerCount.fetch_add(1); }
+	//Additional flag to avoid skipping the wait for values in case the provider thread is slow to start
+	bool m_activated = false;
+
+	void registerProvider() {
+		
+		m_activated = true;
+		m_providerCount.fetch_add(1);
+	 }
 	void unregisterProvider() {
 		m_providerCount.fetch_sub(1);
 		m_cv.notify_all();
@@ -36,6 +43,10 @@ private:
 		std::scoped_lock lock(m_mutex);
 		m_values.push_back(value);
 		m_cv.notify_one();
+	}
+	
+	bool isRetired(){
+		return (m_activated && m_providerCount.load() == 0 && m_values.empty());	
 	}
 
 public:
@@ -48,11 +59,11 @@ public:
 		std::unique_lock lock(m_mutex);
 
 		m_cv.wait(lock, [&] {
-			return (m_providerCount.load() == 0 && m_values.empty()) ||
+			return isRetired() ||
 			       !m_values.empty();
 		});
 
-		if (m_providerCount.load() == 0 && m_values.empty())
+		if (isRetired())
 			return std::nullopt;
 
 		auto value = m_values.back();
