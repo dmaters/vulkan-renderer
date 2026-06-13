@@ -12,6 +12,7 @@
 #include <texture_compressor/utils.hpp>
 #include <thread>
 #include <vector>
+#include <print>
 
 #include "utils/ConcurrentStack.hpp"
 
@@ -155,7 +156,7 @@ Sizes getStagingAllocationSize(
 			fastgltf::visitor {
 				[&](const fastgltf::sources::URI& uri) {
 					stbi_info(
-						(assetPath / uri.uri.fspath()).c_str(),
+					    (assetPath / uri.uri.path()).string().c_str(),
 						&width,
 						&height,
 						&channels
@@ -208,7 +209,7 @@ Sizes getStagingAllocationSize(
 		                 vk::ImageUsageFlagBits::eSampled,
 			}
 		);
-		imageSize = std::max(imageSize, 16ul);
+		imageSize = std::max(imageSize, std::size_t(16));
 		sizes.imageBaseSizes.push_back(imageSize);
 		for (int i = 0; i < mipLevels; i++) {
 			sizes.textures += imageSize >> (i * 2);
@@ -654,7 +655,7 @@ std::vector<std::size_t> loadImages(
 				std::size_t imageSize = texture_compressor::query_size(
 					data.width, data.height, formats[image], mipLevels
 				);
-				imageSize = std::max(imageSize, 16ul);
+				imageSize = std::max(imageSize, std::size_t(16));
 				std::size_t loadOffset = stagingOffset.fetch_add(imageSize);
 				texture_compressor::compress(
 					data.width,
