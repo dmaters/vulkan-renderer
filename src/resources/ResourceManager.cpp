@@ -163,7 +163,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 					std::max(alignment, limits.minStorageBufferOffsetAlignment);
 
 			bufferSize =
-				(description.size / 3 + alignment - 1) & ~(alignment - 1);
+				((description.size + 2) / 3 + alignment - 1) & ~(alignment - 1);
 			bufferSize *= 3;
 		}
 

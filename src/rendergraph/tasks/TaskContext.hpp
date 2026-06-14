@@ -59,14 +59,13 @@ std::span<T> TaskContext::getInputSpan(uint32_t index) {
 		return std::span<T>(
 			reinterpret_cast<T*>(
 				static_cast<std::byte*>(buffer.data) +
-				(buffer.allocation.size / 3) * (currentFrame % 3)
+				(buffer.size / 3) * (currentFrame % 3)
 			),
-			buffer.allocation.size / 3 / sizeof(T)
+			buffer.size / 3 / sizeof(T)
 		);
 	else
 		return std::span<T>(
-			reinterpret_cast<T*>(buffer.data),
-			buffer.allocation.size / sizeof(T)
+			reinterpret_cast<T*>(buffer.data), buffer.size / sizeof(T)
 		);
 	;
 }
@@ -94,14 +93,13 @@ std::span<T> TaskContext::getOutputSpan(uint32_t index) {
 		return std::span<T>(
 			reinterpret_cast<T*>(
 				static_cast<std::byte*>(buffer.data) +
-				(buffer.allocation.size / 3) * (currentFrame % 3)
+				(buffer.size / 3) * (currentFrame % 3)
 			),
-			buffer.allocation.size / 3 / sizeof(T)
+			buffer.size / 3 / sizeof(T)
 		);
 	else
 		return std::span<T>(
-			reinterpret_cast<T*>(buffer.data),
-			buffer.allocation.size / sizeof(T)
+			reinterpret_cast<T*>(buffer.data), buffer.size / sizeof(T)
 		);
 	;
 }
