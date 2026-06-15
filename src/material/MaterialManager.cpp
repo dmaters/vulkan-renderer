@@ -25,7 +25,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 
 		vk::DescriptorPoolSize {
 								.type = vk::DescriptorType::eSampledImage,
-								.descriptorCount = 256,
+								.descriptorCount = 512,
 								},
 
 		vk::DescriptorPoolSize {
@@ -105,7 +105,7 @@ void MaterialManager::createTextureDescriptorSet() {
 		vk::DescriptorSetLayoutBinding {
 										.binding = 0,
 										.descriptorType = vk::DescriptorType::eSampledImage,
-										.descriptorCount = 256,
+										.descriptorCount = 512,
 										.stageFlags = vk::ShaderStageFlagBits::eAll,
 										},
 		vk::DescriptorSetLayoutBinding {
