@@ -4,8 +4,8 @@
 #include "material/MaterialDefinitions.hpp"
 #include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
-#include "rendergraph/tasks/DrawPass.hpp"
 #include "rendergraph/tasks/DrawPassIndirect.hpp"
+#include "rendergraph/tasks/DrawPassQuad.hpp"
 #include "rendergraph/tasks/FrustumCulling.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/SceneUpdatePass.hpp"
@@ -583,7 +583,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassBegin(
 				context, AttachmentOp::ClearWrite, AttachmentOp::Read
 			);
-			DrawPass(context, material, context.scene.buckets.at(material));
+			DrawPassQuad(context, material);
 			RenderPassEnd(context);
 		}
 	);
@@ -607,7 +607,8 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassBegin(
 				context, AttachmentOp::ReadWrite, AttachmentOp::Read
 			);
-			DrawPass(context, material, context.scene.buckets.at(material));
+			DrawPassQuad(context, material);
+
 			RenderPassEnd(context);
 		}
 	);
@@ -680,7 +681,7 @@ void Renderer::createRenderGraph(Scene& scene) {
 			RenderPassBegin(
 				context, AttachmentOp::ClearWrite, AttachmentOp::Read
 			);
-			DrawPass(context, material, context.scene.buckets.at(material));
+			DrawPassQuad(context, material);
 			RenderPassEnd(context);
 		}
 	);
