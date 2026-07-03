@@ -43,7 +43,7 @@ void DrawPass::Quad(Task::BuildContext& context, MaterialIndex materialIndex) {
 void DrawPass::Indirect(
 	Task::BuildContext& context,
 	MaterialIndex material,
-	std::span<uint32_t> primitives,
+	const std::vector<uint32_t>& primitives,
 	uint32_t pushConstant,
 	rendergraph::ResourceIndex indirectBufferLocalIndex,
 	rendergraph::ResourceIndex primitiveBufferLocalIndex

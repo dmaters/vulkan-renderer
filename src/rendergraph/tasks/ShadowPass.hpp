@@ -4,10 +4,16 @@
 
 #include "../ResourceIndex.hpp"
 #include "../Task.hpp"
+#include "material/MaterialManager.hpp"
 
 struct ShadowPass {
-	std::array<rendergraph::ResourceIndex, 3> indirectBuffers;
-	std::array<rendergraph::ResourceIndex, 3> indirectBuffersAlpha;
+	std::array<rendergraph::ResourceIndex, 3> _indirectBuffer;
+	std::array<rendergraph::ResourceIndex, 3> _primitiveMap;
+
+	TaskIndex sceneUpdateTask;
+
+
+	MaterialIndex material;
 
 	static void Setup(Task::SetupContext&);
 	static void Build(Task::BuildContext&);

@@ -7,7 +7,7 @@ struct DrawPass {
 	static void Indirect(
 		Task::BuildContext& context,
 		MaterialIndex material,
-		std::span<uint32_t> primitives,
+		const std::vector<uint32_t>& primitives,
 		uint32_t pushConstant,
 		rendergraph::ResourceIndex indirectBufferLocalIndex,
 		rendergraph::ResourceIndex primitiveBufferLocalIndex

@@ -1,4 +1,5 @@
 #include "GBufferPass.hpp"
+#include <string>
 
 #include "../BuildContext.hpp"
 #include "../SetupContext.hpp"
@@ -19,7 +20,7 @@ void GBUfferPass::Setup(Task::SetupContext& context) {
 
 	for (int i = 0; i < 3; i++) {
 		auto indirectBuffer = context.createBuffer(
-			"indirect_gpass_buffer",
+			"indirect_gpass_buffer_local_" + std::to_string(i),
 			{
 				.size = indirectBufferSize,
 				.usage = vk::BufferUsageFlagBits::eTransferSrc,
@@ -27,7 +28,7 @@ void GBUfferPass::Setup(Task::SetupContext& context) {
 			ResourceManager::MemoryLocation::HostVisible
 		);
 		auto primitiveMap = context.createBuffer(
-			"primitive_gpass_buffer",
+			"primitive_gpass_buffer_local_" + std::to_string(i),
 			{
 				.size = primitiveMapSize,
 				.usage = vk::BufferUsageFlagBits::eTransferSrc,
@@ -172,7 +173,7 @@ void GBUfferPass::Build(Task::BuildContext& context) {
 	DrawPass::Indirect(
 		context,
 		data.material,
-		std::span<uint32_t>(visiblePrimitives),
+		visiblePrimitives,
 		0,
 		data._indirectBuffer[context.currentFrame % 3],
 		data._primitiveMap[context.currentFrame % 3]

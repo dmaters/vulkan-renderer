@@ -1,13 +1,11 @@
 #include <vector>
 
 #include "Renderer.hpp"
-#include "material/MaterialDefinitions.hpp"
 #include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/SetupContext.hpp"
 #include "rendergraph/Task.hpp"
 #include "rendergraph/tasks/ComputePass.hpp"
-#include "rendergraph/tasks/DrawPassQuad.hpp"
-#include "rendergraph/tasks/FrustumCulling.hpp"
+#include "rendergraph/tasks/DrawPass.hpp"
 #include "rendergraph/tasks/GBufferPass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
 #include "rendergraph/tasks/SceneUpdatePass.hpp"
@@ -17,11 +15,12 @@
 
 struct ProceduralSkyOutputPasses {
 	TaskIndex skyLighting;
+	TaskIndex skyviewLUT;
 };
 
 struct ProceduralSkyRequiredPasses {
 	TaskIndex sceneUpdatePass;
-	TaskIndex hdrOutput;
+	TaskIndex gbufferPass;
 };
 ProceduralSkyOutputPasses proceduralSky(
 	std::vector<TaskIndex>& passes,
@@ -245,63 +244,7 @@ ProceduralSkyOutputPasses proceduralSky(
 	);
 	passes.push_back(skyLighting);
 
-	struct SkyboxData {
-		TaskIndex sceneUpdatePass;
-		TaskIndex hdrOutputPass;
-		TaskIndex skyviewLUTPass;
 
-		MaterialIndex skyboxMaterial;
-	};
-
-	TaskIndex skyboxPass = graph.addTask(
-		"skybox",
-		Task::Type::Graphic,
-		{
-
-			.setup =
-				[](Task::SetupContext& context) {
-					auto data = context.getData<SkyboxData>();
-					context.registerInput(
-						data.sceneUpdatePass,
-						0,
-						ResourceUsage::Type::UniformBuffer
-					);
-					context.registerInput(
-						data.skyviewLUTPass, 0, ResourceUsage::Type::SampledRead
-					);
-
-					context.registerOutput(
-						data.hdrOutputPass,
-						0,
-						ResourceUsage::Type::ColorAttachmentWrite
-					);
-					context.registerOutput(
-						data.hdrOutputPass,
-						1,
-						ResourceUsage::Type::DepthStencilRead
-					);
-				},
-
-			.build =
-				[](Task::BuildContext& context) {
-					RenderPass::Begin(
-						context, AttachmentOp::ReadWrite, AttachmentOp::Read
-					);
-					DrawPassQuad(
-						context, context.getData<SkyboxData>().skyboxMaterial
-					);
-
-					RenderPass::End(context.commandBuffer);
-				},
-		},
-		SkyboxData {
-			.sceneUpdatePass = previousPasses.sceneUpdatePass,
-			.hdrOutputPass = previousPasses.hdrOutput,
-			.skyviewLUTPass = skyviewLUTPass,
-			.skyboxMaterial = materialManager.getMaterialIndex("skybox"),
-		}
-	);
-	passes.push_back(skyboxPass);
 }
 
 void Renderer::createRenderGraph(Scene& scene) {
@@ -336,6 +279,10 @@ void Renderer::createRenderGraph(Scene& scene) {
 			.setup = ShadowPass::Setup,
 			.build = ShadowPass::Build,
 
+		},
+		ShadowPass{
+		    .sceneUpdateTask = sceneUpdate,
+			.material = m_materialManager.getMaterialIndex("shadowmap"),
 		}
 	);
 	passes.push_back(shadowMapPass);
@@ -347,53 +294,150 @@ void Renderer::createRenderGraph(Scene& scene) {
 			.setup = GBUfferPass::Setup,
 			.build = GBUfferPass::Build,
 		},
-		GBUfferPass { .sceneUpdatePass = sceneUpdate, .}
+		GBUfferPass { .sceneUpdatePass = sceneUpdate, }
 	);
 
-	ResourceIndex hdr_output = m_graph.createImage(
-		"hdr_output",
+	auto proceduralSkyPasses = proceduralSky(
+	    passes,
+		m_graph,
+	    m_materialManager,
 		{
-			.width = 1280,
-			.height = 720,
-			.depth = 1,
-			.miplevels = 1,
-			.format = vk::Format::eR16G16B16A16Sfloat,
-			.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                 vk::ImageUsageFlagBits::eSampled |
-	                 vk::ImageUsageFlagBits::eStorage,
-		},
-		1
+			.sceneUpdatePass = sceneUpdate,
+		    .gbufferPass = gbufferPass,
+		}
 	);
+
+
+	struct LightingDeferredData {
+	    TaskIndex sceneUpdatePass;
+	    TaskIndex gbufferPass;
+	    TaskIndex shadowPass;
+	    TaskIndex skyLightingPass;
+
+
+
+		MaterialIndex material;
+	};
+
 	TaskIndex lightingDeferred = m_graph.addTask(
 		"lighting_deferred",
-		TaskType::Graphic,
+		Task::Type::Graphic,
 		{
-			{ cameraBuffer,      ResourceUsage::Type::UniformBuffer },
-			{ lightBuffer,       ResourceUsage::Type::UniformBuffer },
-			{ albedo,            ResourceUsage::Type::SampledRead   },
-			{ normal,            ResourceUsage::Type::SampledRead   },
-			{ worldPos,          ResourceUsage::Type::SampledRead   },
-			{ roughnessMetallic, ResourceUsage::Type::SampledRead   },
-			{ shadowAtlas,       ResourceUsage::Type::SampledRead   },
-			{ skyLightingSH,     ResourceUsage::Type::UniformBuffer },
-    },
-		{
-			{ hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
-			{ depth, ResourceUsage::Type::DepthStencilRead },
+		    .setup = [](Task::SetupContext& context) {
+				auto data = context.getData<LightingDeferredData>();
+				context.registerInput(data.sceneUpdatePass, 0, ResourceUsage::Type::UniformBuffer);
+				context.registerInput(data.sceneUpdatePass, 1, ResourceUsage::Type::UniformBuffer);
+				context.registerInput(data.gbufferPass, 0, ResourceUsage::Type::SampledRead);
+				context.registerInput(data.gbufferPass, 1, ResourceUsage::Type::SampledRead);
+				context.registerInput(data.gbufferPass, 2, ResourceUsage::Type::SampledRead);
+				context.registerInput(data.gbufferPass, 3, ResourceUsage::Type::SampledRead);
+				context.registerInput(data.shadowPass, 0, ResourceUsage::Type::SampledRead);
+				context.registerInput(data.skyLightingPass, 0, ResourceUsage::Type::UniformBuffer);
+
+
+				auto resolution =  context.scene.camera.getResolution();
+				rendergraph::ResourceIndex hdr_output = context.createImage(
+   					"hdr_output",
+   					{
+  						.width = static_cast<uint32_t>(resolution.x),
+  						.height = static_cast<uint32_t>(resolution.y),
+  						.depth = 1,
+  						.miplevels = 1,
+  						.format = vk::Format::eR16G16B16A16Sfloat,
+  						.usage = vk::ImageUsageFlagBits::eColorAttachment |
+   				                 vk::ImageUsageFlagBits::eSampled |
+   				                 vk::ImageUsageFlagBits::eStorage,
+   					}
+				);
+				context.registerOutput(hdr_output, ResourceUsage::Type::ColorAttachmentWrite);
+				context.registerOutput(data.gbufferPass, 4, ResourceUsage::Type::DepthStencilWrite);
+
+			},
+			.build = [](Task::BuildContext& context) {
+    			RenderPass::Begin(
+    				context, AttachmentOp::ClearWrite, AttachmentOp::Read
+    			);
+    			DrawPass::Quad(context, context.getData<LightingDeferredData>().material);
+    			RenderPass::End(context.commandBuffer);
+			}
+
 		},
-		[material = m_materialManager.getMaterialIndex("lighting_deferred")](
-			TaskBuildContext& context
-		) {
-			RenderPassBegin(
-				context, AttachmentOp::ClearWrite, AttachmentOp::Read
-			);
-			DrawPassQuad(context, material);
-			RenderPassEnd(context);
+		LightingDeferredData{
+			.sceneUpdatePass = sceneUpdate,
+			.gbufferPass = gbufferPass,
+			.shadowPass = shadowMapPass,
+		    .skyLightingPass = proceduralSkyPasses.skyLighting,
+
+			.material =  m_materialManager.getMaterialIndex("lighting_deferred"),
 		}
+
+
 	);
 	passes.push_back(lightingDeferred);
 
-	ResourceIndex tonemapped = m_graph.createImage(
+
+
+
+	struct SkyboxData {
+		TaskIndex sceneUpdatePass;
+		TaskIndex hdrOutputPass;
+		TaskIndex skyviewLUTPass;
+
+		MaterialIndex skyboxMaterial;
+	};
+
+	TaskIndex skyboxPass = m_graph.addTask(
+		"skybox",
+		Task::Type::Graphic,
+		{
+
+			.setup =
+				[](Task::SetupContext& context) {
+					auto data = context.getData<SkyboxData>();
+					context.registerInput(
+						data.sceneUpdatePass,
+						0,
+						ResourceUsage::Type::UniformBuffer
+					);
+					context.registerInput(
+						data.skyviewLUTPass, 0, ResourceUsage::Type::SampledRead
+					);
+
+					context.registerOutput(
+						data.hdrOutputPass,
+						0,
+						ResourceUsage::Type::ColorAttachmentWrite
+					);
+					context.registerOutput(
+						data.hdrOutputPass,
+						1,
+						ResourceUsage::Type::DepthStencilRead
+					);
+				},
+
+			.build =
+				[](Task::BuildContext& context) {
+					RenderPass::Begin(
+						context, AttachmentOp::ReadWrite, AttachmentOp::Read
+					);
+					DrawPass::Quad(
+						context, context.getData<SkyboxData>().skyboxMaterial
+					);
+
+					RenderPass::End(context.commandBuffer);
+				},
+		},
+		SkyboxData {
+			.sceneUpdatePass = sceneUpdate,
+			.hdrOutputPass = lightingDeferred,
+			.skyviewLUTPass = proceduralSkyPasses.skyviewLUT,
+			.skyboxMaterial = m_materialManager.getMaterialIndex("skybox"),
+		}
+	);
+	passes.push_back(skyboxPass);
+
+
+	rendergraph::ResourceIndex tonemapped = m_graph.createImage(
 		"tonemapped",
 		{
 			.width = 1280,
