@@ -1,4 +1,9 @@
 #pragma once
-#include "TaskContext.hpp"
+#include "../Task.hpp"
 
-void BufferUpload(TaskContext& context);
+struct BufferUpload {
+	rendergraph::ResourceIndex origin;
+	rendergraph::ResourceIndex destination;
+
+	static void build(Task::BuildContext& context, TaskIndex task);
+};

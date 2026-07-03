@@ -2,9 +2,34 @@
 
 #include <glm/glm.hpp>
 
-#include "TaskContext.hpp"
+#include "../BuildContext.hpp"
+#include "../SetupContext.hpp"
 #include "material/MaterialDefinitions.hpp"
-void SceneUpdatePass(TaskContext& context) {
+
+void SceneData::Setup(Task::SetupContext& context) {
+	auto cameraBuffer = context.createBuffer(
+		"camera_buffer",
+		ResourceManager::BufferDescription {
+			.size = sizeof(MaterialDefinitions::Camera),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+		},
+		ResourceManager::MemoryLocation::Device
+	);
+	auto lightBuffer = context.createBuffer(
+		"light_buffer",
+		ResourceManager::BufferDescription {
+			.size = sizeof(MaterialDefinitions::Light),
+			.usage = vk::BufferUsageFlagBits::eTransferDst |
+	                 vk::BufferUsageFlagBits::eUniformBuffer,
+		},
+		ResourceManager::MemoryLocation::Device
+	);
+
+	context.registerOutput(cameraBuffer, ResourceUsage::Type::TransferDst);
+	context.registerOutput(lightBuffer, ResourceUsage::Type::TransferDst);
+}
+void SceneData::Build(Task::BuildContext& context) {
 	glm::mat4 view = context.scene.camera.getViewMatrix();
 	glm::mat4 proj = context.scene.camera.getProjectionMatrix();
 

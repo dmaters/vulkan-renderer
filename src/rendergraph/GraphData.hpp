@@ -1,49 +1,58 @@
 #pragma once
 
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "ResourceUsage.hpp"
+#include "Task.hpp"
 #include "resources/ResourceManager.hpp"
-#include "tasks/Task.hpp"
+
 namespace rendergraph::internal {
 
 struct GraphData {
-	struct TaskData {
-		TaskType type;
+	std::vector<std::pair<ResourceIndex, ImageHandle>> externalImages;
+	std::vector<std::pair<ResourceIndex, BufferHandle>> externalBuffers;
+
+	std::unordered_map<ResourceIndex, std::string> resourceNames;
+
+	std::unordered_map<TaskIndex, Task> tasks;
+	std::unordered_map<TaskIndex, std::vector<std::byte>> taskData;
+
+	struct TaskMetaData {
+		Task::Type type;
 		std::string name;
-
-		struct ResourceDependencySpan {
-			uint32_t offset;
-			uint8_t count;
-		};
-
-		ResourceDependencySpan inputs;
-		ResourceDependencySpan outputs;
 	};
 
-	std::unordered_map<ResourceIndex, uint8_t> swapchainImageRatio;
-	std::unordered_map<ResourceIndex, ResourceManager::ImageDescription> images;
-	std::unordered_map<ResourceIndex, ResourceManager::BufferDescription>
-		buffers;
-	std::unordered_map<ResourceIndex, uint32_t> localBufferSizes;
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
-	std::unordered_set<ResourceIndex> sharedBuffers;
+	std::unordered_map<TaskIndex, TaskMetaData> taskMetadata;
 
-	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
-	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
-
-	std::vector<std::string> resourceNames;
-	std::vector<Task> tasks;
-	std::vector<TaskData> taskData;
-
-	std::vector<ResourceDependency> taskResources;
-
-	std::size_t resourceCount = 0;
+	ResourceIndexer indexer;
 };
 
 struct ExecutionInfo {
+	struct Resources {
+		std::unordered_map<rendergraph::ResourceIndex, std::string> names;
+
+		struct ImageBuildData {
+			ResourceManager::ImageDescription description;
+			ResourceManager::MemoryLocation location;
+		};
+		std::unordered_map<rendergraph::ImageIndex, ImageBuildData> images;
+
+		struct BufferBuildData {
+			ResourceManager::BufferDescription description;
+			ResourceManager::MemoryLocation location;
+		};
+		std::unordered_map<rendergraph::ImageIndex, BufferBuildData> buffers;
+	};
+	Resources resources;
+
+	struct References {
+		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>>
+			inputs;
+		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>>
+			outputs;
+	};
+	References references;
+
 	std::vector<TaskIndex> tasks;
 
 	struct Barrier {
@@ -51,11 +60,11 @@ struct ExecutionInfo {
 		ResourceUsage::Type currentUsage;
 		ResourceIndex index;
 	};
-	std::vector<Barrier> barriers;
-	std::vector<std::size_t> barrierOffsets;
+	std::unordered_map<TaskIndex, std::vector<Barrier>> barriers;
 
 	std::vector<Barrier> initializationBarriers;
-	std::unordered_map<ResourceIndex, ResourceUsage::Type> finalUsages;
+
+	struct InstanceData;
 };
 
 }  // namespace rendergraph::internal

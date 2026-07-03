@@ -47,9 +47,17 @@ private:
 
 public:
 	ResourceManager();
+
 	Image& getImage(ImageHandle handle) { return m_images.at(handle.value); }
 	Buffer& getBuffer(BufferHandle handle) {
 		return m_buffers.at(handle.value);
+	}
+
+	const Image& getImage(ImageHandle handle) const {
+		return m_images[handle.value];
+	}
+	const Buffer& getBuffer(BufferHandle handle) const {
+		return m_buffers[handle.value];
 	}
 
 	const std::vector<ImageHandle>& getImages(AllocationIndex index) const {

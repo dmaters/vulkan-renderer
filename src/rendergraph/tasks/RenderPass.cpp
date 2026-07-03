@@ -5,8 +5,8 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
-#include "Task.hpp"
-#include "TaskContext.hpp"
+#include "../BuildContext.hpp"
+#include "../Task.hpp"
 #include "resources/ResourceManager.hpp"
 
 std::pair<vk::AttachmentLoadOp, vk::AttachmentStoreOp> getAttachmentOps(
@@ -31,8 +31,8 @@ std::pair<vk::AttachmentLoadOp, vk::AttachmentStoreOp> getAttachmentOps(
 	}
 }
 
-void RenderPassBegin(
-	TaskContext& context,
+void RenderPass::Begin(
+	Task::BuildContext& context,
 	AttachmentOp color,
 	AttachmentOp depth,
 	vk::Rect2D viewport
@@ -134,8 +134,8 @@ void RenderPassBegin(
 	);
 }
 
-void RenderPassBegin(
-	TaskContext& context, AttachmentOp color, AttachmentOp depth
+void RenderPass::Begin(
+	Task::BuildContext& context, AttachmentOp color, AttachmentOp depth
 ) {
 	uint32_t width, height;
 	for (auto [index, usage] : context.outputs) {
@@ -152,7 +152,7 @@ void RenderPassBegin(
 		break;
 	}
 
-	RenderPassBegin(
+	RenderPass::Begin(
 		context,
 		color,
 		depth,

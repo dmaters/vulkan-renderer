@@ -1,14 +1,17 @@
 #include "BufferUpload.hpp"
 
-void BufferUpload(TaskContext& context) {
-	Buffer& origin = context.getInput<Buffer&>(0);
-	Buffer& destination = context.getOutput<Buffer&>(0);
+#include "../BuildContext.hpp"
+#include "../DataProvider.hpp"
+
+void BufferUpload::build(Task::BuildContext& context, TaskIndex task) {
+	BufferUpload& data = context.dataProvider.getData<BufferUpload>(task);
+
+	Buffer& origin = context.getInput<Buffer&>(data.origin);
+	Buffer& destination = context.getInput<Buffer&>(data.destination);
 
 	vk::BufferCopy copy {
-		.srcOffset = origin.allocation.offset +
-		             origin.size / 3 * (context.currentFrame % 3),
-		.size = origin.size / 3,
-		
+		.srcOffset = 0,
+		.size = origin.size,
 	};
 
 	context.commandBuffer.copyBuffer(

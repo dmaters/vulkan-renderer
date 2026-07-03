@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include "rendergraph/tasks/TaskContext.hpp"
+#include "rendergraph/BuildContext.hpp"
+#include "rendergraph/Task.hpp"
 #include "ui/UI.hpp"
 
-void UIPass(TaskContext& context) { UI::Render(context.commandBuffer); }
+void UIPass(Task::BuildContext& context) { UI::Render(context.commandBuffer); }

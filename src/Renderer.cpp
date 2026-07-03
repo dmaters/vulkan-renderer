@@ -36,8 +36,6 @@ Renderer::Renderer(SDL_Window* window) :
 	m_presentQueue = m_instance.device.getQueue(
 		m_instance.queueFamiliesIndices.presentIndex, 0
 	);
-
-	UI::Setup();
 }
 
 void Renderer::render() {

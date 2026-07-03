@@ -2,17 +2,18 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "TaskContext.hpp"
+#include "../BuildContext.hpp"
+#include "../Task.hpp"
 #include "material/Pipeline.hpp"
-#include "rendergraph/tasks/Task.hpp"
 
 void ComputePass(
-	TaskContext& context, MaterialIndex materialIndex, glm::uvec3 dispatchSize
+	Task::BuildContext& context,
+	MaterialIndex materialIndex,
+	glm::uvec3 dispatchSize
 ) {
 	vk::CommandBuffer& commandBuffer = context.commandBuffer;
 
-	const Pipeline& material =
-		context.materialManager.getPipeline(materialIndex);
+	Pipeline material = context.materialManager.getPipeline(materialIndex);
 
 	context.commandBuffer.bindPipeline(
 		vk::PipelineBindPoint::eCompute, material.pipeline
@@ -28,7 +29,7 @@ void ComputePass(
 		{}
 	);
 
-	TaskContext::Descriptors descriptors = context.getDescriptors();
+	Task::BuildContext::Descriptors descriptors = context.getDescriptors();
 
 	if (descriptors.descriptors.size() > 0) {
 		context.commandBuffer.pushDescriptorSetKHR(

@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "TaskContext.hpp"
+#include "../BuildContext.hpp"
 
 enum class AttachmentOp {
 	ClearWrite,
@@ -10,17 +10,17 @@ enum class AttachmentOp {
 	Read,
 };
 
-void RenderPassBegin(
-	TaskContext& context,
-	AttachmentOp color,
-	AttachmentOp depth,
-	vk::Rect2D viewport
-);
-
-void RenderPassBegin(
-	TaskContext& context, AttachmentOp color, AttachmentOp depth
-);
-
-constexpr void RenderPassEnd(TaskContext& context) {
-	context.commandBuffer.endRendering();
-}
+struct RenderPass {
+	static void Begin(
+		Task::BuildContext& context,
+		AttachmentOp color,
+		AttachmentOp depth,
+		vk::Rect2D viewport
+	);
+	static void Begin(
+		Task::BuildContext& context, AttachmentOp color, AttachmentOp depth
+	);
+	static void End(vk::CommandBuffer& commandBuffer) {
+		commandBuffer.endRendering();
+	}
+};

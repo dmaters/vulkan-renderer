@@ -151,22 +151,6 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		uint32_t bufferSize = description.size;
 
-		if (location == MemoryLocation::HostVisible) {
-			auto &limits = Instance::Get().physicalDeviceLimits;
-			std::size_t alignment = 1;
-
-			if (description.usage & vk::BufferUsageFlagBits::eUniformBuffer)
-				alignment =
-					std::max(alignment, limits.minUniformBufferOffsetAlignment);
-			if (description.usage & vk::BufferUsageFlagBits::eStorageBuffer)
-				alignment =
-					std::max(alignment, limits.minStorageBufferOffsetAlignment);
-
-			bufferSize =
-				((description.size + 2) / 3 + alignment - 1) & ~(alignment - 1);
-			bufferSize *= 3;
-		}
-
 		vk::Buffer buffer = device.createBuffer(
 			vk::BufferCreateInfo {
 				.size = bufferSize,
