@@ -60,11 +60,20 @@ public:
 		return m_buffers[handle.value];
 	}
 
-	const std::vector<ImageHandle>& getImages(AllocationIndex index) const {
-		return m_allocationImages.at(index);
+	const std::span<const ImageHandle> getImages(AllocationIndex index) const {
+		if (!m_allocationImages.contains(index))
+			return std::span<ImageHandle, 0>();
+		auto& images = m_allocationImages.at(index);
+		return std::span<const ImageHandle>(images);
 	}
-	const std::vector<BufferHandle>& getBuffers(AllocationIndex index) const {
-		return m_allocationBuffers.at(index);
+	const std::span<const BufferHandle> getBuffers(
+		AllocationIndex index
+	) const {
+		if (!m_allocationBuffers.contains(index))
+			return std::span<BufferHandle, 0>();
+
+		auto& buffers = m_allocationBuffers.at(index);
+		return std::span<const BufferHandle>(buffers);
 	}
 	void setName(std::string name, ImageHandle image);
 	void setName(std::string name, BufferHandle buffer);

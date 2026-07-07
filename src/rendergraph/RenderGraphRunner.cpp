@@ -15,7 +15,6 @@
 #include "material/MaterialManager.hpp"
 #include "rendergraph/GraphData.hpp"
 #include "resources/ResourceManager.hpp"
-#include "tasks/SwapchainOutput.hpp"
 #include "ui/UI.hpp"
 
 using namespace rendergraph::internal;
@@ -26,7 +25,7 @@ struct ResourceAllocationData {
 	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
 	std::vector<rendergraph::ResourceIndex> bufferIndices;
 };
-ResourceManager::AllocationIndex mapResources(
+std::optional<ResourceManager::AllocationIndex> mapResources(
 	ResourceManager& resourceManager,
 	ResourceAllocationData& allocationData,
 	ResourceManager::MemoryLocation location,
@@ -34,6 +33,10 @@ ResourceManager::AllocationIndex mapResources(
 	std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& bufferMap,
 	std::unordered_map<rendergraph::ResourceIndex, std::string>& names
 ) {
+	if (allocationData.imageDescriptions.size() == 0 &&
+	    allocationData.bufferDescriptions.size() == 0)
+		return std::nullopt;
+
 	ResourceManager::AllocationIndex allocation =
 		resourceManager.createResources(
 			allocationData.imageDescriptions,
@@ -63,9 +66,9 @@ ResourceManager::AllocationIndex mapResources(
 struct BuildData {
 	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
 	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
-	ResourceManager::AllocationIndex deviceAllocation;
-	ResourceManager::AllocationIndex sharedAllocation;
-	ResourceManager::AllocationIndex hostAllocation;
+	std::optional<ResourceManager::AllocationIndex> deviceAllocation;
+	std::optional<ResourceManager::AllocationIndex> sharedAllocation;
+	std::optional<ResourceManager::AllocationIndex> hostAllocation;
 };
 BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 	ResourceAllocationData deviceAllocationData;
@@ -73,45 +76,45 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 	ResourceAllocationData hostAllocationData;
 
 	for (auto [index, data] : execInfo.resources.images) {
-		ResourceAllocationData& currentdata = deviceAllocationData;
+		ResourceAllocationData* currentdata;
 		switch (data.location) {
 			case ResourceManager::MemoryLocation::Device:
-				currentdata = deviceAllocationData;
+				currentdata = &deviceAllocationData;
 				break;
 			case ResourceManager::MemoryLocation::HostVisible:
-				currentdata = sharedAllocationData;
+				currentdata = &sharedAllocationData;
 				break;
 			case ResourceManager::MemoryLocation::Host:
-				currentdata = hostAllocationData;
+				currentdata = &hostAllocationData;
 				break;
 		}
 
-		currentdata.imageDescriptions.push_back(data.description);
-		currentdata.imagesIndices.push_back(index);
+		currentdata->imageDescriptions.push_back(data.description);
+		currentdata->imagesIndices.push_back(index);
 	}
 	for (auto [index, data] : execInfo.resources.buffers) {
-		ResourceAllocationData& currentdata = deviceAllocationData;
+		ResourceAllocationData* currentdata;
 		switch (data.location) {
 			case ResourceManager::MemoryLocation::Device:
-				currentdata = deviceAllocationData;
+				currentdata = &deviceAllocationData;
 				break;
 			case ResourceManager::MemoryLocation::HostVisible:
-				currentdata = sharedAllocationData;
+				currentdata = &sharedAllocationData;
 				break;
 			case ResourceManager::MemoryLocation::Host:
-				currentdata = hostAllocationData;
+				currentdata = &hostAllocationData;
 				break;
 		}
 
-		currentdata.bufferDescriptions.push_back(data.description);
-		currentdata.bufferIndices.push_back(index);
+		currentdata->bufferDescriptions.push_back(data.description);
+		currentdata->bufferIndices.push_back(index);
 	}
 
 	// TODO: Handle indexing better
-	std::unordered_map<rendergraph::ImageIndex, ImageHandle> imageMap;
-	std::unordered_map<rendergraph::BufferIndex, BufferHandle> bufferMap;
+	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
+	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
 
-	ResourceManager::AllocationIndex deviceAllocation = mapResources(
+	auto deviceAllocation = mapResources(
 		resourceManager,
 		deviceAllocationData,
 		ResourceManager::MemoryLocation::Device,
@@ -119,7 +122,7 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 		bufferMap,
 		execInfo.resources.names
 	);
-	ResourceManager::AllocationIndex sharedAllocation = mapResources(
+	auto sharedAllocation = mapResources(
 		resourceManager,
 		sharedAllocationData,
 		ResourceManager::MemoryLocation::HostVisible,
@@ -127,7 +130,7 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 		bufferMap,
 		execInfo.resources.names
 	);
-	ResourceManager::AllocationIndex hostAllocation = mapResources(
+	auto hostAllocation = mapResources(
 		resourceManager,
 		hostAllocationData,
 		ResourceManager::MemoryLocation::Host,
@@ -174,7 +177,13 @@ RenderGraphRunner::RenderGraphRunner(
 
 	m_images = data.imageMap;
 	m_buffers = data.bufferMap;
+	for (auto& [index, handle] : graphData.externalImages) {
+		m_images[index] = handle;
+	}
 
+	for (auto& [index, handle] : graphData.externalBuffers) {
+		m_buffers[index] = handle;
+	}
 	// Finish initialization
 	uint32_t queryCount =
 		static_cast<uint32_t>(execInfo.tasks.size() * 3 * 2 + 6);
@@ -190,9 +199,14 @@ RenderGraphRunner::RenderGraphRunner(
 RenderGraphRunner::~RenderGraphRunner() {
 	Instance::Get().device.waitIdle();
 
-	m_resourceManager.freeAllocation(m_deviceAllocation);
-	m_resourceManager.freeAllocation(m_sharedAllocation);
-	m_resourceManager.freeAllocation(m_hostAllocation);
+	if (m_deviceAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_deviceAllocation);
+
+	if (m_sharedAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_sharedAllocation);
+
+	if (m_hostAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_hostAllocation);
 }
 void writeBarrier(
 	vk::CommandBuffer commandBuffer,
@@ -342,10 +356,7 @@ bool RenderGraphRunner::updateTimings() const {
 void RenderGraphRunner::outputToSwapchain(
 	vk::CommandBuffer& commandBuffer, uint32_t imageIndex
 ) const {
-	ResourceIndex finalImage =
-		Task::DataProvider(m_data.taskData)
-			.getData<SwapchainOutput>(m_execInfo.tasks.back())
-			.outputImage;
+	ResourceIndex finalImage = m_execInfo.outputImage;
 
 	rendergraph::internal::ExecutionInfo::Barrier firstBarrier[] = {
 		{
@@ -535,7 +546,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 		GraphData::TaskMetaData taskData = m_data.taskMetadata[taskIndex];
 
 		Task::BuildContext context {
-
+			.task = taskIndex,
 			.commandBuffer = commandBuffer,
 			.dataProvider = provider,
 			.currentFrame = m_currentFrame,
@@ -641,4 +652,5 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	}
 
 	m_currentFrame++;
+	return true;
 }

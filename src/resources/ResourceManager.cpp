@@ -90,10 +90,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	const std::vector<BufferDescription> &buffersDescriptions,
 	ResourceManager::MemoryLocation location
 ) {
-	if (imagesDescriptions.empty() && buffersDescriptions.empty()) {
-		std::cerr << "Tried to allocate with no resources" << std::endl;
-		return 0;
-	}
+	assert(!(imagesDescriptions.empty() && buffersDescriptions.empty()));
 
 	assert(
 		std::find_if(

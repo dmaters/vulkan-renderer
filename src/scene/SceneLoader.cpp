@@ -12,7 +12,6 @@
 #include <texture_compressor/utils.hpp>
 #include <thread>
 #include <vector>
-#include <print>
 
 #include "utils/ConcurrentStack.hpp"
 
@@ -156,7 +155,7 @@ Sizes getStagingAllocationSize(
 			fastgltf::visitor {
 				[&](const fastgltf::sources::URI& uri) {
 					stbi_info(
-					    (assetPath / uri.uri.path()).string().c_str(),
+						(assetPath / uri.uri.path()).string().c_str(),
 						&width,
 						&height,
 						&channels
@@ -674,17 +673,17 @@ std::vector<std::size_t> loadImages(
 		}).detach();
 	}
 
-	while (
-		auto image = readyImages.pop_wait()
-	);  // Wait until all images have been processed
+	while (auto image =
+	           readyImages
+	               .pop_wait());  // Wait until all images have been processed
 
 	return compressedImagesOffsets;
 }
 
 std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
 	BufferHandle stagingBuffer,
-	const std::vector<BufferHandle>& sceneBuffers,
-	const std::vector<ImageHandle>& sceneImages,
+	std::span<const BufferHandle> sceneBuffers,
+	std::span<const ImageHandle> sceneImages,
 	const std::vector<std::size_t>& imageOffsets,
 	const Sizes& sizes,
 	const Sizes& offsets

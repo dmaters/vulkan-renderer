@@ -23,9 +23,11 @@ private:
 	MaterialManager m_materialManager;
 	RenderGraph m_graph;
 
+	std::vector<TaskIndex> m_passes;
+
 	Scene m_currentScene;
 
-	void createRenderGraph(Scene& scene);
+	std::vector<TaskIndex> createRenderGraph(Scene& scene);
 
 public:
 	Renderer(SDL_Window* window);

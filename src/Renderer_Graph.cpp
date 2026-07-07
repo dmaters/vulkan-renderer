@@ -30,7 +30,6 @@ ProceduralSkyOutputPasses proceduralSky(
 ) {
 	TaskIndex transmittanceLUTPass = graph.addTask(
 		"transmittanceLUT",
-		Task::Type::Compute,
 		{
 			.setup =
 				[](Task::SetupContext& context) {
@@ -70,7 +69,6 @@ ProceduralSkyOutputPasses proceduralSky(
 
 	TaskIndex multiscatteringLUTPass = graph.addTask(
 		"multiscatteringLUT",
-		Task::Type::Compute,
 		{
 			.setup =
 				[](Task::SetupContext& context) {
@@ -136,7 +134,6 @@ ProceduralSkyOutputPasses proceduralSky(
 
 	TaskIndex skyviewLUTPass = graph.addTask(
 		"skyviewLUT",
-		Task::Type::Compute,
 		{
 			.setup =
 				[](Task::SetupContext& context) {
@@ -197,21 +194,18 @@ ProceduralSkyOutputPasses proceduralSky(
 
 	struct SkyLightingData {
 		MaterialIndex material;
-		TaskIndex transmittanceLUTPass;
+		TaskIndex skyviewLUT;
 	};
 	TaskIndex skyLighting = graph.addTask(
 		"skyLighting",
-		Task::Type::Compute,
 		{
 			.setup =
 				[](Task::SetupContext& context) {
-					auto transmittanceLUTPass =
-						context.getData<SkyLightingData>().transmittanceLUTPass;
+					auto skyviewLUT =
+						context.getData<SkyLightingData>().skyviewLUT;
 
 					context.registerInput(
-						transmittanceLUTPass,
-						0,
-						ResourceUsage::Type::SampledRead
+						skyviewLUT, 0, ResourceUsage::Type::SampledRead
 					);
 
 					auto skyLightingSH = context.createBuffer(
@@ -239,17 +233,19 @@ ProceduralSkyOutputPasses proceduralSky(
 		},
 		SkyLightingData {
 			.material = materialManager.getMaterialIndex("sky_lighting"),
-			.transmittanceLUTPass = transmittanceLUTPass,
+			.skyviewLUT = skyviewLUTPass,
 		}
 	);
 	passes.push_back(skyLighting);
 
-
+	return {
+		.skyLighting = skyLighting,
+		.skyviewLUT = skyviewLUTPass,
+	};
 }
 
-void Renderer::createRenderGraph(Scene& scene) {
-	const std::vector<BufferHandle>& buffers =
-		m_resourceManager.getBuffers(scene.allocation);
+std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
+	auto buffers = m_resourceManager.getBuffers(scene.allocation);
 
 	m_graph.registerBuffer("vertex_positions_buffer", buffers[0]);
 	m_graph.registerBuffer("vertex_attributes_buffer", buffers[1]);
@@ -265,7 +261,6 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 	TaskIndex sceneUpdate = m_graph.addTask(
 		"scene_update",
-		Task::Type::Transfer,
 		{
 			.setup = SceneData::Setup,
 			.build = SceneData::Build,
@@ -274,14 +269,13 @@ void Renderer::createRenderGraph(Scene& scene) {
 	passes.push_back(sceneUpdate);
 	TaskIndex shadowMapPass = m_graph.addTask(
 		"shadow_map",
-		Task::Type::Graphic,
 		{
 			.setup = ShadowPass::Setup,
 			.build = ShadowPass::Build,
 
 		},
-		ShadowPass{
-		    .sceneUpdateTask = sceneUpdate,
+		ShadowPass {
+			.sceneUpdateTask = sceneUpdate,
 			.material = m_materialManager.getMaterialIndex("shadowmap"),
 		}
 	);
@@ -289,94 +283,120 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 	TaskIndex gbufferPass = m_graph.addTask(
 		"gbuffer",
-		Task::Type::Graphic,
 		{
 			.setup = GBUfferPass::Setup,
 			.build = GBUfferPass::Build,
 		},
-		GBUfferPass { .sceneUpdatePass = sceneUpdate, }
+		GBUfferPass {
+			.sceneUpdatePass = sceneUpdate,
+			.material = m_materialManager.getMaterialIndex("gbuffer"),
+			.pbrMaterialData = pbrMaterialData,
+			.pbrMaterialInstances = pbrMaterialInstances,
+		}
 	);
+	passes.push_back(gbufferPass);
 
 	auto proceduralSkyPasses = proceduralSky(
-	    passes,
+		passes,
 		m_graph,
-	    m_materialManager,
+		m_materialManager,
 		{
 			.sceneUpdatePass = sceneUpdate,
-		    .gbufferPass = gbufferPass,
+			.gbufferPass = gbufferPass,
 		}
 	);
 
-
 	struct LightingDeferredData {
-	    TaskIndex sceneUpdatePass;
-	    TaskIndex gbufferPass;
-	    TaskIndex shadowPass;
-	    TaskIndex skyLightingPass;
-
-
+		TaskIndex sceneUpdatePass;
+		TaskIndex gbufferPass;
+		TaskIndex shadowPass;
+		TaskIndex skyLightingPass;
 
 		MaterialIndex material;
 	};
 
 	TaskIndex lightingDeferred = m_graph.addTask(
 		"lighting_deferred",
-		Task::Type::Graphic,
-		{
-		    .setup = [](Task::SetupContext& context) {
-				auto data = context.getData<LightingDeferredData>();
-				context.registerInput(data.sceneUpdatePass, 0, ResourceUsage::Type::UniformBuffer);
-				context.registerInput(data.sceneUpdatePass, 1, ResourceUsage::Type::UniformBuffer);
-				context.registerInput(data.gbufferPass, 0, ResourceUsage::Type::SampledRead);
-				context.registerInput(data.gbufferPass, 1, ResourceUsage::Type::SampledRead);
-				context.registerInput(data.gbufferPass, 2, ResourceUsage::Type::SampledRead);
-				context.registerInput(data.gbufferPass, 3, ResourceUsage::Type::SampledRead);
-				context.registerInput(data.shadowPass, 0, ResourceUsage::Type::SampledRead);
-				context.registerInput(data.skyLightingPass, 0, ResourceUsage::Type::UniformBuffer);
+		{ .setup =
+	          [](Task::SetupContext& context) {
+				  auto data = context.getData<LightingDeferredData>();
+				  context.registerInput(
+					  data.sceneUpdatePass,
+					  0,
+					  ResourceUsage::Type::UniformBuffer
+				  );
+				  context.registerInput(
+					  data.sceneUpdatePass,
+					  1,
+					  ResourceUsage::Type::UniformBuffer
+				  );
+				  context.registerInput(
+					  data.gbufferPass, 0, ResourceUsage::Type::SampledRead
+				  );
+				  context.registerInput(
+					  data.gbufferPass, 1, ResourceUsage::Type::SampledRead
+				  );
+				  context.registerInput(
+					  data.gbufferPass, 2, ResourceUsage::Type::SampledRead
+				  );
+				  context.registerInput(
+					  data.gbufferPass, 3, ResourceUsage::Type::SampledRead
+				  );
+				  context.registerInput(
+					  data.shadowPass, 0, ResourceUsage::Type::SampledRead
+				  );
+				  context.registerInput(
+					  data.skyLightingPass,
+					  0,
+					  ResourceUsage::Type::UniformBuffer
+				  );
 
+				  auto resolution = context.scene.camera.getResolution();
+				  rendergraph::ResourceIndex hdr_output = context.createImage(
+					  "hdr_output",
+					  {
+						  .width = static_cast<uint32_t>(resolution.x),
+						  .height = static_cast<uint32_t>(resolution.y),
+						  .depth = 1,
+						  .miplevels = 1,
+						  .format = vk::Format::eR16G16B16A16Sfloat,
+						  .usage = vk::ImageUsageFlagBits::eColorAttachment |
+		                           vk::ImageUsageFlagBits::eSampled |
+		                           vk::ImageUsageFlagBits::eStorage,
+					  }
+				  );
+				  context.registerOutput(
+					  hdr_output, ResourceUsage::Type::ColorAttachmentWrite
+				  );
+				  context.registerOutput(
+					  data.gbufferPass,
+					  4,
+					  ResourceUsage::Type::DepthStencilWrite
+				  );
+			  },
+	      .build =
+	          [](Task::BuildContext& context) {
+				  RenderPass::Begin(
+					  context, AttachmentOp::ClearWrite, AttachmentOp::Read
+				  );
+				  DrawPass::Quad(
+					  context, context.getData<LightingDeferredData>().material
+				  );
+				  RenderPass::End(context.commandBuffer);
+			  }
 
-				auto resolution =  context.scene.camera.getResolution();
-				rendergraph::ResourceIndex hdr_output = context.createImage(
-   					"hdr_output",
-   					{
-  						.width = static_cast<uint32_t>(resolution.x),
-  						.height = static_cast<uint32_t>(resolution.y),
-  						.depth = 1,
-  						.miplevels = 1,
-  						.format = vk::Format::eR16G16B16A16Sfloat,
-  						.usage = vk::ImageUsageFlagBits::eColorAttachment |
-   				                 vk::ImageUsageFlagBits::eSampled |
-   				                 vk::ImageUsageFlagBits::eStorage,
-   					}
-				);
-				context.registerOutput(hdr_output, ResourceUsage::Type::ColorAttachmentWrite);
-				context.registerOutput(data.gbufferPass, 4, ResourceUsage::Type::DepthStencilWrite);
-
-			},
-			.build = [](Task::BuildContext& context) {
-    			RenderPass::Begin(
-    				context, AttachmentOp::ClearWrite, AttachmentOp::Read
-    			);
-    			DrawPass::Quad(context, context.getData<LightingDeferredData>().material);
-    			RenderPass::End(context.commandBuffer);
-			}
-
-		},
-		LightingDeferredData{
+	    },
+		LightingDeferredData {
 			.sceneUpdatePass = sceneUpdate,
 			.gbufferPass = gbufferPass,
 			.shadowPass = shadowMapPass,
-		    .skyLightingPass = proceduralSkyPasses.skyLighting,
+			.skyLightingPass = proceduralSkyPasses.skyLighting,
 
-			.material =  m_materialManager.getMaterialIndex("lighting_deferred"),
+			.material = m_materialManager.getMaterialIndex("lighting_deferred"),
 		}
-
 
 	);
 	passes.push_back(lightingDeferred);
-
-
-
 
 	struct SkyboxData {
 		TaskIndex sceneUpdatePass;
@@ -388,7 +408,6 @@ void Renderer::createRenderGraph(Scene& scene) {
 
 	TaskIndex skyboxPass = m_graph.addTask(
 		"skybox",
-		Task::Type::Graphic,
 		{
 
 			.setup =
@@ -436,98 +455,133 @@ void Renderer::createRenderGraph(Scene& scene) {
 	);
 	passes.push_back(skyboxPass);
 
-
-	rendergraph::ResourceIndex tonemapped = m_graph.createImage(
-		"tonemapped",
-		{
-			.width = 1280,
-			.height = 720,
-			.depth = 1,
-			.miplevels = 1,
-			.format = vk::Format::eR8G8B8A8Unorm,
-			.usage = vk::ImageUsageFlagBits::eStorage |
-	                 vk::ImageUsageFlagBits::eSampled,
-
-		},
-		1
-	);
-	ResourceIndex final = m_graph.createImage(
-		"final",
-		{
-			.width = 1280,
-			.height = 720,
-			.depth = 1,
-			.miplevels = 1,
-			.format = vk::Format::eR8G8B8A8Unorm,
-			.usage = vk::ImageUsageFlagBits::eColorAttachment |
-	                 vk::ImageUsageFlagBits::eTransferSrc,
-
-		},
-		1
-	);
+	struct SimplePassData {
+		TaskIndex previousPass;
+		MaterialIndex material;
+	};
 	TaskIndex compositionPass = m_graph.addTask(
 		"composition",
-		TaskType::Compute,
-		{
-			{ hdr_output, ResourceUsage::Type::ShaderRead },
-    },
-		{
-			{ tonemapped, ResourceUsage::Type::ShaderWrite },
-		},
-		[composition = m_materialManager.getMaterialIndex("composition")](
-			TaskBuildContext& context
-		) {
-			ImageHandle input = context.images[context.inputs[0].resource];
-			auto dispatch = context.resourceManager.getImage(input).size;
+		{ .setup =
+	          [](Task::SetupContext& context) {
+				  context.registerInput(
+					  context.getData<SimplePassData>().previousPass,
+					  0,
+					  ResourceUsage::Type::SampledRead
+				  );
+				  auto resolution = context.scene.camera.getResolution();
 
-			ComputePass(
-				context,
-				composition,
-				glm::uvec3(dispatch.width, dispatch.height, 1)
-			);
+				  rendergraph::ResourceIndex tonemapped = context.createImage(
+					  "tonemapped",
+					  {
+						  .width = static_cast<uint32_t>(resolution.x),
+						  .height = static_cast<uint32_t>(resolution.y),
+						  .depth = 1,
+						  .miplevels = 1,
+						  .format = vk::Format::eR8G8B8A8Unorm,
+						  .usage = vk::ImageUsageFlagBits::eStorage |
+		                           vk::ImageUsageFlagBits::eSampled,
+
+					  }
+
+				  );
+
+				  context.registerOutput(
+					  tonemapped, ResourceUsage::Type::ShaderWrite
+				  );
+			  },
+	      .build =
+	          [](Task::BuildContext& context) {
+				  auto& size = context.getInput<Image&>(0).size;
+
+				  ComputePass(
+					  context,
+					  context.getData<SimplePassData>().material,
+					  glm::uvec3(size.width, size.height, 1)
+				  );
+			  } },
+		SimplePassData {
+			.previousPass = lightingDeferred,
+			.material = m_materialManager.getMaterialIndex("composition"),
 		}
+
 	);
 
 	passes.push_back(compositionPass);
 
 	TaskIndex fxaa = m_graph.addTask(
 		"fxaa",
-		TaskType::Graphic,
 		{
-			{ tonemapped, ResourceUsage::Type::SampledRead },
-    },
-		{
-			{ final, ResourceUsage::Type::ColorAttachmentWrite },
+			.setup =
+				[](Task::SetupContext& context) {
+					context.registerInput(
+						context.getData<SimplePassData>().previousPass,
+						0,
+						ResourceUsage::Type::SampledRead
+					);
+
+					auto resolution = context.scene.camera.getResolution();
+					auto final = context.createImage(
+						"final",
+						{
+							.width = static_cast<uint32_t>(resolution.x),
+							.height = static_cast<uint32_t>(resolution.y),
+							.depth = 1,
+							.miplevels = 1,
+							.format = vk::Format::eR8G8B8A8Unorm,
+							.usage = vk::ImageUsageFlagBits::eColorAttachment |
+		                             vk::ImageUsageFlagBits::eTransferSrc,
+
+						}
+
+					);
+					context.registerOutput(
+						final, ResourceUsage::Type::ColorAttachmentWrite
+					);
+				},
+			.build =
+				[](Task::BuildContext& context) {
+					RenderPass::Begin(
+						context, AttachmentOp::ClearWrite, AttachmentOp::Read
+					);
+					DrawPass::Quad(
+						context, context.getData<SimplePassData>().material
+					);
+					RenderPass::End(context.commandBuffer);
+				},
 		},
-		[material = m_materialManager.getMaterialIndex("fxaa")](
-			TaskBuildContext& context
-		) {
-			RenderPassBegin(
-				context, AttachmentOp::ClearWrite, AttachmentOp::Read
-			);
-			DrawPassQuad(context, material);
-			RenderPassEnd(context);
+		SimplePassData {
+			.previousPass = compositionPass,
+			.material = m_materialManager.getMaterialIndex("fxaa"),
 		}
 	);
 	passes.push_back(fxaa);
 
 	TaskIndex ui = m_graph.addTask(
 		"UI",
-		TaskType::Graphic,
 		{
-    },
-		{
-			{ final, ResourceUsage::Type::ColorAttachmentWrite },
+			.setup =
+				[](Task::SetupContext& context) {
+					context.registerOutput(
+						context.getData<TaskIndex>(),
+						0,
+						ResourceUsage::Type::ColorAttachmentWrite
+					);
+				},
+			.build =
+				[](Task::BuildContext& context) {
+					RenderPass::Begin(
+						context,
+						AttachmentOp::ReadWrite,
+						AttachmentOp::ReadWrite
+					);
+					UIPass(context);
+					RenderPass::End(context.commandBuffer);
+				},
 		},
-		[](TaskBuildContext& context) {
-			RenderPassBegin(
-				context, AttachmentOp::ReadWrite, AttachmentOp::ReadWrite
-			);
-			UIPass(context);
-			RenderPassEnd(context);
-		}
+		fxaa
 	);
 	passes.push_back(ui);
+	m_graph.update(passes, scene);
 
-	m_graph.update(passes, final);
+	return passes;
 }

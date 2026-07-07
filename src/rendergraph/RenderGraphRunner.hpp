@@ -25,12 +25,12 @@ private:
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
-	ResourceManager::AllocationIndex m_deviceAllocation;
-	ResourceManager::AllocationIndex m_sharedAllocation;
-	ResourceManager::AllocationIndex m_hostAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_deviceAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_sharedAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_hostAllocation;
 
-	std::unordered_map<ImageIndex, ImageHandle> m_images;
-	std::unordered_map<BufferIndex, BufferHandle> m_buffers;
+	std::unordered_map<ResourceIndex, ImageHandle> m_images;
+	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
 
 	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
 

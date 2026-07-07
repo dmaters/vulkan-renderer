@@ -14,8 +14,8 @@ public:
 
 	template <typename T>
 	T& getData(TaskIndex task) {
-		auto rawData = m_taskData[task];
+		auto& rawData = m_taskData[task];
 		assert(rawData.size() == sizeof(T));
-		return static_cast<T&>(rawData.data());
+		return *reinterpret_cast<T*>(rawData.data());
 	}
 };

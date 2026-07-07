@@ -31,14 +31,6 @@ public:
 		MaterialManager& materialManager
 	);
 
-	rendergraph::ResourceIndex createImage(
-		std::string name, ResourceManager::ImageDescription desc
-	);
-
-	rendergraph::ResourceIndex createDeviceBuffer(
-		std::string name, ResourceManager::BufferDescription desc
-	);
-
 	rendergraph::ResourceIndex registerImage(
 		std::string name, ImageHandle handle
 	);
@@ -46,17 +38,26 @@ public:
 		std::string name, BufferHandle handle
 	);
 
-	TaskIndex addTask(
-		std::string name, Task::Type type, Task task, auto taskData
-	);
+	TaskIndex addTask(std::string name, Task task, auto taskData);
 
-	TaskIndex addTask(std::string name, Task::Type type, Task task);
+	TaskIndex addTask(std::string name, Task task);
 
 	void update(std::vector<TaskIndex> tasks, const Scene& scene);
-	void submit(const Scene& scene);
+	bool submit(const Scene& scene);
 };
 
-// Definisci task come 3 funzioni
-//  TTaskdata passato apparte funziona come coso
-//  Definisci funzione template, che dato l'indice del task prende i dati di
-//  quel task
+TaskIndex RenderGraph::addTask(std::string name, Task task, auto taskData) {
+	TaskIndex index = m_data.tasks.size();
+
+	std::vector<std::byte> rawData(sizeof(taskData));
+	std::memcpy(rawData.data(), &taskData, sizeof(taskData));
+
+	m_data.taskData[index] = std::move(rawData);
+
+	m_data.taskMetadata[index] = {
+		.name = name,
+	};
+	m_data.tasks[index] = task;
+
+	return index;
+}

@@ -40,17 +40,17 @@ Renderer::Renderer(SDL_Window* window) :
 
 void Renderer::render() {
 	m_materialManager.update();
-	vk::Extent2D resolution = Instance::Get().swapchain.getResolution();
+	auto swapchainResolution = Instance::Get().swapchain.getResolution();
 
-	if (resolution == vk::Extent2D(0)) {
+	if (swapchainResolution.width == 0 && swapchainResolution.height == 0) {
 		Instance::Get().swapchain.rebuild();
 		return;
 	}
 
 	m_currentScene.camera.setResolution(
 		{
-			resolution.width,
-			resolution.height,
+			swapchainResolution.width,
+			swapchainResolution.height,
 		}
 	);
 
@@ -64,7 +64,20 @@ void Renderer::render() {
 
 	m_currentScene.lights[0].orientation = orientation;
 
-	m_graph.submit(m_currentScene);
+	bool res = m_graph.submit(m_currentScene);
+
+	if (!res) {
+		Instance::Get().swapchain.rebuild();
+		auto swapchainResolution = Instance::Get().swapchain.getResolution();
+
+		m_currentScene.camera.setResolution(
+			{
+				swapchainResolution.width,
+				swapchainResolution.height,
+			}
+		);
+		m_graph.update(m_passes, m_currentScene);
+	}
 };
 
 void Renderer::load(const std::filesystem::path& path) {
@@ -111,10 +124,18 @@ void Renderer::load(const std::filesystem::path& path) {
 		m_currentScene.primitives.size() - 1
 	);
 
+	auto swapchainResolution = Instance::Get().swapchain.getResolution();
+	m_currentScene.camera.setResolution(
+		{
+			swapchainResolution.width,
+			swapchainResolution.height,
+		}
+	);
+
 	m_currentScene.camera.setFov(70);
 
 	UI::Data.sceneData.scenePath = path.string();
 	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();
 
-	createRenderGraph(m_currentScene);
+	m_passes = createRenderGraph(m_currentScene);
 }

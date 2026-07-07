@@ -1,4 +1,5 @@
 #include "GBufferPass.hpp"
+
 #include <string>
 
 #include "../BuildContext.hpp"
@@ -11,11 +12,10 @@
 void GBUfferPass::Setup(Task::SetupContext& context) {
 	auto& data = context.getData<GBUfferPass>();
 	uint32_t indirectBufferSize = static_cast<uint32_t>(
-		context.scene.primitives.size() *
-		sizeof(vk::DrawIndexedIndirectCommand) * 3
+		context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand)
 	);
 	uint32_t primitiveMapSize = static_cast<uint32_t>(
-		context.scene.primitives.size() * sizeof(uint32_t) * 3
+		context.scene.primitives.size() * sizeof(uint32_t)
 	);
 
 	for (int i = 0; i < 3; i++) {
@@ -52,17 +52,11 @@ void GBUfferPass::Setup(Task::SetupContext& context) {
 		"primitive_gpass_buffer",
 		{
 			.size = primitiveMapSize,
-			.usage = vk::BufferUsageFlagBits::eTransferSrc |
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer |
 	                 vk::BufferUsageFlagBits::eTransferDst,
 		},
 		ResourceManager::MemoryLocation::HostVisible
 	);
-
-	context.registerInput(
-		indirectBuffer, ResourceUsage::Type::IndirectBufferRead
-	);
-	context.registerInput(primitiveMap, ResourceUsage::Type::StorageBufferRead);
-
 	context.registerInput(
 		data.sceneUpdatePass, 0, ResourceUsage::Type::UniformBuffer
 	);
@@ -73,6 +67,11 @@ void GBUfferPass::Setup(Task::SetupContext& context) {
 	context.registerInput(
 		data.pbrMaterialInstances, ResourceUsage::Type::StorageBufferRead
 	);
+
+	context.registerInput(
+		indirectBuffer, ResourceUsage::Type::IndirectBufferRead
+	);
+	context.registerInput(primitiveMap, ResourceUsage::Type::StorageBufferRead);
 
 	auto resolution = context.scene.camera.getResolution();
 	auto albedo = context.createImage(
@@ -166,18 +165,21 @@ void GBUfferPass::Build(Task::BuildContext& context) {
 
 	UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
 
+	DrawPass::LoadIndirect(
+		context.commandBuffer,
+		visiblePrimitives,
+		context.scene.primitives,
+		context.getBuffer(data._indirectBuffer[context.currentFrame % 3]),
+		context.getInput<Buffer&>(3),
+		context.getBuffer(data._primitiveMap[context.currentFrame % 3]),
+		context.getInput<Buffer&>(4)
+	);
+
 	RenderPass::Begin(
 		context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite
 	);
 
-	DrawPass::Indirect(
-		context,
-		data.material,
-		visiblePrimitives,
-		0,
-		data._indirectBuffer[context.currentFrame % 3],
-		data._primitiveMap[context.currentFrame % 3]
-	);
+	DrawPass::Indirect(context, data.material, visiblePrimitives, 0, 3, 4);
 
 	RenderPass::End(context.commandBuffer);
 }

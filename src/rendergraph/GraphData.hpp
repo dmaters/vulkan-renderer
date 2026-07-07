@@ -18,7 +18,6 @@ struct GraphData {
 	std::unordered_map<TaskIndex, std::vector<std::byte>> taskData;
 
 	struct TaskMetaData {
-		Task::Type type;
 		std::string name;
 	};
 
@@ -35,13 +34,13 @@ struct ExecutionInfo {
 			ResourceManager::ImageDescription description;
 			ResourceManager::MemoryLocation location;
 		};
-		std::unordered_map<rendergraph::ImageIndex, ImageBuildData> images;
+		std::unordered_map<rendergraph::ResourceIndex, ImageBuildData> images;
 
 		struct BufferBuildData {
 			ResourceManager::BufferDescription description;
 			ResourceManager::MemoryLocation location;
 		};
-		std::unordered_map<rendergraph::ImageIndex, BufferBuildData> buffers;
+		std::unordered_map<rendergraph::ResourceIndex, BufferBuildData> buffers;
 	};
 	Resources resources;
 
@@ -52,6 +51,7 @@ struct ExecutionInfo {
 			outputs;
 	};
 	References references;
+	ResourceIndex outputImage;
 
 	std::vector<TaskIndex> tasks;
 

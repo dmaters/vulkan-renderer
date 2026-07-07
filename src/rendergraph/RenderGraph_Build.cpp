@@ -45,6 +45,7 @@ InstanceData buildTasks(
 		outputs.clear();
 
 		Task::SetupContext context {
+			.task = task,
 			.scene = scene,
 			.resourceProvider = resourceProvider,
 			.dataProvider = dataProvider,
@@ -65,6 +66,18 @@ InstanceData buildTasks(
 					Task::SetupContext::ResourceReference::SlotReference>(
 					input.reference
 				);
+
+				assert(
+					std::find(
+						unorderedTasks.begin(),
+						unorderedTasks.end(),
+						reference.task
+					) != unorderedTasks.end()
+				);  // Check if all referenced tasks are present
+
+				assert(
+					references.outputs.contains(reference.task)
+				);  // Check if task has been explored already
 
 				resource =
 					references.outputs[reference.task][reference.slot].resource;
@@ -88,6 +101,18 @@ InstanceData buildTasks(
 					Task::SetupContext::ResourceReference::SlotReference>(
 					output.reference
 				);
+
+				assert(
+					std::find(
+						unorderedTasks.begin(),
+						unorderedTasks.end(),
+						reference.task
+					) != unorderedTasks.end()
+				);  // Check if all referenced tasks are present
+
+				assert(
+					references.outputs.contains(reference.task)
+				);  // Check if task has been explored already
 
 				resource =
 					references.outputs[reference.task][reference.slot].resource;
@@ -126,7 +151,7 @@ struct DependencyGraph {
 		ResourceUsage::Type usage;
 	};
 	std::unordered_map<rendergraph::ResourceIndex, std::vector<Reference>>
-		references;
+		taskReferencesByResources;
 
 	struct ReferenceCount {
 		uint8_t read = 0;
@@ -142,30 +167,29 @@ TaskReference getPreviousTask(
 	uint32_t taskIndex,
 	rendergraph::ResourceIndex resourceIndex
 ) {
-	int currentUsageIndex = -1;
-	auto references = graph.references.at(resourceIndex);
+	int taskUsageIndex = -1;
+	auto references = graph.taskReferencesByResources.at(resourceIndex);
 	for (int i = 0; i < references.size(); i++) {
 		if (references[i].task == taskIndex) {
-			currentUsageIndex = i;
+			taskUsageIndex = i;
 			break;
 		}
 	}
-	assert(currentUsageIndex != -1);
-	int previousUsageIndex = currentUsageIndex;
+	assert(taskUsageIndex != -1);
+	int previousUsageIndex = taskUsageIndex;
 
 	for (int i = 1; i <= references.size(); i++) {
-		int previousLocalOffset =
-			(currentUsageIndex + references.size() - i) % references.size();
-		if (previousLocalOffset <
-		    graph.referenceCounts.at(resourceIndex).write) {
-			previousUsageIndex = previousLocalOffset;
+		int current =
+			(taskUsageIndex + references.size() - i) % references.size();
+		if (current < graph.referenceCounts.at(resourceIndex).write) {
+			previousUsageIndex = current;
 			break;
 		}
 	}
 
 	return {
 		.task = references[previousUsageIndex].task,
-		.isTaskPreviousSubmission = previousUsageIndex >= currentUsageIndex,
+		.isTaskPreviousSubmission = previousUsageIndex >= taskUsageIndex,
 	};
 }
 
@@ -253,7 +277,8 @@ DependencyGraph buildDependencyGraph(
 				x.type == TempReference::ReferenceType::Read &&
 				y.type == TempReference::ReferenceType::Write;
 			return x.resource < y.resource ||
-		           (x.resource == y.resource && !(isOrderFlipped));
+		           (x.resource == y.resource && !(isOrderFlipped) &&
+		            x.task < y.task);
 		}
 	);
 
@@ -264,26 +289,19 @@ DependencyGraph buildDependencyGraph(
 
 	std::vector<DependencyGraph::Reference> perResourcesReferences;
 
-	rendergraph::ResourceIndex previousResource = tempReferences[0].resource;
-
 	for (int i = 0; i < tempReferences.size(); i++) {
 		rendergraph::ResourceIndex resource = tempReferences[i].resource;
-		if (previousResource != resource) {
-			resourceTaskReferences[previousResource] = perResourcesReferences;
-			previousResource = resource;
-			perResourcesReferences.clear();
-		}
 
-		perResourcesReferences.push_back(
+		resourceTaskReferences[resource].push_back(
 			{
-				.task = tempReferences[resource].task,
-				.usage = tempReferences[resource].usage,
+				.task = tempReferences[i].task,
+				.usage = tempReferences[i].usage,
 			}
 		);
 	}
 
 	return DependencyGraph {
-		.references = resourceTaskReferences,
+		.taskReferencesByResources = resourceTaskReferences,
 		.referenceCounts = usageCount,
 	};
 }
@@ -318,10 +336,9 @@ ExecutionInfo RenderGraph::build(
 	std::vector<bool> visitedTasks(m_data.tasks.size());
 
 	rendergraph::ResourceIndex outputImage =
-		Task::DataProvider(m_data.taskData)
-			.getData<rendergraph::ResourceIndex>(taskList.back());
+		instanceData.references.outputs[taskList.back()].front().resource;
 
-	for (auto [task, usage] : graph.references[outputImage]) {
+	for (auto [task, usage] : graph.taskReferencesByResources[outputImage]) {
 		taskStack.push(task);
 	}
 
@@ -403,6 +420,7 @@ ExecutionInfo RenderGraph::build(
 	return {
 		.resources = instanceData.resources,
 		.references = instanceData.references,
+		.outputImage = outputImage,
 		.tasks = tasks,
 		.barriers = barriers,
 		.initializationBarriers = initializationBarriers,

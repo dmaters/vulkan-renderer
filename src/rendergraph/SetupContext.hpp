@@ -1,5 +1,4 @@
 #pragma once
-#include <algorithm>
 
 #include "DataProvider.hpp"
 #include "GraphData.hpp"
@@ -43,48 +42,17 @@ struct Task::SetupContext {
 
 	void registerInput(
 		rendergraph::ResourceIndex index, ResourceUsage::Type usage
-	) {
-		inputs.push_back({ .reference = index, .usage = usage });
-	}
+	);
 	void registerInput(
 		TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-	) {
-		inputs.push_back(
-			{
-				.reference =
-					ResourceReference::SlotReference {
-													  .task = task,
-													  .slot = slot,
-													  },
-				.usage = usage,
-        }
-		);
-	}
+	);
 
 	void registerOutput(
 		rendergraph::ResourceIndex index, ResourceUsage::Type usage
-	) {
-		outputs.push_back(
-			{
-				.reference = index,
-				.usage = usage,
-			}
-		);
-	}
+	);
 	void registerOutput(
 		TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-	) {
-		outputs.push_back(
-			{
-				.reference =
-					ResourceReference::SlotReference {
-													  .task = task,
-													  .slot = slot,
-													  },
-				.usage = usage,
-        }
-		);
-	}
+	);
 
 	template <typename T>
 	T& getData() {
@@ -97,22 +65,24 @@ struct Task::SetupContext {
 };
 
 class Task::SetupContext::ResourceProvider {
-public:
 private:
 	rendergraph::internal::ResourceIndexer m_indexer;
 
+	std::unordered_map<rendergraph::ResourceIndex, std::string> m_names;
+
 	std::unordered_map<
-		rendergraph::ImageIndex,
+		rendergraph::ResourceIndex,
 		rendergraph::internal::ExecutionInfo::Resources::ImageBuildData>
 		m_images;
 
 	std::unordered_map<
-		rendergraph::BufferIndex,
+		rendergraph::ResourceIndex,
 		rendergraph::internal::ExecutionInfo::Resources::BufferBuildData>
 		m_buffers;
 
 public:
-	ResourceProvider(rendergraph::internal::ResourceIndexer baseIndexer);
+	ResourceProvider(rendergraph::internal::ResourceIndexer baseIndexer) :
+		m_indexer(baseIndexer) {}
 
 	rendergraph::ResourceIndex createImage(
 		std::string name,

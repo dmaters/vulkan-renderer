@@ -40,28 +40,55 @@ void DrawPass::Quad(Task::BuildContext& context, MaterialIndex materialIndex) {
 	context.commandBuffer.draw(3, 1, 0, 0);
 }
 
-void DrawPass::Indirect(
-	Task::BuildContext& context,
-	MaterialIndex material,
-	const std::vector<uint32_t>& primitives,
-	uint32_t pushConstant,
-	rendergraph::ResourceIndex indirectBufferLocalIndex,
-	rendergraph::ResourceIndex primitiveBufferLocalIndex
+void DrawPass::LoadIndirect(
+	vk::CommandBuffer& commandBuffer,
+	const std::vector<uint32_t>& primitivesIndices,
+	const std::vector<Primitive>& primitives,
+	Buffer& indirectBufferLocal,
+	Buffer& indirectBufferDevice,
+	Buffer& primitiveMapLocal,
+	Buffer& primitiveMapDevice
 ) {
-	Buffer& indirectBufferLocal = context.getBuffer(indirectBufferLocalIndex);
-	Buffer& primitiveMapLocal = context.getBuffer(primitiveBufferLocalIndex);
-	Buffer& indirectBufferDevice = context.getInput<Buffer&>(0);
-	Buffer& primitiveMapDevice = context.getInput<Buffer&>(1);
+	auto indirectBufferValues =
+		(vk::DrawIndexedIndirectCommand*)indirectBufferLocal.data;
 
-	vk::BufferCopy2 primitiveCopy {
-		.size = primitiveMapLocal.size,
+	auto primitiveBufferValues = (uint32_t*)primitiveMapLocal.data;
+
+	for (int i = 0; i < primitivesIndices.size(); i++) {
+		uint32_t primitiveIndex = primitivesIndices[i];
+		const Primitive& primitive = primitives[primitiveIndex];
+
+		indirectBufferValues[i] = vk::DrawIndexedIndirectCommand {
+			.indexCount = primitive.indexCount,
+			.instanceCount = 1,
+			.firstIndex = primitive.baseIndex,
+			.vertexOffset = static_cast<int32_t>(primitive.baseVertex),
+			.firstInstance = 0,
+		};
+
+		primitiveBufferValues[i] = primitiveIndex;
+	}
+
+	vk::BufferCopy2 indirectCopy {
+		.size = indirectBufferLocal.size,
 	};
-	context.commandBuffer.copyBuffer2(
+	commandBuffer.copyBuffer2(
+		{
+			.srcBuffer = indirectBufferLocal.buffer,
+			.dstBuffer = indirectBufferDevice.buffer,
+			.regionCount = 1,
+			.pRegions = &indirectCopy,
+		}
+	);
+	vk::BufferCopy2 primitiveMapCopy {
+		.size = primitiveMapDevice.size,
+	};
+	commandBuffer.copyBuffer2(
 		{
 			.srcBuffer = primitiveMapLocal.buffer,
 			.dstBuffer = primitiveMapDevice.buffer,
 			.regionCount = 1,
-			.pRegions = &primitiveCopy,
+			.pRegions = &primitiveMapCopy,
 		}
 	);
 
@@ -84,12 +111,23 @@ void DrawPass::Indirect(
 								  },
 	};
 
-	context.commandBuffer.pipelineBarrier2(
+	commandBuffer.pipelineBarrier2(
 		{
 			.bufferMemoryBarrierCount = 2,
 			.pBufferMemoryBarriers = barriers.data(),
 		}
 	);
+}
+
+void DrawPass::Indirect(
+	Task::BuildContext& context,
+	MaterialIndex material,
+	const std::vector<uint32_t>& primitives,
+	uint32_t pushConstant,
+	std::size_t indirectSlot,
+	std::size_t primitiveMapSlot
+) {
+	Buffer& indirectBufferDevice = context.getInput<Buffer&>(indirectSlot);
 
 	const Pipeline& pipeline = context.materialManager.getPipeline(material);
 
@@ -123,11 +161,6 @@ void DrawPass::Indirect(
 			{}
 		);
 
-	auto indirectBufferValues =
-		(vk::DrawIndexedIndirectCommand*)indirectBufferLocal.data;
-
-	auto primitiveBufferValues = (uint32_t*)primitiveMapLocal.data;
-
 	context.commandBuffer.pushConstants(
 		pipeline.pipelineLayout,
 		vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -136,36 +169,9 @@ void DrawPass::Indirect(
 		&pushConstant
 	);
 
-	for (int i = 0; i < primitives.size(); i++) {
-		uint32_t primitiveIndex = primitives[i];
-		const Primitive& primitive = context.scene.primitives[primitiveIndex];
-
-		indirectBufferValues[i] = vk::DrawIndexedIndirectCommand {
-			.indexCount = primitive.indexCount,
-			.instanceCount = 1,
-			.firstIndex = primitive.baseIndex,
-			.vertexOffset = static_cast<int32_t>(primitive.baseVertex),
-			.firstInstance = 0,
-		};
-
-		primitiveBufferValues[i] = primitiveIndex;
-	}
-
-	vk::BufferCopy2 indirectCopy {
-		.size = indirectBufferLocal.size,
-	};
-	context.commandBuffer.copyBuffer2(
-		{
-			.srcBuffer = indirectBufferLocal.buffer,
-			.dstBuffer = indirectBufferDevice.buffer,
-			.regionCount = 1,
-			.pRegions = &indirectCopy,
-		}
-	);
-
 	context.commandBuffer.drawIndexedIndirect(
 		indirectBufferDevice.buffer,
-		indirectBufferDevice.size,
+		0,
 		primitives.size(),
 		sizeof(vk::DrawIndexedIndirectCommand)
 	);

@@ -10,16 +10,9 @@ using TaskIndex = uint32_t;
 struct Task {
 	struct SetupContext;
 	struct BuildContext;
-	struct ExecutionContext;
 
 	class DataProvider;
 
-	enum class Type {
-		CPU,
-		Graphic,
-		Compute,
-		Transfer,
-	};
 	struct ResourceDependency {
 		rendergraph::ResourceIndex resource;
 		ResourceUsage::Type usage;

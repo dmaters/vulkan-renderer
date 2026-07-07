@@ -49,31 +49,12 @@ rendergraph::ResourceIndex RenderGraph::registerBuffer(
 	return index;
 }
 
-TaskIndex RenderGraph::addTask(
-	std::string name, Task::Type type, Task task, auto taskData
-) {
-	TaskIndex index = m_data.tasks.size();
-
-	std::vector<std::byte> rawData(&taskData, sizeof(taskData));
-
-	m_data.taskData[index] = rawData;
-
-	m_data.taskMetadata[index] = {
-		.type = type,
-		.name = name,
-	};
-	m_data.tasks[index] = task;
-
-	return index;
-}
-
-TaskIndex RenderGraph::addTask(std::string name, Task::Type type, Task task) {
+TaskIndex RenderGraph::addTask(std::string name, Task task) {
 	TaskIndex index = m_data.tasks.size();
 
 	m_data.taskData[index] = {};
 
 	m_data.taskMetadata[index] = {
-		.type = type,
 		.name = name,
 	};
 	m_data.tasks[index] = task;
@@ -83,9 +64,7 @@ TaskIndex RenderGraph::addTask(std::string name, Task::Type type, Task task) {
 void RenderGraph::update(std::vector<TaskIndex> tasks, const Scene& scene) {
 	rendergraph::internal::ExecutionInfo info = build(tasks, scene);
 	m_runner.emplace(
-		rendergraph::internal::RenderGraphRunner(
-			m_data, m_swapchain, m_resourceManager, m_materialManager, info
-		)
+		m_data, m_swapchain, m_resourceManager, m_materialManager, info
 	);
 }
-void RenderGraph::submit(const Scene& scene) { m_runner->submit(scene); }
+bool RenderGraph::submit(const Scene& scene) { return m_runner->submit(scene); }
