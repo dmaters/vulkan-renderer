@@ -15,51 +15,11 @@ rendergraph::ResourceIndex Task::SetupContext::createBuffer(
 	return resourceProvider.createBuffer(name, description, location);
 }
 
-void Task::SetupContext::registerInput(
-	rendergraph::ResourceIndex index, ResourceUsage::Type usage
+rendergraph::ResourceIndex Task::SetupContext::getReference(
+	TaskIndex task, std::size_t slot
 ) {
-	inputs.push_back({ .reference = index, .usage = usage });
-}
-
-void Task::SetupContext::registerInput(
-	TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-) {
-	inputs.push_back(
-		{
-			.reference =
-				ResourceReference::SlotReference {
-												  .task = task,
-												  .slot = slot,
-												  },
-			.usage = usage,
-    }
-	);
-}
-
-void Task::SetupContext::registerOutput(
-	rendergraph::ResourceIndex index, ResourceUsage::Type usage
-) {
-	outputs.push_back(
-		{
-			.reference = index,
-			.usage = usage,
-		}
-	);
-}
-void Task::SetupContext::registerOutput(
-	TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-) {
-	outputs.push_back(
-		{
-			.reference =
-				ResourceReference::SlotReference {
-												  .task = task,
-												  .slot = slot,
-												  },
-			.usage = usage,
-    }
-	);
-}
+	return resourceProvider.getReference(task, slot);
+};
 
 rendergraph::ResourceIndex Task::SetupContext::ResourceProvider::createImage(
 	std::string name,
@@ -78,6 +38,7 @@ rendergraph::ResourceIndex Task::SetupContext::ResourceProvider::createImage(
 
 	return index;
 }
+
 rendergraph::ResourceIndex Task::SetupContext::ResourceProvider::createBuffer(
 	std::string name,
 	ResourceManager::BufferDescription description,
@@ -94,6 +55,12 @@ rendergraph::ResourceIndex Task::SetupContext::ResourceProvider::createBuffer(
 	m_names[index] = name;
 
 	return index;
+}
+
+rendergraph::ResourceIndex Task::SetupContext::ResourceProvider::getReference(
+	TaskIndex task, std::size_t slot
+) {
+	return m_references.outputs.at(task)[slot].resource;
 }
 
 rendergraph::internal::ExecutionInfo::Resources

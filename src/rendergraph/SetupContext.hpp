@@ -14,19 +14,6 @@ struct Task::SetupContext {
 	ResourceProvider& resourceProvider;
 	DataProvider& dataProvider;
 
-	struct ResourceReference {
-		struct SlotReference {
-			TaskIndex task;
-			std::size_t slot;
-		};
-
-		std::variant<rendergraph::ResourceIndex, SlotReference> reference;
-
-		ResourceUsage::Type usage;
-	};
-	std::vector<ResourceReference>& inputs;
-	std::vector<ResourceReference>& outputs;
-
 	rendergraph::ResourceIndex createImage(
 		std::string name,
 		ResourceManager::ImageDescription description,
@@ -40,34 +27,17 @@ struct Task::SetupContext {
 			ResourceManager::MemoryLocation::Device
 	);
 
-	void registerInput(
-		rendergraph::ResourceIndex index, ResourceUsage::Type usage
-	);
-	void registerInput(
-		TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-	);
-
-	void registerOutput(
-		rendergraph::ResourceIndex index, ResourceUsage::Type usage
-	);
-	void registerOutput(
-		TaskIndex task, std::size_t slot, ResourceUsage::Type usage
-	);
-
 	template <typename T>
 	T& getData() {
 		return dataProvider.getData<T>(task);
 	}
-	template <typename T>
-	T& getData(TaskIndex task) {
-		return dataProvider.getData<T>(task);
-	}
+
+	rendergraph::ResourceIndex getReference(TaskIndex task, std::size_t slot);
 };
 
 class Task::SetupContext::ResourceProvider {
 private:
 	rendergraph::internal::ResourceIndexer m_indexer;
-
 	std::unordered_map<rendergraph::ResourceIndex, std::string> m_names;
 
 	std::unordered_map<
@@ -80,9 +50,14 @@ private:
 		rendergraph::internal::ExecutionInfo::Resources::BufferBuildData>
 		m_buffers;
 
+	const rendergraph::internal::ExecutionInfo::References& m_references;
+
 public:
-	ResourceProvider(rendergraph::internal::ResourceIndexer baseIndexer) :
-		m_indexer(baseIndexer) {}
+	ResourceProvider(
+		rendergraph::internal::ResourceIndexer baseIndexer,
+		const rendergraph::internal::ExecutionInfo::References& references
+	) :
+		m_indexer(baseIndexer), m_references(references) {}
 
 	rendergraph::ResourceIndex createImage(
 		std::string name,
@@ -96,6 +71,8 @@ public:
 		ResourceManager::MemoryLocation location =
 			ResourceManager::MemoryLocation::Device
 	);
+
+	rendergraph::ResourceIndex getReference(TaskIndex task, std::size_t slot);
 
 	rendergraph::internal::ExecutionInfo::Resources getCompiledResources() &&;
 };

@@ -14,6 +14,14 @@ struct GBUfferPass {
 	std::array<rendergraph::ResourceIndex, 3> _alphaIndirectBuffer;
 	std::array<rendergraph::ResourceIndex, 3> _alphaPrimitiveMap;
 
-	static void Setup(Task::SetupContext&);
+	static Task::Dependencies Setup(Task::SetupContext&);
 	static void Build(Task::BuildContext&);
+
+	enum Slot {
+		Albedo,
+		Normal,
+		WorldPos,
+		RoughnessMetallic,
+		Depth
+	};
 };

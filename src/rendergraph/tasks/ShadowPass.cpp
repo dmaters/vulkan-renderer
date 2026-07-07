@@ -6,19 +6,16 @@
 #include "../SetupContext.hpp"
 #include "DrawPass.hpp"
 #include "RenderPass.hpp"
+#include "SceneData.hpp"
 
 static const int32_t CASCADE_SIZE = 2048;
 
-void ShadowPass::Setup(Task::SetupContext& context) {
+Task::Dependencies ShadowPass::Setup(Task::SetupContext& context) {
 	auto& data = context.getData<ShadowPass>();
-	uint32_t indirectBufferSize = static_cast<uint32_t>(
-		context.scene.primitives.size() *
-		sizeof(vk::DrawIndexedIndirectCommand) * 3
-	);
+	uint32_t indirectBufferSize =
+		static_cast<uint32_t>(context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand) * 3);
 
-	uint32_t primitiveMapSize = static_cast<uint32_t>(
-		context.scene.primitives.size() * sizeof(uint32_t) * 3
-	);
+	uint32_t primitiveMapSize = static_cast<uint32_t>(context.scene.primitives.size() * sizeof(uint32_t) * 3);
 
 	for (int i = 0; i < 3; i++) {
 		auto indirectBuffer = context.createBuffer(
@@ -46,8 +43,7 @@ void ShadowPass::Setup(Task::SetupContext& context) {
 		"indirect_shadowmap_buffer",
 		{
 			.size = indirectBufferSize,
-			.usage = vk::BufferUsageFlagBits::eIndirectBuffer |
-	                 vk::BufferUsageFlagBits::eTransferDst,
+			.usage = vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst,
 		},
 		ResourceManager::MemoryLocation::HostVisible
 	);
@@ -55,24 +51,14 @@ void ShadowPass::Setup(Task::SetupContext& context) {
 		"primitive_shadowpass_buffer",
 		{
 			.size = primitiveMapSize,
-			.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-	                 vk::BufferUsageFlagBits::eTransferDst,
+			.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
 		},
 		ResourceManager::MemoryLocation::HostVisible
 
 	);
 
-	context.registerInput(
-		data.sceneUpdateTask, 1, ResourceUsage::Type::UniformBuffer
-	);
-	context.registerInput(
-		data.sceneUpdateTask, 0, ResourceUsage::Type::UniformBuffer
-	);
-
-	context.registerInput(
-		indirectBuffer, ResourceUsage::Type::IndirectBufferRead
-	);
-	context.registerInput(primitiveMap, ResourceUsage::Type::StorageBufferRead);
+	auto lightBuffer = context.getReference(data.sceneUpdateTask, SceneData::Slot::Lights);
+	auto cameraBuffer = context.getReference(data.sceneUpdateTask, SceneData::Slot::Camera);
 
 	rendergraph::ResourceIndex shadowAtlas = context.createImage(
 		"shadow_atlas",
@@ -82,11 +68,21 @@ void ShadowPass::Setup(Task::SetupContext& context) {
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eD16Unorm,
-			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
-	                 vk::ImageUsageFlagBits::eSampled,
+			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
 		}
 	);
-	context.registerOutput(shadowAtlas, ResourceUsage::Type::DepthStencilWrite);
+
+	return {
+		.inputs ={
+			{ lightBuffer, ResourceUsage::Type::UniformBuffer },
+			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
+			{ indirectBuffer, ResourceUsage::Type::IndirectBufferRead },
+			{ primitiveMap, ResourceUsage::Type::StorageBufferRead },
+		 },
+		.outputs = {
+			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
+		 },
+	};
 }
 
 void ShadowPass::Build(Task::BuildContext& context) {
@@ -108,19 +104,12 @@ void ShadowPass::Build(Task::BuildContext& context) {
 			AttachmentOp::Read,
 			AttachmentOp::ClearWrite,
 			vk::Rect2D {
-				{ CASCADE_SIZE * i, 0            },
-				{ CASCADE_SIZE,     CASCADE_SIZE },
-        }
+				{ CASCADE_SIZE * i, 0			  },
+				{ CASCADE_SIZE,		CASCADE_SIZE },
+		}
 		);
 
-		DrawPass::Indirect(
-			context,
-			data.material,
-			context.scene.buckets.at(data.material),
-			i,
-			2,
-			3
-		);
+		DrawPass::Indirect(context, data.material, context.scene.buckets.at(data.material), i, 2, 3);
 
 		RenderPass::End(context.commandBuffer);
 	}

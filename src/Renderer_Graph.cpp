@@ -8,7 +8,7 @@
 #include "rendergraph/tasks/DrawPass.hpp"
 #include "rendergraph/tasks/GBufferPass.hpp"
 #include "rendergraph/tasks/RenderPass.hpp"
-#include "rendergraph/tasks/SceneUpdatePass.hpp"
+#include "rendergraph/tasks/SceneData.hpp"
 #include "rendergraph/tasks/ShadowPass.hpp"
 #include "rendergraph/tasks/UIPass.hpp"
 #include "resources/ResourceManager.hpp"
@@ -31,27 +31,24 @@ ProceduralSkyOutputPasses proceduralSky(
 	TaskIndex transmittanceLUTPass = graph.addTask(
 		"transmittanceLUT",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					auto transmittanceLUT =
-						context.resourceProvider.createImage(
-							"transmittanceLUT",
-							{
-								.width = 256,
-								.height = 64,
-								.depth = 1,
-								.miplevels = 1,
-								.format = vk::Format::eR16G16B16A16Sfloat,
-								.usage = vk::ImageUsageFlagBits::eStorage |
-		                                 vk::ImageUsageFlagBits::eSampled,
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto transmittanceLUT = context.resourceProvider.createImage(
+					"transmittanceLUT",
+					{
+						.width = 256,
+						.height = 64,
+						.depth = 1,
+						.miplevels = 1,
+						.format = vk::Format::eR16G16B16A16Sfloat,
+						.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
 
-							}
-						);
+					}
+				);
 
-					context.registerOutput(
-						transmittanceLUT, ResourceUsage::Type::ShaderWrite
-					);
-				},
+				return {
+					.outputs = { { transmittanceLUT, ResourceUsage::Type::ShaderWrite } },
+				};
+			},
 			.build =
 				[](Task::BuildContext& context) {
 					auto material = context.getData<MaterialIndex>();
@@ -63,62 +60,53 @@ ProceduralSkyOutputPasses proceduralSky(
 	passes.push_back(transmittanceLUTPass);
 
 	struct MultiScatteringLUTData {
-		TaskIndex transmittanceLUT;
+		TaskIndex transmittanceLUTPass;
 		MaterialIndex material;
 	};
 
 	TaskIndex multiscatteringLUTPass = graph.addTask(
 		"multiscatteringLUT",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					auto data = context.getData<MultiScatteringLUTData>();
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto data = context.getData<MultiScatteringLUTData>();
 
-					context.registerInput(
-						data.transmittanceLUT,
-						0,
-						ResourceUsage::Type::SampledRead
-					);
+				auto transmittanceLUT = context.getReference(data.transmittanceLUTPass, 0);
+				auto scratch_buffer = context.resourceProvider.createBuffer(
+					"scratch_buffer",
 
-					auto scratch_buffer = context.resourceProvider.createBuffer(
-						"scratch_buffer",
+					{
+						.size = 1 << 23,  // 8MB
+						.usage = vk::BufferUsageFlagBits::eStorageBuffer,
 
-						{
-							.size = 1 << 23,  // 8MB
-							.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+					}
+				);
+				auto multiscatteringLUT = context.resourceProvider.createImage(
+					"multiscatteringLUT",
+					{
+						.width = 64,
+						.height = 64,
+						.depth = 1,
+						.miplevels = 1,
+						.format = vk::Format::eR16G16B16A16Sfloat,
+						.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
 
-						}
-					);
-					auto multiscatteringLUT =
-						context.resourceProvider.createImage(
-							"multiscatteringLUT",
-							{
-								.width = 64,
-								.height = 64,
-								.depth = 1,
-								.miplevels = 1,
-								.format = vk::Format::eR16G16B16A16Sfloat,
-								.usage = vk::ImageUsageFlagBits::eStorage |
-		                                 vk::ImageUsageFlagBits::eSampled,
+					}
+				);
 
-							}
-						);
-					context.registerOutput(
-						multiscatteringLUT, ResourceUsage::Type::ShaderWrite
-					);
-					context.registerOutput(
-						scratch_buffer, ResourceUsage::Type::ShaderWrite
-					);
-				},
+				return {
+					.inputs = { { transmittanceLUT, ResourceUsage::Type::SampledRead } },
+					.outputs = { { multiscatteringLUT, ResourceUsage::Type::ShaderWrite },
+								 { scratch_buffer, ResourceUsage::Type::ShaderWrite } }
+				};
+			},
 			.build =
 				[](Task::BuildContext& context) {
-					auto material =
-						context.getData<MultiScatteringLUTData>().material;
+					auto material = context.getData<MultiScatteringLUTData>().material;
 					ComputePass(context, material, { 64, 64, 1 });
 				},
 		},
 		MultiScatteringLUTData {
-			.transmittanceLUT = transmittanceLUTPass,
+			.transmittanceLUTPass = transmittanceLUTPass,
 			.material = materialManager.getMaterialIndex("multiscatteringLUT"),
 		}
 	);
@@ -135,52 +123,41 @@ ProceduralSkyOutputPasses proceduralSky(
 	TaskIndex skyviewLUTPass = graph.addTask(
 		"skyviewLUT",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					auto data = context.getData<SkyViewLUTData>();
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto data = context.getData<SkyViewLUTData>();
 
-					context.registerInput(
-						data.scenePass, 1, ResourceUsage::Type::UniformBuffer
-					);
+				auto lightBuffer = context.getReference(data.scenePass, SceneData::Slot::Lights);
+				auto transmittanceLUT = context.getReference(data.transmittanceLUTPass, 0);
+				auto multiscatteringLUT = context.getReference(data.multiscatteringLUTPass, 0);
 
-					context.registerInput(
-						data.transmittanceLUTPass,
-						0,
-						ResourceUsage::Type::SampledRead
-					);
+				auto skyviewLUT = context.createImage(
+					"skyviewLUT",
+					{
+						.width = 200,
+						.height = 100,
+						.depth = 1,
+						.miplevels = 1,
+						.format = vk::Format::eR16G16B16A16Sfloat,
+						.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+					}
+				);
+				return {
+					.inputs =
+					    {
+							 { lightBuffer, ResourceUsage::Type::UniformBuffer },
+							 { transmittanceLUT, ResourceUsage::Type::SampledRead },
+							 { multiscatteringLUT, ResourceUsage::Type::SampledRead },
+						},
+					.outputs =
+				        {
+							 { skyviewLUT, ResourceUsage::Type::ShaderWrite },
+						},
+				};
+			},
 
-					context.registerInput(
-						data.multiscatteringLUTPass,
-						0,
-						ResourceUsage::Type::SampledRead
-					);
-
-					auto lut = context.createImage(
-						"skyviewLUT",
-						{
-							.width = 200,
-							.height = 100,
-							.depth = 1,
-							.miplevels = 1,
-							.format = vk::Format::eR16G16B16A16Sfloat,
-							.usage = vk::ImageUsageFlagBits::eStorage |
-		                             vk::ImageUsageFlagBits::eSampled,
-
-						}
-					);
-					context.registerOutput(
-						lut, ResourceUsage::Type::ShaderWrite
-					);
-				},
-
-			.build =
-				[](Task::BuildContext& context) {
-					ComputePass(
-						context,
-						context.getData<SkyViewLUTData>().material,
-						{ 200, 100, 1 }
-					);
-				},
+			.build = [](
+						 Task::BuildContext& context
+					 ) { ComputePass(context, context.getData<SkyViewLUTData>().material, { 200, 100, 1 }); },
 		},
 		SkyViewLUTData {
 			.material = materialManager.getMaterialIndex("skyviewLUT"),
@@ -199,37 +176,31 @@ ProceduralSkyOutputPasses proceduralSky(
 	TaskIndex skyLighting = graph.addTask(
 		"skyLighting",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					auto skyviewLUT =
-						context.getData<SkyLightingData>().skyviewLUT;
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto skyviewLUTPass = context.getData<SkyLightingData>().skyviewLUT;
 
-					context.registerInput(
-						skyviewLUT, 0, ResourceUsage::Type::SampledRead
-					);
+				auto skyviewLUT = context.getReference(skyviewLUTPass, 0);
 
-					auto skyLightingSH = context.createBuffer(
-						"skyLightingSH",
-						{
-							.size = sizeof(glm::vec4) * 9,
-							.usage = vk::BufferUsageFlagBits::eStorageBuffer |
-		                             vk::BufferUsageFlagBits::eUniformBuffer,
-						}
-					);
+				auto skyLightingSH = context.createBuffer(
+					"skyLightingSH",
+					{
+						.size = sizeof(glm::vec4) * 9,
+						.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eUniformBuffer,
+					}
+				);
+				return {
+					.inputs = {
+						{ skyviewLUT, ResourceUsage::Type::SampledRead },
+                    },
+					.outputs = {
+						{ skyLightingSH, ResourceUsage::Type::StorageBufferWrite },
+					},
+				};
+			},
 
-					context.registerOutput(
-						skyLightingSH, ResourceUsage::Type::StorageBufferWrite
-					);
-				},
-
-			.build =
-				[](Task::BuildContext& context) {
-					ComputePass(
-						context,
-						context.getData<SkyLightingData>().material,
-						{ 1, 1, 1 }
-					);
-				},
+			.build = [](
+						 Task::BuildContext& context
+					 ) { ComputePass(context, context.getData<SkyLightingData>().material, { 1, 1, 1 }); },
 		},
 		SkyLightingData {
 			.material = materialManager.getMaterialIndex("sky_lighting"),
@@ -254,10 +225,8 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 
 	std::vector<TaskIndex> passes;
 
-	rendergraph::ResourceIndex pbrMaterialData =
-		m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
-	rendergraph::ResourceIndex pbrMaterialInstances =
-		m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
+	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
+	auto pbrMaterialInstances = m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
 
 	TaskIndex sceneUpdate = m_graph.addTask(
 		"scene_update",
@@ -317,75 +286,57 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 
 	TaskIndex lightingDeferred = m_graph.addTask(
 		"lighting_deferred",
-		{ .setup =
-	          [](Task::SetupContext& context) {
-				  auto data = context.getData<LightingDeferredData>();
-				  context.registerInput(
-					  data.sceneUpdatePass,
-					  0,
-					  ResourceUsage::Type::UniformBuffer
-				  );
-				  context.registerInput(
-					  data.sceneUpdatePass,
-					  1,
-					  ResourceUsage::Type::UniformBuffer
-				  );
-				  context.registerInput(
-					  data.gbufferPass, 0, ResourceUsage::Type::SampledRead
-				  );
-				  context.registerInput(
-					  data.gbufferPass, 1, ResourceUsage::Type::SampledRead
-				  );
-				  context.registerInput(
-					  data.gbufferPass, 2, ResourceUsage::Type::SampledRead
-				  );
-				  context.registerInput(
-					  data.gbufferPass, 3, ResourceUsage::Type::SampledRead
-				  );
-				  context.registerInput(
-					  data.shadowPass, 0, ResourceUsage::Type::SampledRead
-				  );
-				  context.registerInput(
-					  data.skyLightingPass,
-					  0,
-					  ResourceUsage::Type::UniformBuffer
-				  );
+		{ .setup = [](Task::SetupContext& context) -> Task::Dependencies {
+			 auto data = context.getData<LightingDeferredData>();
 
-				  auto resolution = context.scene.camera.getResolution();
-				  rendergraph::ResourceIndex hdr_output = context.createImage(
-					  "hdr_output",
-					  {
-						  .width = static_cast<uint32_t>(resolution.x),
-						  .height = static_cast<uint32_t>(resolution.y),
-						  .depth = 1,
-						  .miplevels = 1,
-						  .format = vk::Format::eR16G16B16A16Sfloat,
-						  .usage = vk::ImageUsageFlagBits::eColorAttachment |
-		                           vk::ImageUsageFlagBits::eSampled |
-		                           vk::ImageUsageFlagBits::eStorage,
-					  }
-				  );
-				  context.registerOutput(
-					  hdr_output, ResourceUsage::Type::ColorAttachmentWrite
-				  );
-				  context.registerOutput(
-					  data.gbufferPass,
-					  4,
-					  ResourceUsage::Type::DepthStencilWrite
-				  );
-			  },
-	      .build =
-	          [](Task::BuildContext& context) {
-				  RenderPass::Begin(
-					  context, AttachmentOp::ClearWrite, AttachmentOp::Read
-				  );
-				  DrawPass::Quad(
-					  context, context.getData<LightingDeferredData>().material
-				  );
+			 auto resolution = context.scene.camera.getResolution();
+			 rendergraph::ResourceIndex hdr_output = context.createImage(
+				 "hdr_output",
+				 {
+					 .width = static_cast<uint32_t>(resolution.x),
+					 .height = static_cast<uint32_t>(resolution.y),
+					 .depth = 1,
+					 .miplevels = 1,
+					 .format = vk::Format::eR16G16B16A16Sfloat,
+					 .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled |
+							  vk::ImageUsageFlagBits::eStorage,
+				 }
+			 );
+
+			 return {
+				 // Inputs
+				 {
+					 { context.getReference(data.sceneUpdatePass, SceneData::Slot::Camera),
+					   ResourceUsage::Type::UniformBuffer },
+					 { context.getReference(data.sceneUpdatePass, SceneData::Slot::Lights),
+					   ResourceUsage::Type::UniformBuffer },
+					 { context.getReference(data.gbufferPass, GBUfferPass::Slot::Albedo),
+					   ResourceUsage::Type::SampledRead },
+					 { context.getReference(data.gbufferPass, GBUfferPass::Slot::Normal),
+					   ResourceUsage::Type::SampledRead },
+					 { context.getReference(data.gbufferPass, GBUfferPass::Slot::WorldPos),
+					   ResourceUsage::Type::SampledRead },
+					 { context.getReference(data.gbufferPass, GBUfferPass::Slot::RoughnessMetallic),
+					   ResourceUsage::Type::SampledRead },
+					 { context.getReference(data.shadowPass, 0), ResourceUsage::Type::SampledRead },
+					 { context.getReference(data.skyLightingPass, 0), ResourceUsage::Type::UniformBuffer },
+				  },
+				 // Outputs
+				 {
+					 { hdr_output, ResourceUsage::Type::ColorAttachmentWrite },
+					 { context.getReference(data.gbufferPass, GBUfferPass::Slot::Depth),
+					   ResourceUsage::Type::DepthStencilRead },
+				  },
+			 };
+		 },
+		  .build =
+			  [](Task::BuildContext& context) {
+				  RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::Read);
+				  DrawPass::Quad(context, context.getData<LightingDeferredData>().material);
 				  RenderPass::End(context.commandBuffer);
 			  }
 
-	    },
+		},
 		LightingDeferredData {
 			.sceneUpdatePass = sceneUpdate,
 			.gbufferPass = gbufferPass,
@@ -410,38 +361,41 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 		"skybox",
 		{
 
-			.setup =
-				[](Task::SetupContext& context) {
-					auto data = context.getData<SkyboxData>();
-					context.registerInput(
-						data.sceneUpdatePass,
-						0,
-						ResourceUsage::Type::UniformBuffer
-					);
-					context.registerInput(
-						data.skyviewLUTPass, 0, ResourceUsage::Type::SampledRead
-					);
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto data = context.getData<SkyboxData>();
+				context.getReference(data.sceneUpdatePass, SceneData::Slot::Camera);
+				context.getReference(data.skyviewLUTPass, 0);
 
-					context.registerOutput(
-						data.hdrOutputPass,
-						0,
-						ResourceUsage::Type::ColorAttachmentWrite
-					);
-					context.registerOutput(
-						data.hdrOutputPass,
-						1,
-						ResourceUsage::Type::DepthStencilRead
-					);
-				},
+				context.getReference(data.hdrOutputPass, 0);
+				context.getReference(data.hdrOutputPass, 1);
+
+				return {
+					.inputs = {
+                        {
+							context.getReference(data.sceneUpdatePass, SceneData::Slot::Camera),
+							ResourceUsage::Type::UniformBuffer
+						}, {
+							context.getReference(data.skyviewLUTPass, 0),
+							ResourceUsage::Type::SampledRead,
+						},
+					},
+					.outputs = {
+                        {
+                            context.getReference(data.hdrOutputPass, 0),
+    			              ResourceUsage::Type::ColorAttachmentWrite,
+                        },
+                        {
+                            context.getReference(data.hdrOutputPass, 1),
+    			              ResourceUsage::Type::DepthStencilRead
+                        },
+					 }
+				};
+			},
 
 			.build =
 				[](Task::BuildContext& context) {
-					RenderPass::Begin(
-						context, AttachmentOp::ReadWrite, AttachmentOp::Read
-					);
-					DrawPass::Quad(
-						context, context.getData<SkyboxData>().skyboxMaterial
-					);
+					RenderPass::Begin(context, AttachmentOp::ReadWrite, AttachmentOp::Read);
+					DrawPass::Quad(context, context.getData<SkyboxData>().skyboxMaterial);
 
 					RenderPass::End(context.commandBuffer);
 				},
@@ -461,42 +415,37 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	};
 	TaskIndex compositionPass = m_graph.addTask(
 		"composition",
-		{ .setup =
-	          [](Task::SetupContext& context) {
-				  context.registerInput(
-					  context.getData<SimplePassData>().previousPass,
-					  0,
-					  ResourceUsage::Type::SampledRead
-				  );
-				  auto resolution = context.scene.camera.getResolution();
+		{ .setup = [](Task::SetupContext& context) -> Task::Dependencies {
+			 auto hdr_output = context.getReference(context.getData<SimplePassData>().previousPass, 0);
+			 auto resolution = context.scene.camera.getResolution();
 
-				  rendergraph::ResourceIndex tonemapped = context.createImage(
-					  "tonemapped",
-					  {
-						  .width = static_cast<uint32_t>(resolution.x),
-						  .height = static_cast<uint32_t>(resolution.y),
-						  .depth = 1,
-						  .miplevels = 1,
-						  .format = vk::Format::eR8G8B8A8Unorm,
-						  .usage = vk::ImageUsageFlagBits::eStorage |
-		                           vk::ImageUsageFlagBits::eSampled,
+			 rendergraph::ResourceIndex tonemapped = context.createImage(
+				 "tonemapped",
+				 {
+					 .width = static_cast<uint32_t>(resolution.x),
+					 .height = static_cast<uint32_t>(resolution.y),
+					 .depth = 1,
+					 .miplevels = 1,
+					 .format = vk::Format::eR8G8B8A8Unorm,
+					 .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+				 }
 
-					  }
-
-				  );
-
-				  context.registerOutput(
-					  tonemapped, ResourceUsage::Type::ShaderWrite
-				  );
-			  },
-	      .build =
-	          [](Task::BuildContext& context) {
+			 );
+			 return {
+				.inputs = {
+					 { hdr_output, ResourceUsage::Type::ShaderRead },
+				},
+				.outputs = {
+					 { tonemapped, ResourceUsage::Type::ShaderWrite },
+				},
+			 };
+		 },
+		  .build =
+			  [](Task::BuildContext& context) {
 				  auto& size = context.getInput<Image&>(0).size;
 
 				  ComputePass(
-					  context,
-					  context.getData<SimplePassData>().material,
-					  glm::uvec3(size.width, size.height, 1)
+					  context, context.getData<SimplePassData>().material, glm::uvec3(size.width, size.height, 1)
 				  );
 			  } },
 		SimplePassData {
@@ -511,41 +460,36 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	TaskIndex fxaa = m_graph.addTask(
 		"fxaa",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					context.registerInput(
-						context.getData<SimplePassData>().previousPass,
-						0,
-						ResourceUsage::Type::SampledRead
-					);
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				auto tonemapped = context.getReference(context.getData<SimplePassData>().previousPass, 0);
 
-					auto resolution = context.scene.camera.getResolution();
-					auto final = context.createImage(
-						"final",
-						{
-							.width = static_cast<uint32_t>(resolution.x),
-							.height = static_cast<uint32_t>(resolution.y),
-							.depth = 1,
-							.miplevels = 1,
-							.format = vk::Format::eR8G8B8A8Unorm,
-							.usage = vk::ImageUsageFlagBits::eColorAttachment |
-		                             vk::ImageUsageFlagBits::eTransferSrc,
+				auto resolution = context.scene.camera.getResolution();
+				auto final = context.createImage(
+					"final",
+					{
+						.width = static_cast<uint32_t>(resolution.x),
+						.height = static_cast<uint32_t>(resolution.y),
+						.depth = 1,
+						.miplevels = 1,
+						.format = vk::Format::eR8G8B8A8Unorm,
+						.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
 
-						}
+					}
 
-					);
-					context.registerOutput(
-						final, ResourceUsage::Type::ColorAttachmentWrite
-					);
-				},
+				);
+				return {
+					.inputs = {
+					 { tonemapped, ResourceUsage::Type::ShaderRead },
+					},
+					.outputs = {
+					 { final, ResourceUsage::Type::ColorAttachmentWrite },
+					},
+				};
+			},
 			.build =
 				[](Task::BuildContext& context) {
-					RenderPass::Begin(
-						context, AttachmentOp::ClearWrite, AttachmentOp::Read
-					);
-					DrawPass::Quad(
-						context, context.getData<SimplePassData>().material
-					);
+					RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::Read);
+					DrawPass::Quad(context, context.getData<SimplePassData>().material);
 					RenderPass::End(context.commandBuffer);
 				},
 		},
@@ -559,21 +503,19 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	TaskIndex ui = m_graph.addTask(
 		"UI",
 		{
-			.setup =
-				[](Task::SetupContext& context) {
-					context.registerOutput(
-						context.getData<TaskIndex>(),
-						0,
-						ResourceUsage::Type::ColorAttachmentWrite
-					);
-				},
+			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
+				return {
+					.outputs = {
+						{
+							context.getReference(context.getData<TaskIndex>(), 0),
+							ResourceUsage::Type::ColorAttachmentWrite,
+						},
+					},
+				};
+			},
 			.build =
 				[](Task::BuildContext& context) {
-					RenderPass::Begin(
-						context,
-						AttachmentOp::ReadWrite,
-						AttachmentOp::ReadWrite
-					);
+					RenderPass::Begin(context, AttachmentOp::ReadWrite, AttachmentOp::ReadWrite);
 					UIPass(context);
 					RenderPass::End(context.commandBuffer);
 				},

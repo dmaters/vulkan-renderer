@@ -27,109 +27,22 @@ InstanceData buildTasks(
 	const std::unordered_map<TaskIndex, Task>& tasks,
 	std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData
 ) {
-	std::vector<Task::SetupContext::ResourceReference> localInputs;
-	std::vector<Task::SetupContext::ResourceReference> localOutputs;
-
-	Task::SetupContext::ResourceProvider resourceProvider(indexer);
+	ExecutionInfo::References references;
+	Task::SetupContext::ResourceProvider resourceProvider(indexer, references);
 	Task::DataProvider dataProvider(taskData);
 
-	ExecutionInfo::References references;
-
-	std::vector<Task::ResourceDependency> inputs;
-	std::vector<Task::ResourceDependency> outputs;
-
 	for (TaskIndex task : unorderedTasks) {
-		localInputs.clear();
-		localOutputs.clear();
-		inputs.clear();
-		outputs.clear();
-
 		Task::SetupContext context {
 			.task = task,
 			.scene = scene,
 			.resourceProvider = resourceProvider,
 			.dataProvider = dataProvider,
-			.inputs = localInputs,
-			.outputs = localOutputs,
 		};
 
-		tasks.at(task).setup(context);
+		Task::Dependencies deps = tasks.at(task).setup(context);
 
-		// TODO: we have access to task references and kinda ordering already,
-		// so we don't need to reconstruct those info later, optimize
-
-		for (auto& input : localInputs) {
-			TaskIndex resource = 0;
-
-			if (input.reference.index() == 1) {
-				auto reference = std::get<
-					Task::SetupContext::ResourceReference::SlotReference>(
-					input.reference
-				);
-
-				assert(
-					std::find(
-						unorderedTasks.begin(),
-						unorderedTasks.end(),
-						reference.task
-					) != unorderedTasks.end()
-				);  // Check if all referenced tasks are present
-
-				assert(
-					references.outputs.contains(reference.task)
-				);  // Check if task has been explored already
-
-				resource =
-					references.outputs[reference.task][reference.slot].resource;
-			} else {
-				resource =
-					std::get<rendergraph::ResourceIndex>(input.reference);
-			}
-
-			inputs.push_back(
-				{
-					.resource = resource,
-					.usage = input.usage,
-				}
-			);
-		}
-		for (auto& output : localOutputs) {
-			TaskIndex resource = 0;
-
-			if (output.reference.index() == 1) {
-				auto reference = std::get<
-					Task::SetupContext::ResourceReference::SlotReference>(
-					output.reference
-				);
-
-				assert(
-					std::find(
-						unorderedTasks.begin(),
-						unorderedTasks.end(),
-						reference.task
-					) != unorderedTasks.end()
-				);  // Check if all referenced tasks are present
-
-				assert(
-					references.outputs.contains(reference.task)
-				);  // Check if task has been explored already
-
-				resource =
-					references.outputs[reference.task][reference.slot].resource;
-			} else {
-				resource =
-					std::get<rendergraph::ResourceIndex>(output.reference);
-			}
-
-			outputs.push_back(
-				{
-					.resource = resource,
-					.usage = output.usage,
-				}
-			);
-		}
-		references.inputs[task] = inputs;
-		references.outputs[task] = outputs;
+		references.inputs[task] = deps.inputs;
+		references.outputs[task] = deps.outputs;
 	}
 	ExecutionInfo::Resources resources =
 		std::move(resourceProvider).getCompiledResources();

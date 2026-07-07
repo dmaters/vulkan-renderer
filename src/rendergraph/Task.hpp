@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <variant>
 #include <vulkan/vulkan.hpp>
 
 #include "ResourceIndex.hpp"
@@ -18,6 +19,11 @@ struct Task {
 		ResourceUsage::Type usage;
 	};
 
-	void (*setup)(SetupContext&);
+	struct Dependencies {
+		std::vector<ResourceDependency> inputs = {};
+		std::vector<ResourceDependency> outputs = {};
+	};
+
+	Dependencies (*setup)(SetupContext&);
 	void (*build)(BuildContext&);
 };

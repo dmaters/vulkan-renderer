@@ -12,9 +12,8 @@ struct ShadowPass {
 
 	TaskIndex sceneUpdateTask;
 
-
 	MaterialIndex material;
 
-	static void Setup(Task::SetupContext&);
+	static Task::Dependencies Setup(Task::SetupContext&);
 	static void Build(Task::BuildContext&);
 };
