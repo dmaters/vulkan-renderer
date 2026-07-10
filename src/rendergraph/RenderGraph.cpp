@@ -10,21 +10,14 @@
 #include "resources/ResourceManager.hpp"
 
 RenderGraph::RenderGraph(
-	Swapchain& swapchain,
-	ResourceManager& resourceManager,
-	MaterialManager& materialManager
+	Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager
 
 ) :
-	m_swapchain(swapchain),
-	m_resourceManager(resourceManager),
-	m_materialManager(materialManager) {}
+	m_swapchain(swapchain), m_resourceManager(resourceManager), m_materialManager(materialManager) {}
 
-rendergraph::ResourceIndex RenderGraph::registerImage(
-	std::string name, ImageHandle image
-) {
-	rendergraph::ResourceIndex index = m_data.indexer.registerResource(
-		rendergraph::internal::ResourceIndexer::ResourceType::Image
-	);
+rendergraph::ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
+	rendergraph::ResourceIndex index =
+		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Image);
 
 	m_data.resourceNames[index] = name;
 	m_data.externalImages.push_back({ index, image });
@@ -34,12 +27,9 @@ rendergraph::ResourceIndex RenderGraph::registerImage(
 	return index;
 }
 
-rendergraph::ResourceIndex RenderGraph::registerBuffer(
-	std::string name, BufferHandle buffer
-) {
-	rendergraph::ResourceIndex index = m_data.indexer.registerResource(
-		rendergraph::internal::ResourceIndexer::ResourceType::Buffer
-	);
+rendergraph::ResourceIndex RenderGraph::registerBuffer(std::string name, BufferHandle buffer) {
+	rendergraph::ResourceIndex index =
+		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Buffer);
 
 	m_data.resourceNames[index] = name;
 	m_data.externalBuffers.push_back({ index, buffer });
@@ -61,10 +51,8 @@ TaskIndex RenderGraph::addTask(std::string name, Task task) {
 
 	return index;
 }
-void RenderGraph::update(std::vector<TaskIndex> tasks, const Scene& scene) {
-	rendergraph::internal::ExecutionInfo info = build(tasks, scene);
-	m_runner.emplace(
-		m_data, m_swapchain, m_resourceManager, m_materialManager, info
-	);
+void RenderGraph::update(TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene) {
+	rendergraph::internal::ExecutionInfo info = build(outputTask, optionalTasks, scene);
+	m_runner.emplace(m_data, m_swapchain, m_resourceManager, m_materialManager, info);
 }
 bool RenderGraph::submit(const Scene& scene) { return m_runner->submit(scene); }

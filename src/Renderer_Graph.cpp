@@ -23,10 +23,7 @@ struct ProceduralSkyRequiredPasses {
 	TaskIndex gbufferPass;
 };
 ProceduralSkyOutputPasses proceduralSky(
-	std::vector<TaskIndex>& passes,
-	RenderGraph& graph,
-	MaterialManager& materialManager,
-	ProceduralSkyRequiredPasses previousPasses
+	RenderGraph& graph, MaterialManager& materialManager, ProceduralSkyRequiredPasses previousPasses
 ) {
 	TaskIndex transmittanceLUTPass = graph.addTask(
 		"transmittanceLUT",
@@ -57,7 +54,6 @@ ProceduralSkyOutputPasses proceduralSky(
 		},
 		materialManager.getMaterialIndex("transmittanceLUT")
 	);
-	passes.push_back(transmittanceLUTPass);
 
 	struct MultiScatteringLUTData {
 		TaskIndex transmittanceLUTPass;
@@ -110,8 +106,6 @@ ProceduralSkyOutputPasses proceduralSky(
 			.material = materialManager.getMaterialIndex("multiscatteringLUT"),
 		}
 	);
-
-	passes.push_back(multiscatteringLUTPass);
 
 	struct SkyViewLUTData {
 		MaterialIndex material;
@@ -167,8 +161,6 @@ ProceduralSkyOutputPasses proceduralSky(
 		}
 	);
 
-	passes.push_back(skyviewLUTPass);
-
 	struct SkyLightingData {
 		MaterialIndex material;
 		TaskIndex skyviewLUT;
@@ -207,7 +199,6 @@ ProceduralSkyOutputPasses proceduralSky(
 			.skyviewLUT = skyviewLUTPass,
 		}
 	);
-	passes.push_back(skyLighting);
 
 	return {
 		.skyLighting = skyLighting,
@@ -223,7 +214,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	m_graph.registerBuffer("index_buffer", buffers[2]);
 	m_graph.registerBuffer("instance_buffer", buffers[3]);
 
-	std::vector<TaskIndex> passes;
+	std::vector<TaskIndex> optionalPasses;
 
 	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
 	auto pbrMaterialInstances = m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
@@ -235,7 +226,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 			.build = SceneData::Build,
 		}
 	);
-	passes.push_back(sceneUpdate);
 	TaskIndex shadowMapPass = m_graph.addTask(
 		"shadow_map",
 		{
@@ -248,7 +238,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 			.material = m_materialManager.getMaterialIndex("shadowmap"),
 		}
 	);
-	passes.push_back(shadowMapPass);
 
 	TaskIndex gbufferPass = m_graph.addTask(
 		"gbuffer",
@@ -263,10 +252,8 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 			.pbrMaterialInstances = pbrMaterialInstances,
 		}
 	);
-	passes.push_back(gbufferPass);
 
 	auto proceduralSkyPasses = proceduralSky(
-		passes,
 		m_graph,
 		m_materialManager,
 		{
@@ -347,7 +334,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 		}
 
 	);
-	passes.push_back(lightingDeferred);
 
 	struct SkyboxData {
 		TaskIndex sceneUpdatePass;
@@ -407,7 +393,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 			.skyboxMaterial = m_materialManager.getMaterialIndex("skybox"),
 		}
 	);
-	passes.push_back(skyboxPass);
+	optionalPasses.push_back(skyboxPass);
 
 	struct SimplePassData {
 		TaskIndex previousPass;
@@ -455,8 +441,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 
 	);
 
-	passes.push_back(compositionPass);
-
 	TaskIndex fxaa = m_graph.addTask(
 		"fxaa",
 		{
@@ -498,7 +482,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 			.material = m_materialManager.getMaterialIndex("fxaa"),
 		}
 	);
-	passes.push_back(fxaa);
 
 	TaskIndex ui = m_graph.addTask(
 		"UI",
@@ -522,8 +505,9 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 		},
 		fxaa
 	);
-	passes.push_back(ui);
-	m_graph.update(passes, scene);
+	optionalPasses.push_back(ui);
+	m_optionalPasses = optionalPasses;
+	m_graph.update(optionalPasses.back(), m_optionalPasses, scene);
 
-	return passes;
+	return optionalPasses;
 }

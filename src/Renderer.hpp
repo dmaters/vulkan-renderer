@@ -23,7 +23,7 @@ private:
 	MaterialManager m_materialManager;
 	RenderGraph m_graph;
 
-	std::vector<TaskIndex> m_passes;
+	std::vector<TaskIndex> m_optionalPasses;
 
 	Scene m_currentScene;
 

@@ -21,28 +21,20 @@ private:
 	std::optional<rendergraph::internal::RenderGraphRunner> m_runner;
 
 	rendergraph::internal::ExecutionInfo build(
-		const std::vector<TaskIndex>& taskList, const Scene& scene
+		TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene
 	);
 
 public:
-	RenderGraph(
-		Swapchain& swapchain,
-		ResourceManager& resourceManager,
-		MaterialManager& materialManager
-	);
+	RenderGraph(Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager);
 
-	rendergraph::ResourceIndex registerImage(
-		std::string name, ImageHandle handle
-	);
-	rendergraph::ResourceIndex registerBuffer(
-		std::string name, BufferHandle handle
-	);
+	rendergraph::ResourceIndex registerImage(std::string name, ImageHandle handle);
+	rendergraph::ResourceIndex registerBuffer(std::string name, BufferHandle handle);
 
 	TaskIndex addTask(std::string name, Task task, auto taskData);
 
 	TaskIndex addTask(std::string name, Task task);
 
-	void update(std::vector<TaskIndex> tasks, const Scene& scene);
+	void update(TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene);
 	bool submit(const Scene& scene);
 };
 
