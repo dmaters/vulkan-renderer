@@ -5,8 +5,4 @@
 #include "../Task.hpp"
 #include "material/MaterialManager.hpp"
 
-void ComputePass(
-	Task::BuildContext& context,
-	MaterialIndex materialIndex,
-	glm::uvec3 dispatchSize
-);
+void ComputePass(Task::BuildContext& context, MaterialIndex materialIndex, glm::uvec3 dispatchSize);

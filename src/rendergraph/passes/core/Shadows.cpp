@@ -1,16 +1,22 @@
-#include "ShadowPass.hpp"
-
 #include <string>
 
-#include "../BuildContext.hpp"
-#include "../SetupContext.hpp"
-#include "DrawPass.hpp"
-#include "RenderPass.hpp"
-#include "SceneData.hpp"
+#include "../RenderPass.hpp"
+#include "rendergraph/BuildContext.hpp"
+#include "rendergraph/RenderGraphPasses.hpp"
+#include "rendergraph/SetupContext.hpp"
 
 static const int32_t CASCADE_SIZE = 2048;
 
-Task::Dependencies ShadowPass::Setup(Task::SetupContext& context) {
+struct ShadowPass {
+	std::array<rendergraph::ResourceIndex, 3> _indirectBuffer;
+	std::array<rendergraph::ResourceIndex, 3> _primitiveMap;
+
+	TaskIndex sceneData;
+
+	MaterialIndex material;
+};
+
+static Task::Dependencies setup(Task::SetupContext& context) {
 	auto& data = context.getData<ShadowPass>();
 	uint32_t indirectBufferSize =
 		static_cast<uint32_t>(context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand) * 3);
@@ -57,8 +63,8 @@ Task::Dependencies ShadowPass::Setup(Task::SetupContext& context) {
 
 	);
 
-	auto lightBuffer = context.getReference(data.sceneUpdateTask, SceneData::Slot::Lights);
-	auto cameraBuffer = context.getReference(data.sceneUpdateTask, SceneData::Slot::Camera);
+	auto lightBuffer = context.getReference(data.sceneData, rendergraph::passes::core::SceneDataSlots::Lights);
+	auto cameraBuffer = context.getReference(data.sceneData, rendergraph::passes::core::SceneDataSlots::Camera);
 
 	rendergraph::ResourceIndex shadowAtlas = context.createImage(
 		"shadow_atlas",
@@ -85,10 +91,10 @@ Task::Dependencies ShadowPass::Setup(Task::SetupContext& context) {
 	};
 }
 
-void ShadowPass::Build(Task::BuildContext& context) {
+static void build(Task::BuildContext& context) {
 	auto data = context.getData<ShadowPass>();
 
-	DrawPass::LoadIndirect(
+	RenderPass::LoadIndirect(
 		context.commandBuffer,
 		context.scene.buckets.at(data.material),
 		context.scene.primitives,
@@ -109,8 +115,22 @@ void ShadowPass::Build(Task::BuildContext& context) {
 		}
 		);
 
-		DrawPass::Indirect(context, data.material, context.scene.buckets.at(data.material), i, 2, 3);
+		RenderPass::IndirectDraw(context, data.material, context.scene.buckets.at(data.material), i, 2, 3);
 
 		RenderPass::End(context.commandBuffer);
 	}
+}
+TaskIndex rendergraph::passes::core::shadows(PassBuildContext& context, TaskIndex sceneData) {
+	return context.renderGraph.addTask(
+		"shadow_map",
+		{
+			.setup = setup,
+			.build = build,
+
+		},
+		ShadowPass {
+			.sceneData = sceneData,
+			.material = context.materialManager.getMaterialIndex("shadowmap"),
+		}
+	);
 }

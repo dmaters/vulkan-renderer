@@ -6,6 +6,7 @@
 namespace ResourceUsage {
 enum class Type {
 	Undefined,
+	None,
 	SampledRead,
 	ShaderWrite,
 	ShaderRead,
@@ -22,9 +23,7 @@ enum class Type {
 	TransferDst,
 };
 
-std::optional<vk::DescriptorType> GetDescriptorType(
-	ResourceUsage::Type usage, bool isBuffer
-);
+std::optional<vk::DescriptorType> GetDescriptorType(ResourceUsage::Type usage, bool isBuffer);
 
 struct Access {
 	vk::PipelineStageFlags2 stage;
@@ -34,4 +33,4 @@ struct Access {
 Access GetAccess(Type type);
 
 bool IsReadAccess(Type type);
-};  // namespace ResourceUsage
+};	// namespace ResourceUsage

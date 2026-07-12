@@ -1,12 +1,11 @@
-#include "SceneData.hpp"
-
 #include <glm/glm.hpp>
 
-#include "../BuildContext.hpp"
-#include "../SetupContext.hpp"
 #include "material/MaterialDefinitions.hpp"
+#include "rendergraph/BuildContext.hpp"
+#include "rendergraph/RenderGraphPasses.hpp"
+#include "rendergraph/SetupContext.hpp"
 
-Task::Dependencies SceneData::Setup(Task::SetupContext& context) {
+static Task::Dependencies setup(Task::SetupContext& context) {
 	auto cameraBuffer = context.createBuffer(
 		"camera_buffer",
 		ResourceManager::BufferDescription {
@@ -30,7 +29,8 @@ Task::Dependencies SceneData::Setup(Task::SetupContext& context) {
 	    },
 	};
 }
-void SceneData::Build(Task::BuildContext& context) {
+
+static void build(Task::BuildContext& context) {
 	glm::mat4 view = context.scene.camera.getViewMatrix();
 	glm::mat4 proj = context.scene.camera.getProjectionMatrix();
 
@@ -41,13 +41,23 @@ void SceneData::Build(Task::BuildContext& context) {
 		.invProj = glm::inverse(proj),
 	};
 
-	Buffer& cameraBuffer = context.getOutput<Buffer&>(SceneData::Slot::Camera);
+	Buffer& cameraBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Camera);
 
 	context.commandBuffer.updateBuffer(cameraBuffer.buffer, 0, sizeof(cameraView), &cameraView);
 
 	MaterialDefinitions::Light light =
 		context.scene.lights[0].getShaderObject(context.scene.camera, context.scene.size);
-	Buffer& lightBuffer = context.getOutput<Buffer&>(SceneData::Slot::Lights);
+	Buffer& lightBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Lights);
 
 	context.commandBuffer.updateBuffer(lightBuffer.buffer, 0, sizeof(MaterialDefinitions::Light), &light);
+}
+
+TaskIndex rendergraph::passes::core::sceneData(PassBuildContext& context) {
+	return context.renderGraph.addTask(
+		"scene_data",
+		{
+			.setup = setup,
+			.build = build,
+		}
+	);
 }

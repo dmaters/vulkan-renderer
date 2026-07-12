@@ -1,9 +1,20 @@
 #pragma once
 
+#include <vulkan/vulkan.hpp>
+
 #include "../BuildContext.hpp"
 
-struct DrawPass {
-	static void Quad(Task::BuildContext& context, MaterialIndex materialIndex);
+enum class AttachmentOp {
+	ClearWrite,
+	ReadWrite,
+	Read,
+};
+
+struct RenderPass {
+	static void Begin(Task::BuildContext& context, AttachmentOp color, AttachmentOp depth, vk::Rect2D viewport);
+	static void Begin(Task::BuildContext& context, AttachmentOp color, AttachmentOp depth);
+
+	static void QuadDraw(Task::BuildContext& context, MaterialIndex materialIndex);
 	static void LoadIndirect(
 		vk::CommandBuffer& commandBuffer,
 		const std::vector<uint32_t>& primitivesIndices,
@@ -13,7 +24,7 @@ struct DrawPass {
 		Buffer& primitiveMapLocal,
 		Buffer& primitiveMapDevice
 	);
-	static void Indirect(
+	static void IndirectDraw(
 		Task::BuildContext& context,
 		MaterialIndex material,
 		const std::vector<uint32_t>& primitives,
@@ -21,4 +32,6 @@ struct DrawPass {
 		std::size_t indirectSlot,
 		std::size_t primitiveMapSlot
 	);
+
+	static void End(vk::CommandBuffer& commandBuffer) { commandBuffer.endRendering(); }
 };

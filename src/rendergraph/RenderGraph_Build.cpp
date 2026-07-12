@@ -1,6 +1,4 @@
-#include <algorithm>
 #include <cassert>
-#include <ranges>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -112,6 +110,8 @@ ExecutionInfo RenderGraph::build(
 	for (TaskIndex task : tasks) {
 		taskBarriers.clear();
 		for (auto [index, usage] : references.inputs[task]) {
+			if (usage == ResourceUsage::Type::None) continue;
+
 			taskBarriers.push_back(
 				{
 					.previousUsage = resourceUsages[index],
@@ -123,6 +123,7 @@ ExecutionInfo RenderGraph::build(
 			resourceUsages[index] = usage;
 		}
 		for (auto [index, usage] : references.outputs[task]) {
+			if (usage == ResourceUsage::Type::None) continue;
 			taskBarriers.push_back(
 				{
 					.previousUsage = resourceUsages[index],

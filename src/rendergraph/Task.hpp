@@ -24,6 +24,6 @@ struct Task {
 		std::vector<ResourceDependency> outputs = {};
 	};
 
-	Dependencies (*setup)(SetupContext&);
-	void (*build)(BuildContext&);
+	Dependencies (*setup)(SetupContext&) = [](SetupContext&) -> Dependencies { return {}; };
+	void (*build)(BuildContext&) = [](BuildContext&) {};
 };

@@ -1,16 +1,34 @@
-#include "GBufferPass.hpp"
-
 #include <string>
 
-#include "../BuildContext.hpp"
-#include "../SetupContext.hpp"
-#include "DrawPass.hpp"
-#include "FrustumCulling.hpp"
-#include "RenderPass.hpp"
-#include "SceneData.hpp"
+#include "../FrustumCulling.hpp"
+#include "../RenderPass.hpp"
+#include "rendergraph/RenderGraph.hpp"
+#include "rendergraph/RenderGraphPasses.hpp"
+#include "rendergraph/SetupContext.hpp"
 #include "ui/UI.hpp"
 
-Task::Dependencies GBUfferPass::Setup(Task::SetupContext& context) {
+struct GBUfferPass {
+	TaskIndex sceneData;
+	MaterialIndex material;
+	rendergraph::ResourceIndex pbrMaterialData;
+	rendergraph::ResourceIndex pbrMaterialInstances;
+
+	std::array<rendergraph::ResourceIndex, 3> _indirectBuffer;
+	std::array<rendergraph::ResourceIndex, 3> _primitiveMap;
+
+	std::array<rendergraph::ResourceIndex, 3> _alphaIndirectBuffer;
+	std::array<rendergraph::ResourceIndex, 3> _alphaPrimitiveMap;
+
+	enum Slot {
+		Albedo,
+		Normal,
+		WorldPos,
+		RoughnessMetallic,
+		Depth
+	};
+};
+
+static Task::Dependencies setup(Task::SetupContext& context) {
 	auto& data = context.getData<GBUfferPass>();
 	uint32_t indirectBufferSize =
 		static_cast<uint32_t>(context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand));
@@ -54,7 +72,7 @@ Task::Dependencies GBUfferPass::Setup(Task::SetupContext& context) {
 		},
 		ResourceManager::MemoryLocation::HostVisible
 	);
-	auto cameraBuffer = context.getReference(data.sceneUpdatePass, SceneData::Slot::Camera);
+	auto cameraBuffer = context.getReference(data.sceneData, rendergraph::passes::core::SceneDataSlots::Camera);
 
 	auto resolution = context.scene.camera.getResolution();
 	auto albedo = context.createImage(
@@ -142,7 +160,7 @@ Task::Dependencies GBUfferPass::Setup(Task::SetupContext& context) {
 		 },
 	};
 }
-void GBUfferPass::Build(Task::BuildContext& context) {
+static void build(Task::BuildContext& context) {
 	auto& data = context.getData<GBUfferPass>();
 
 	auto visiblePrimitives =
@@ -150,7 +168,7 @@ void GBUfferPass::Build(Task::BuildContext& context) {
 
 	UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
 
-	DrawPass::LoadIndirect(
+	RenderPass::LoadIndirect(
 		context.commandBuffer,
 		visiblePrimitives,
 		context.scene.primitives,
@@ -162,7 +180,25 @@ void GBUfferPass::Build(Task::BuildContext& context) {
 
 	RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite);
 
-	DrawPass::Indirect(context, data.material, visiblePrimitives, 0, 3, 4);
+	RenderPass::IndirectDraw(context, data.material, visiblePrimitives, 0, 3, 4);
 
 	RenderPass::End(context.commandBuffer);
+}
+
+TaskIndex rendergraph::passes::core::gbuffer(
+	PassBuildContext& context, const ExternalResources& resources, TaskIndex sceneData
+) {
+	return context.renderGraph.addTask(
+		"gbuffer",
+		{
+			.setup = setup,
+			.build = build,
+		},
+		GBUfferPass {
+			.sceneData = sceneData,
+			.material = context.materialManager.getMaterialIndex("gbuffer"),
+			.pbrMaterialData = resources.pbrMaterialData,
+			.pbrMaterialInstances = resources.pbrMaterialInstances,
+		}
+	);
 }
