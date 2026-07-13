@@ -180,7 +180,7 @@ static void build(Task::BuildContext& context) {
 
 	RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite);
 
-	RenderPass::IndirectDraw(context, data.material, visiblePrimitives, 0, 3, 4);
+	RenderPass::IndirectDraw(context, data.material, visiblePrimitives, 0, 3);
 
 	RenderPass::End(context.commandBuffer);
 }
