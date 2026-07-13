@@ -60,10 +60,9 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	optionalPasses.push_back(fxaa);
 
 	auto ui = core::ui(context, sdrOutput);
-	optionalPasses.push_back(ui);
 
 	m_optionalPasses = optionalPasses;
-	m_graph.update(optionalPasses.back(), m_optionalPasses, scene);
+	m_graph.update(ui, m_optionalPasses, scene);
 
 	return optionalPasses;
 }
