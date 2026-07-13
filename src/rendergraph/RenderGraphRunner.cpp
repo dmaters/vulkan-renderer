@@ -7,24 +7,155 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "BuildContext.hpp"
+#include "DataProvider.hpp"
 #include "Instance.hpp"
 #include "Swapchain.hpp"
+#include "Task.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/GraphData.hpp"
 #include "resources/ResourceManager.hpp"
-#include "tasks/Task.hpp"
-#include "tasks/TaskContext.hpp"
 #include "ui/UI.hpp"
 
 using namespace rendergraph::internal;
+struct ResourceAllocationData {
+	std::vector<ResourceManager::ImageDescription> imageDescriptions;
+	std::vector<rendergraph::ResourceIndex> imagesIndices;
+
+	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
+	std::vector<rendergraph::ResourceIndex> bufferIndices;
+};
+std::optional<ResourceManager::AllocationIndex> mapResources(
+	ResourceManager& resourceManager,
+	ResourceAllocationData& allocationData,
+	ResourceManager::MemoryLocation location,
+	std::unordered_map<rendergraph::ResourceIndex, ImageHandle>& imageMap,
+	std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& bufferMap,
+	std::unordered_map<rendergraph::ResourceIndex, std::string>& names
+) {
+	if (allocationData.imageDescriptions.size() == 0 &&
+	    allocationData.bufferDescriptions.size() == 0)
+		return std::nullopt;
+
+	ResourceManager::AllocationIndex allocation =
+		resourceManager.createResources(
+			allocationData.imageDescriptions,
+			allocationData.bufferDescriptions,
+			location
+		);
+
+	auto& imageHandles = resourceManager.getImages(allocation);
+
+	for (int i = 0; i < imageHandles.size(); i++) {
+		rendergraph::ResourceIndex index = allocationData.imagesIndices[i];
+		imageMap[index] = imageHandles[i];
+		resourceManager.setName(names[index], imageHandles[i]);
+	}
+
+	auto& bufferHandles = resourceManager.getBuffers(allocation);
+
+	for (int i = 0; i < bufferHandles.size(); i++) {
+		rendergraph::ResourceIndex index = allocationData.bufferIndices[i];
+		bufferMap[index] = bufferHandles[i];
+		resourceManager.setName(names[index], bufferHandles[i]);
+	}
+
+	return allocation;
+}
+
+struct BuildData {
+	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
+	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
+	std::optional<ResourceManager::AllocationIndex> deviceAllocation;
+	std::optional<ResourceManager::AllocationIndex> sharedAllocation;
+	std::optional<ResourceManager::AllocationIndex> hostAllocation;
+};
+BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
+	ResourceAllocationData deviceAllocationData;
+	ResourceAllocationData sharedAllocationData;
+	ResourceAllocationData hostAllocationData;
+
+	for (auto [index, data] : execInfo.resources.images) {
+		ResourceAllocationData* currentdata;
+		switch (data.location) {
+			case ResourceManager::MemoryLocation::Device:
+				currentdata = &deviceAllocationData;
+				break;
+			case ResourceManager::MemoryLocation::HostVisible:
+				currentdata = &sharedAllocationData;
+				break;
+			case ResourceManager::MemoryLocation::Host:
+				currentdata = &hostAllocationData;
+				break;
+		}
+
+		currentdata->imageDescriptions.push_back(data.description);
+		currentdata->imagesIndices.push_back(index);
+	}
+	for (auto [index, data] : execInfo.resources.buffers) {
+		ResourceAllocationData* currentdata;
+		switch (data.location) {
+			case ResourceManager::MemoryLocation::Device:
+				currentdata = &deviceAllocationData;
+				break;
+			case ResourceManager::MemoryLocation::HostVisible:
+				currentdata = &sharedAllocationData;
+				break;
+			case ResourceManager::MemoryLocation::Host:
+				currentdata = &hostAllocationData;
+				break;
+		}
+
+		currentdata->bufferDescriptions.push_back(data.description);
+		currentdata->bufferIndices.push_back(index);
+	}
+
+	// TODO: Handle indexing better
+	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
+	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
+
+	auto deviceAllocation = mapResources(
+		resourceManager,
+		deviceAllocationData,
+		ResourceManager::MemoryLocation::Device,
+		imageMap,
+		bufferMap,
+		execInfo.resources.names
+	);
+	auto sharedAllocation = mapResources(
+		resourceManager,
+		sharedAllocationData,
+		ResourceManager::MemoryLocation::HostVisible,
+		imageMap,
+		bufferMap,
+		execInfo.resources.names
+	);
+	auto hostAllocation = mapResources(
+		resourceManager,
+		hostAllocationData,
+		ResourceManager::MemoryLocation::Host,
+		imageMap,
+		bufferMap,
+		execInfo.resources.names
+	);
+
+	return {
+		.imageMap = imageMap,
+		.bufferMap = bufferMap,
+		.deviceAllocation = deviceAllocation,
+		.sharedAllocation = sharedAllocation,
+		.hostAllocation = hostAllocation,
+	};
+}
 
 RenderGraphRunner::RenderGraphRunner(
-	const GraphData& data,
+	GraphData& graphData,
 	Swapchain& swapchain,
 	ResourceManager& resourceManager,
-	MaterialManager& materialManager
+	MaterialManager& materialManager,
+	ExecutionInfo execInfo
 ) :
-	m_data(data),
+	m_data(graphData),
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
 	m_materialManager(materialManager) {
@@ -34,55 +165,55 @@ RenderGraphRunner::RenderGraphRunner(
 		device.createSemaphore({}),
 		device.createSemaphore({}),
 	};
-	build();
-}
 
-void RenderGraphRunner::clearUnusedResources() {
-	if (m_swapchainFlushCounter > 1)
-		m_swapchainFlushCounter--;
-	else if (m_swapchainFlushCounter == 1) {
-		m_resourceManager.freeAllocation(m_oldResolutionDependentAllocation);
-		m_swapchain.flush();
-		m_swapchainFlushCounter = 0;
-	}
-}
-void RenderGraphRunner::buildSwapchainResources() {
-	std::vector<ResourceManager::ImageDescription>
-		resolutionDependentImagesDescription;
+	m_execInfo = execInfo;
+	m_initialized = false;
 
-	for (auto& [index, ratio] : m_data.swapchainImageRatio) {
-		auto creationInfo = m_data.images.at(index);
+	BuildData data = build(execInfo, m_resourceManager);
 
-		float multiplier = ratio > 0 ? ratio : (1 / -ratio);
+	m_deviceAllocation = data.deviceAllocation;
+	m_sharedAllocation = data.sharedAllocation;
+	m_deviceAllocation = data.deviceAllocation;
 
-		vk::Extent2D res = m_swapchain.getResolution();
-		creationInfo.width = res.width * multiplier;
-		creationInfo.height = res.height * multiplier;
-
-		resolutionDependentImagesDescription.push_back(creationInfo);
+	m_images = data.imageMap;
+	m_buffers = data.bufferMap;
+	for (auto& [index, handle] : graphData.externalImages) {
+		m_images[index] = handle;
 	}
 
-	m_resolutionDependentAllocation = m_resourceManager.createResources(
-		resolutionDependentImagesDescription,
-		{},
-		ResourceManager::MemoryLocation::Device
+	for (auto& [index, handle] : graphData.externalBuffers) {
+		m_buffers[index] = handle;
+	}
+	// Finish initialization
+	uint32_t queryCount =
+		static_cast<uint32_t>(execInfo.tasks.size() * 3 * 2 + 6);
+	// TODO: Dispose of old query pool to reduce leaks
+	m_debugQueryPool = device.createQueryPool(
+		vk::QueryPoolCreateInfo {
+			.queryType = vk::QueryType::eTimestamp,
+			.queryCount = queryCount,
+		}
 	);
-
-	auto& images = m_resourceManager.getImages(m_resolutionDependentAllocation);
-	int i = 0;
-	for (auto& [index, _] : m_data.swapchainImageRatio) {
-		m_images[index] = images[i];
-		m_resourceManager.setName(m_data.resourceNames[index], images[i]);
-		i++;
-	}
+	device.resetQueryPool(m_debugQueryPool, 0, queryCount);
 }
+RenderGraphRunner::~RenderGraphRunner() {
+	Instance::Get().device.waitIdle();
 
+	if (m_deviceAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_deviceAllocation);
+
+	if (m_sharedAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_sharedAllocation);
+
+	if (m_hostAllocation.has_value())
+		m_resourceManager.freeAllocation(*m_hostAllocation);
+}
 void writeBarrier(
 	vk::CommandBuffer commandBuffer,
-	std::span<const ExecutionInfo::Barrier> barriers,
-	std::unordered_map<ResourceIndex, ImageHandle>& images,
-	std::unordered_map<ResourceIndex, BufferHandle>& buffers,
-	ResourceManager& resourceManager
+	const std::span<ExecutionInfo::Barrier>& barriers,
+	const std::unordered_map<rendergraph::ResourceIndex, ImageHandle>& images,
+	const std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& buffers,
+	const ResourceManager& resourceManager
 ) {
 	if (barriers.size() == 0) return;
 
@@ -91,15 +222,17 @@ void writeBarrier(
 	std::vector<vk::BufferMemoryBarrier2> bufferBarriers;
 	bufferBarriers.reserve(barriers.size());
 
-	for (ExecutionInfo::Barrier barrier : barriers) {
+	for (auto& barrier : barriers) {
 		ResourceUsage::Access previousAccess =
 			ResourceUsage::GetAccess(barrier.previousUsage);
 
 		ResourceUsage::Access currentAccess =
 			ResourceUsage::GetAccess(barrier.currentUsage);
 
-		if (images.contains(barrier.index)) {
-			Image& image = resourceManager.getImage(images.at(barrier.index));
+		if (ResourceIndexer::ResourceIndex_getType(barrier.index) ==
+		    ResourceIndexer::ResourceType::Image) {
+			const Image& image =
+				resourceManager.getImage(images.at(barrier.index));
 
 			imageBarriers.push_back(
 			    {
@@ -118,7 +251,7 @@ void writeBarrier(
                 }
 			);
 		} else {
-			Buffer& buffer =
+			const Buffer& buffer =
 				resourceManager.getBuffer(buffers.at(barrier.index));
 
 			bufferBarriers.push_back(
@@ -147,26 +280,95 @@ void writeBarrier(
 	);
 }
 
-void RenderGraphRunner::rebuildSwapchain() {
-	m_swapchain.rebuild();
-	if (m_swapchain.getResolution() == vk::Extent2D(0)) return;
-	m_oldResolutionDependentAllocation = m_resolutionDependentAllocation;
-	buildSwapchainResources();
-	m_swapchainFlushCounter = 4;
-}
+bool RenderGraphRunner::updateTimings() const {
+	if (m_currentFrame < 3) return true;
 
+	vk::Device device = Instance::Get().device;
+	uint8_t currentFrameInFlight = m_currentFrame % 3;
+	uint32_t timestampsCount = m_execInfo.tasks.size() * 2 + 2;
+
+	std::vector<uint64_t> timestamps(timestampsCount);
+	vk::Result result = device.getQueryPoolResults(
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight,
+		timestampsCount,
+		sizeof(uint64_t) * timestampsCount,
+		timestamps.data(),
+		sizeof(uint64_t),
+		vk::QueryResultFlagBits::e64
+	);
+	if (result != vk::Result::eSuccess) return false;
+
+	device.resetQueryPool(
+		m_debugQueryPool,
+		timestampsCount * currentFrameInFlight,
+		timestampsCount
+	);
+
+	uint32_t timestampOffset = 2;
+
+	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
+		uint32_t taskIndex = m_execInfo.tasks[i];
+
+		if (taskIndex >= m_data.tasks.size()) continue;  // It's a barrier
+
+		float ms =
+			static_cast<float>(
+				timestamps[timestampOffset + 1] - timestamps[timestampOffset]
+			) /
+			10e6;
+
+		float pastFrameTime =
+			UI::Data.performanceData
+				.taskFrameTime[m_data.taskMetadata[taskIndex].name];
+
+		UI::Data.performanceData
+			.taskFrameTime[m_data.taskMetadata[taskIndex].name] =
+			(pastFrameTime / 64 * 63) + ms / 64;
+
+		timestampOffset += 2;
+	}
+
+	float lastGpuFrameTime = UI::Data.performanceData.gpuFrameTime;
+	float gpuMS = static_cast<float>(timestamps[1] - timestamps[0]) / 10e6;
+	UI::Data.performanceData.gpuFrameTime =
+		(lastGpuFrameTime / 64 * 63) + gpuMS / 64;
+
+	UI::Data.performanceData.cpuFrameTime =
+		(UI::Data.performanceData.cpuFrameTime / 64 * 63) +
+		m_lastCpuFrameTime / 64;
+
+	double lastTotalFrameTime =
+		std::chrono::duration_cast<std::chrono::duration<double>>(
+			std::chrono::steady_clock::now() - m_beginFrameTimestamp
+		)
+			.count();
+
+	float currentFrameRate = lastTotalFrameTime > 0 ? (1.0 / lastTotalFrameTime)
+	                                                : 0;
+	UI::Data.performanceData.frameRate = static_cast<uint16_t>(
+		UI::Data.performanceData.frameRate / 64.0 * 63.0 +
+		currentFrameRate / 64.0
+	);
+
+	return true;
+}
 void RenderGraphRunner::outputToSwapchain(
-	vk::CommandBuffer& commandBuffer, ResourceIndex output, uint32_t imageIndex
-) {
-	ExecutionInfo::Barrier firstBarrier = {
-		.previousUsage = m_data.finalUsages.at(output),
-		.currentUsage = ResourceUsage::Type::TransferSrc,
-		.index = output,
+	vk::CommandBuffer& commandBuffer, uint32_t imageIndex
+) const {
+	ResourceIndex finalImage = m_execInfo.outputImage;
+
+	rendergraph::internal::ExecutionInfo::Barrier firstBarrier[] = {
+		{
+         .previousUsage = ResourceUsage::Type::ColorAttachmentWrite,
+         .currentUsage = ResourceUsage::Type::TransferSrc,
+         .index = finalImage,
+		 }
 	};
 
 	writeBarrier(
 		commandBuffer,
-		std::span<const ExecutionInfo::Barrier>({ firstBarrier }),
+		std::span<ExecutionInfo::Barrier>(firstBarrier),
 		m_images,
 		m_buffers,
 		m_resourceManager
@@ -196,7 +398,7 @@ void RenderGraphRunner::outputToSwapchain(
 		}
 	);
 
-	Image& resultImage = m_resourceManager.getImage(m_images[output]);
+	Image& resultImage = m_resourceManager.getImage(m_images.at(finalImage));
 
 	commandBuffer.blitImage(
 		resultImage.image,
@@ -240,15 +442,17 @@ void RenderGraphRunner::outputToSwapchain(
 		vk::Filter::eLinear
 	);
 
-	ExecutionInfo::Barrier secondBarrier = {
-		.previousUsage = ResourceUsage::Type::TransferSrc,
-		.currentUsage = m_data.finalUsages.at(output),
-		.index = output,
+	ExecutionInfo::Barrier secondBarrier[] = {
+		{
+         .previousUsage = ResourceUsage::Type::TransferSrc,
+         .currentUsage = ResourceUsage::Type::ColorAttachmentWrite,
+         .index = finalImage,
+		 }
 	};
 
 	writeBarrier(
 		commandBuffer,
-		std::span<const ExecutionInfo::Barrier>({ secondBarrier }),
+		std::span<ExecutionInfo::Barrier>(secondBarrier),
 		m_images,
 		m_buffers,
 		m_resourceManager
@@ -269,102 +473,7 @@ void RenderGraphRunner::outputToSwapchain(
 	);
 }
 
-void RenderGraphRunner::update(ResourceIndex output, ExecutionInfo execInfo) {
-	m_output = output;
-	m_execInfo = execInfo;
-	m_initialized = false;
-
-	vk::Device device = Instance::Get().device;
-
-	uint32_t queryCount =
-		static_cast<uint32_t>(execInfo.tasks.size() * 3 * 2 + 6);
-	// TODO: Dispose of old query pool to reduce leaks
-	m_debugQueryPool = device.createQueryPool(
-		vk::QueryPoolCreateInfo {
-			.queryType = vk::QueryType::eTimestamp,
-			.queryCount = queryCount,
-		}
-	);
-	device.resetQueryPool(m_debugQueryPool, 0, queryCount);
-}
-
-bool RenderGraphRunner::updateTimings() const {
-	if (m_currentFrame < 3) return true;
-
-	vk::Device device = Instance::Get().device;
-	uint8_t currentFrameInFlight = m_currentFrame % 3;
-	uint32_t timestampsCount = m_execInfo.tasks.size() * 2 + 2;
-
-	std::vector<uint64_t> timestamps(timestampsCount);
-	vk::Result result = device.getQueryPoolResults(
-		m_debugQueryPool,
-		timestampsCount * currentFrameInFlight,
-		timestampsCount,
-		sizeof(uint64_t) * timestampsCount,
-		timestamps.data(),
-		sizeof(uint64_t),
-		vk::QueryResultFlagBits::e64
-	);
-	if (result != vk::Result::eSuccess) return false;
-
-	device.resetQueryPool(
-		m_debugQueryPool,
-		timestampsCount * currentFrameInFlight,
-		timestampsCount
-	);
-
-	uint32_t timestampOffset = 2;
-
-	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
-		uint32_t taskIndex = m_execInfo.tasks[i];
-
-		if (taskIndex >= m_data.tasks.size()) continue;  // It's a barrier
-
-		float ms =
-			static_cast<float>(
-				timestamps[timestampOffset + 1] - timestamps[timestampOffset]
-			) /
-			10e6;
-
-		float pastFrameTime =
-			UI::Data.performanceData
-				.taskFrameTime[m_data.taskData[taskIndex].name];
-
-		UI::Data.performanceData
-			.taskFrameTime[m_data.taskData[taskIndex].name] =
-			(pastFrameTime / 64 * 63) + ms / 64;
-
-		timestampOffset += 2;
-	}
-
-	float lastGpuFrameTime = UI::Data.performanceData.gpuFrameTime;
-	float gpuMS = static_cast<float>(timestamps[1] - timestamps[0]) / 10e6;
-	UI::Data.performanceData.gpuFrameTime =
-		(lastGpuFrameTime / 64 * 63) + gpuMS / 64;
-
-	UI::Data.performanceData.cpuFrameTime =
-		(UI::Data.performanceData.cpuFrameTime / 64 * 63) +
-		m_lastCpuFrameTime / 64;
-
-	double lastTotalFrameTime =
-		std::chrono::duration_cast<std::chrono::duration<double>>(
-			std::chrono::steady_clock::now() - m_beginFrameTimestamp
-		)
-			.count();
-
-	float currentFrameRate = lastTotalFrameTime > 0 ? (1.0 / lastTotalFrameTime)
-	                                                : 0;
-	UI::Data.performanceData.frameRate = static_cast<uint16_t>(
-		UI::Data.performanceData.frameRate / 64.0 * 63.0 +
-		currentFrameRate / 64.0
-	);
-
-	return true;
-}
-
-void RenderGraphRunner::submit(const Scene& scene) {
-	clearUnusedResources();
-
+bool RenderGraphRunner::submit(const Scene& scene) {
 	vk::Device device = Instance::Get().device;
 
 	uint8_t currentFrameInFlight = m_currentFrame % 3;
@@ -386,11 +495,10 @@ void RenderGraphRunner::submit(const Scene& scene) {
 	try {
 		auto [result, index] = device.acquireNextImage2KHR(acquireInfo);
 		imageIndex = index;
-		if (result == vk::Result::eSuboptimalKHR) rebuildSwapchain();
+		if (result == vk::Result::eSuboptimalKHR) return false;
 
 	} catch (vk::OutOfDateKHRError _) {
-		rebuildSwapchain();
-		return;
+		return false;
 	}
 
 	bool timingFetched =
@@ -431,52 +539,37 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		);
 	}
 
+	Task::DataProvider provider(m_data.taskData);
+
 	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
-		uint32_t taskIndex = m_execInfo.tasks[i];
-		GraphData::TaskData taskData = m_data.taskData[taskIndex];
+		TaskIndex taskIndex = m_execInfo.tasks[i];
+		GraphData::TaskMetaData taskData = m_data.taskMetadata[taskIndex];
 
-		auto inputs = std::span<const ResourceDependency>(
-			m_data.taskResources.data() + taskData.inputs.offset,
-			m_data.taskResources.data() + taskData.inputs.offset +
-				taskData.inputs.count
-		);
-
-		auto outputs = std::span<const ResourceDependency>(
-			m_data.taskResources.data() + taskData.outputs.offset,
-			m_data.taskResources.data() + taskData.outputs.offset +
-				taskData.outputs.count
-		);
-
-		TaskContext context {
+		Task::BuildContext context {
+			.task = taskIndex,
 			.commandBuffer = commandBuffer,
-			.inputs = inputs,
-			.outputs = outputs,
+			.dataProvider = provider,
+			.currentFrame = m_currentFrame,
 			.images = m_images,
 			.buffers = m_buffers,
-			.currentFrame = m_currentFrame,
+			.inputs = m_execInfo.references.inputs[taskIndex],
+			.outputs = m_execInfo.references.outputs[taskIndex],
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,
 		};
 
-		uint32_t barrierOffset = m_execInfo.barrierOffsets[i * 2];
-		uint32_t barrierCount =
-			m_execInfo.barrierOffsets[i * 2 + 1] - barrierOffset;
-
-		if (barrierCount > 0)
-			writeBarrier(
-				commandBuffer,
-				std::span<const ExecutionInfo::Barrier>(
-					m_execInfo.barriers.data() + barrierOffset, barrierCount
-				),
-				m_images,
-				m_buffers,
-				m_resourceManager
-			);
+		writeBarrier(
+			commandBuffer,
+			std::span<ExecutionInfo::Barrier>(m_execInfo.barriers[taskIndex]),
+			m_images,
+			m_buffers,
+			m_resourceManager
+		);
 
 		commandBuffer.beginDebugUtilsLabelEXT(
 			{
-				.pLabelName = m_data.taskData[taskIndex].name.data(),
+				.pLabelName = m_data.taskMetadata[taskIndex].name.data(),
 			}
 		);
 		if (timingFetched)
@@ -486,7 +579,7 @@ void RenderGraphRunner::submit(const Scene& scene) {
 				i * 2 + timestampsCount * currentFrameInFlight + 2
 			);
 
-		m_data.tasks[taskIndex](context);
+		m_data.tasks[taskIndex].build(context);
 
 		if (timingFetched)
 			commandBuffer.writeTimestamp(
@@ -497,7 +590,8 @@ void RenderGraphRunner::submit(const Scene& scene) {
 		commandBuffer.endDebugUtilsLabelEXT();
 	}
 
-	outputToSwapchain(commandBuffer, m_output, imageIndex);
+	outputToSwapchain(commandBuffer, imageIndex);
+
 	commandBuffer.writeTimestamp(
 		vk::PipelineStageFlagBits::eBottomOfPipe,
 		m_debugQueryPool,
@@ -551,109 +645,12 @@ void RenderGraphRunner::submit(const Scene& scene) {
 	try {
 		auto presentResult =
 			Instance::Get().presentQueue.presentKHR(presentInfo);
-		if (presentResult == vk::Result::eSuboptimalKHR) rebuildSwapchain();
+		if (presentResult == vk::Result::eSuboptimalKHR) return false;
 
 	} catch (vk::OutOfDateKHRError _) {
-		rebuildSwapchain();
+		return false;
 	}
 
 	m_currentFrame++;
-}
-
-void RenderGraphRunner::build() {
-	std::vector<ResourceManager::ImageDescription> imageDescriptions;
-	std::vector<ResourceIndex> imagesIndices;
-
-	std::vector<ResourceManager::BufferDescription> bufferDescriptions;
-	std::vector<ResourceIndex> bufferIndices;
-
-	for (auto& [index, description] : m_data.images) {
-		if (m_data.swapchainImageRatio.contains(index)) continue;
-		if (m_data.externalImages.contains(index)) continue;
-
-		imageDescriptions.push_back(description);
-		imagesIndices.push_back(index);
-	}
-	for (auto& [index, description] : m_data.buffers) {
-		if (m_data.externalBuffers.contains(index)) continue;
-		if (m_data.sharedBuffers.contains(index)) continue;
-
-		bufferDescriptions.push_back(description);
-		bufferIndices.push_back(index);
-	}
-
-	m_frameDataAllocation = m_resourceManager.createResources(
-		imageDescriptions,
-		bufferDescriptions,
-		ResourceManager::MemoryLocation::Device
-	);
-	auto& images = m_resourceManager.getImages(m_frameDataAllocation);
-
-	for (int i = 0; i < imagesIndices.size(); i++) {
-		m_images[imagesIndices[i]] = images[i];
-	}
-
-	auto& frameDataBuffers =
-		m_resourceManager.getBuffers(m_frameDataAllocation);
-
-	for (int i = 0; i < bufferIndices.size(); i++) {
-		m_buffers[bufferIndices[i]] = frameDataBuffers[i];
-		m_resourceManager.setName(
-			m_data.resourceNames[bufferIndices[i]], frameDataBuffers[i]
-		);
-	}
-
-	if (m_data.sharedBuffers.size() > 0) {
-		bufferDescriptions.clear();
-		bufferIndices.clear();
-
-		for (ResourceIndex index : m_data.sharedBuffers) {
-			bufferDescriptions.push_back(m_data.buffers.at(index));
-			bufferIndices.push_back(index);
-		}
-
-		m_sharedDataAllocation = m_resourceManager.createResources(
-			{}, bufferDescriptions, ResourceManager::MemoryLocation::HostVisible
-		);
-
-		auto buffers = m_resourceManager.getBuffers(m_sharedDataAllocation);
-		for (int i = 0; i < bufferIndices.size(); i++) {
-			m_buffers[bufferIndices[i]] = buffers[i];
-			m_resourceManager.setName(
-				m_data.resourceNames[bufferIndices[i]], buffers[i]
-			);
-		}
-	}
-
-	if (m_data.localBufferSizes.size() > 0) {
-		std::vector<ResourceManager::BufferDescription> bufferInfo;
-		bufferIndices.clear();
-
-		for (auto [index, size] : m_data.localBufferSizes) {
-			bufferInfo.push_back(
-				{
-					.size = size,
-				}
-			);
-			bufferIndices.push_back(index);
-		}
-
-		// Return buffers so they can bound to resource index
-		m_hostDataAllocation = m_resourceManager.createResources(
-			{}, bufferInfo, ResourceManager::MemoryLocation::HostVisible
-		);
-
-		auto buffers = m_resourceManager.getBuffers(*m_hostDataAllocation);
-		for (int i = 0; i < bufferIndices.size(); i++) {
-			m_buffers[bufferIndices[i]] = buffers[i];
-			m_resourceManager.setName(
-				m_data.resourceNames[bufferIndices[i]], buffers[i]
-			);
-		}
-	}
-
-	for (auto entry : m_data.externalImages) m_images.insert(entry);
-	for (auto entry : m_data.externalBuffers) m_buffers.insert(entry);
-
-	buildSwapchainResources();
+	return true;
 }

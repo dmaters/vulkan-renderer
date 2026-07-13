@@ -1,4 +1,4 @@
-#include "TaskContext.hpp"
+#include "BuildContext.hpp"
 
 #include "rendergraph/ResourceUsage.hpp"
 #include "vulkan/vulkan.hpp"
@@ -25,9 +25,9 @@ bool isValidBufferDescriptor(ResourceUsage::Type usage) {
 	}
 }
 
-TaskContext::Descriptors TaskContext::getDescriptors() const {
+Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 	uint32_t bindingCount = 0;
-	TaskContext::Descriptors resources;
+	Task::BuildContext::Descriptors resources;
 
 	uint32_t maxPossibleSize = inputs.size() + outputs.size();
 	resources._imageInfo.reserve(maxPossibleSize);
@@ -37,7 +37,9 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage))
 			continue;
 
-		if (images.contains(index)) {
+		if (rendergraph::internal::ResourceIndexer::ResourceIndex_getType(
+				index
+			) == rendergraph::internal::ResourceIndexer::ResourceType::Image) {
 			Image& image = resourceManager.getImage(images[index]);
 
 			resources._imageInfo.push_back(
@@ -57,7 +59,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.pImageInfo = &resources._imageInfo.back(),
 				}
 			);
-		} else if (buffers.contains(index)) {
+		} else {
 			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
 
 			resources._bufferInfo.push_back(
@@ -66,13 +68,6 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.range = buffer.size,
 				}
 			);
-
-			if (buffer.data != nullptr) {
-				resources._bufferInfo.back().offset =
-					(buffer.size / 3) * (currentFrame % 3);
-
-				resources._bufferInfo.back().range /= 3;
-			}
 
 			resources.descriptors.push_back(
 				vk::WriteDescriptorSet {
@@ -92,7 +87,9 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage))
 			continue;
 
-		if (images.contains(index)) {
+		if (rendergraph::internal::ResourceIndexer::ResourceIndex_getType(
+				index
+			) == rendergraph::internal::ResourceIndexer::ResourceType::Image) {
 			Image& image = resourceManager.getImage(images[index]);
 
 			resources._imageInfo.push_back(
@@ -113,7 +110,7 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.pImageInfo = &resources._imageInfo.back(),
 				}
 			);
-		} else if (buffers.contains(index)) {
+		} else {
 			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
 
 			resources._bufferInfo.push_back(
@@ -122,12 +119,6 @@ TaskContext::Descriptors TaskContext::getDescriptors() const {
 					.range = buffer.size,
 				}
 			);
-			if (buffer.data != nullptr) {
-				resources._bufferInfo.back().offset =
-					(buffer.size / 3) * (currentFrame % 3);
-
-				resources._bufferInfo.back().range /= 3;
-			}
 
 			resources.descriptors.push_back(
 				vk::WriteDescriptorSet {

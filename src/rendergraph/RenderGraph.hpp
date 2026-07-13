@@ -1,20 +1,16 @@
 #pragma once
 
-#include <array>
-#include <cstdint>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "GraphData.hpp"
-#include "RenderGraphBuilder.hpp"
 #include "RenderGraphRunner.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
-#include "rendergraph/tasks/Task.hpp"
+#include "rendergraph/Task.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
+
 class RenderGraph {
 private:
 	Swapchain& m_swapchain;
@@ -22,51 +18,38 @@ private:
 	MaterialManager& m_materialManager;
 
 	rendergraph::internal::GraphData m_data;
-	rendergraph::internal::RenderGraphBuilder m_builder;
 	std::optional<rendergraph::internal::RenderGraphRunner> m_runner;
 
-	ResourceIndex m_outputImage = UINT32_MAX;
-	std::vector<TaskIndex> m_tasks;
-
-	bool m_graphUpdated = true;
+	rendergraph::internal::ExecutionInfo build(
+		TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene
+	);
 
 public:
-	RenderGraph(
-		Swapchain& swapchain,
-		ResourceManager& resourceManager,
-		MaterialManager& materialManager
-	);
+	RenderGraph(Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager);
 
-	ResourceIndex createImage(
-		std::string name,
-		ResourceManager::ImageDescription desc,
-		uint8_t swapchainRatio = 0
-	);
+	rendergraph::ResourceIndex registerImage(std::string name, ImageHandle handle);
+	rendergraph::ResourceIndex registerBuffer(std::string name, BufferHandle handle);
 
-	ResourceIndex createDeviceBuffer(
-		std::string name,
-		ResourceManager::BufferDescription desc,
-		bool shared = false
-	);
+	TaskIndex addTask(std::string name, Task task, auto taskData);
 
-	ResourceIndex createHostBuffer(std::string name, uint32_t size);
+	TaskIndex addTask(std::string name, Task task);
 
-	ResourceIndex registerImage(std::string name, ImageHandle handle);
-	ResourceIndex registerBuffer(std::string name, BufferHandle handle);
-
-	TaskIndex addTask(
-		std::string name,
-		TaskType type,
-		std::vector<ResourceDependency> inputResources,
-		std::vector<ResourceDependency> outputResources,
-		Task task
-	);
-
-	void update(std::vector<TaskIndex> tasks, ResourceIndex output) {
-		m_outputImage = output;
-		m_tasks = tasks;
-		m_graphUpdated = true;
-	}
-
-	void submit(const Scene& scene);
+	void update(TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene);
+	bool submit(const Scene& scene);
 };
+
+TaskIndex RenderGraph::addTask(std::string name, Task task, auto taskData) {
+	TaskIndex index = m_data.tasks.size();
+
+	std::vector<std::byte> rawData(sizeof(taskData));
+	std::memcpy(rawData.data(), &taskData, sizeof(taskData));
+
+	m_data.taskData[index] = std::move(rawData);
+
+	m_data.taskMetadata[index] = {
+		.name = name,
+	};
+	m_data.tasks[index] = task;
+
+	return index;
+}

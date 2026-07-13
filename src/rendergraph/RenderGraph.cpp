@@ -1,144 +1,207 @@
 #include "RenderGraph.hpp"
 
 #include <cassert>
-#include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
-#include "Instance.hpp"
+#include "DataProvider.hpp"
+#include "GraphData.hpp"
+#include "RenderGraph.hpp"
+#include "ResourceIndex.hpp"
+#include "ResourceUsage.hpp"
+#include "SetupContext.hpp"
 #include "Swapchain.hpp"
-#include "material/Pipeline.hpp"
+#include "Task.hpp"
 #include "rendergraph/GraphData.hpp"
-#include "rendergraph/RenderGraphBuilder.hpp"
-#include "rendergraph/ResourceUsage.hpp"
-#include "rendergraph/tasks/Task.hpp"
+#include "rendergraph/Task.hpp"
 #include "resources/ResourceManager.hpp"
+#include "scene/Scene.hpp"
 
 RenderGraph::RenderGraph(
-	Swapchain& swapchain,
-	ResourceManager& resourceManager,
-	MaterialManager& materialManager
+	Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager
+
 ) :
-	m_swapchain(swapchain),
-	m_resourceManager(resourceManager),
-	m_materialManager(materialManager),
-	m_builder(m_data) {}
+	m_swapchain(swapchain), m_resourceManager(resourceManager), m_materialManager(materialManager) {}
 
-ResourceIndex RenderGraph::createImage(
-	std::string name,
-	ResourceManager::ImageDescription desc,
-	uint8_t swapchainRatio
-) {
-	ResourceIndex index = m_data.resourceCount++;
-	m_data.images[index] = desc;
+rendergraph::ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
+	rendergraph::ResourceIndex index =
+		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Image);
 
-	if (swapchainRatio != 0) m_data.swapchainImageRatio[index] = swapchainRatio;
+	m_data.resourceNames[index] = name;
+	m_data.externalImages.push_back({ index, image });
 
-	m_data.resourceNames.push_back(name);
-	m_data.finalUsages[index] = ResourceUsage::Type::Undefined;
-
-	return index;
-}
-
-ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
-	ResourceIndex index = m_data.resourceCount++;
-
-	m_data.resourceNames.push_back(name);
-	m_data.externalImages[index] = image;
 	m_resourceManager.setName(m_data.resourceNames[index], image);
-	m_data.finalUsages[index] = ResourceUsage::Type::Undefined;
 
 	return index;
 }
 
-ResourceIndex RenderGraph::createDeviceBuffer(
-	std::string name, ResourceManager::BufferDescription desc, bool shared
-) {
-	assert(desc.size > 0);
-	ResourceIndex index = m_data.resourceCount++;
-	m_data.buffers[index] = desc;
-	m_data.resourceNames.push_back(name);
+rendergraph::ResourceIndex RenderGraph::registerBuffer(std::string name, BufferHandle buffer) {
+	rendergraph::ResourceIndex index =
+		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Buffer);
 
-	if (shared) m_data.sharedBuffers.insert(index);
+	m_data.resourceNames[index] = name;
+	m_data.externalBuffers.push_back({ index, buffer });
 
-	return index;
-}
-
-ResourceIndex RenderGraph::createHostBuffer(std::string name, uint32_t size) {
-	ResourceIndex index = m_data.resourceCount++;
-	m_data.localBufferSizes[index] = size;
-	m_data.resourceNames.push_back(name);
-
-	return index;
-}
-
-ResourceIndex RenderGraph::registerBuffer(
-	std::string name, BufferHandle buffer
-) {
-	ResourceIndex index = m_data.resourceCount++;
-
-	m_data.resourceNames.push_back(name);
-	m_data.externalBuffers[index] = buffer;
 	m_resourceManager.setName(m_data.resourceNames[index], buffer);
+
 	return index;
 }
 
-TaskIndex RenderGraph::addTask(
-	std::string name,
-	TaskType type,
-	std::vector<ResourceDependency> inputResources,
-	std::vector<ResourceDependency> outputResources,
-	Task task
-) {
+TaskIndex RenderGraph::addTask(std::string name, Task task) {
 	TaskIndex index = m_data.tasks.size();
 
-	uint32_t offset = m_data.taskResources.size();
-	uint8_t inputSize = inputResources.size();
-	m_data.taskData.push_back(
-		{
-			.type = type,
-			.name = name,
-			.inputs = {
-		        .offset = offset,
-				.count = inputSize,
-			},
-			.outputs = {
-    			.offset = offset + inputSize,
-    		    .count = static_cast<uint8_t>(outputResources.size())
-			},
-		}
-	);
-	m_data.tasks.push_back(std::move(task));
+	m_data.taskData[index] = {};
 
-	m_data.taskResources.insert(
-		m_data.taskResources.end(), inputResources.begin(), inputResources.end()
-	);
-	m_data.taskResources.insert(
-		m_data.taskResources.end(),
-		outputResources.begin(),
-		outputResources.end()
-	);
+	m_data.taskMetadata[index] = {
+		.name = name,
+	};
+	m_data.tasks[index] = task;
 
 	return index;
 }
 
-void RenderGraph::submit(const Scene& scene) {
-	assert(m_outputImage != UINT32_MAX);
+struct ExplorationData {
+	rendergraph::internal::ExecutionInfo::Resources resources;
+	rendergraph::internal::ExecutionInfo::References references;
+	std::vector<TaskIndex> tasks;
+};
 
-	if (!m_runner.has_value()) {
-		m_runner.emplace(
-			m_data, m_swapchain, m_resourceManager, m_materialManager
+class GraphExplorer : Task::SetupContext::ResourceProvider::TaskManager {
+private:
+	const std::unordered_map<TaskIndex, Task>& m_tasks;
+	std::unordered_map<TaskIndex, std::vector<std::byte>>& m_taskData;
+	const Scene& m_scene;
+	Task::SetupContext::ResourceProvider m_resourceProvider;
+
+	std::vector<TaskIndex> m_taskStack;
+	std::vector<bool> m_exploredTasks;
+	ExplorationData m_data;
+
+public:
+	GraphExplorer(
+		const std::unordered_map<TaskIndex, Task>& tasks,
+		std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData,
+		const std::vector<TaskIndex>& optionalTasks,
+		const Scene& scene,
+		rendergraph::internal::ResourceIndexer indexer
+	) :
+		m_tasks(tasks), m_taskData(taskData), m_scene(scene), m_resourceProvider(indexer, *this) {
+		m_exploredTasks = std::vector<bool>(tasks.size());
+		for (auto optionalTask : optionalTasks) {
+			explore(optionalTask);
+		}
+	}
+
+	void explore(TaskIndex task) {
+		m_exploredTasks[task] = true;
+
+		Task::DataProvider dataProvider(m_taskData);
+
+		Task::SetupContext context {
+			.task = task,
+			.scene = m_scene,
+			.resourceProvider = m_resourceProvider,
+			.dataProvider = dataProvider,
+		};
+
+		Task::Dependencies deps = m_tasks.at(task).setup(context);
+
+		m_data.references.inputs[task] = deps.inputs;
+		m_data.references.outputs[task] = deps.outputs;
+
+		m_taskStack.push_back(task);
+	}
+
+	rendergraph::ResourceIndex getResource(TaskIndex index, std::size_t slot) override {
+		if (!m_exploredTasks[index]) explore(index);
+		return m_data.references.outputs[index][slot].resource;
+	}
+
+	ExplorationData getData() && {
+		m_data.tasks = std::move(m_taskStack);
+		m_data.resources = std::move(m_resourceProvider).getCompiledResources();
+
+		return m_data;
+	}
+};
+
+rendergraph::internal::ExecutionInfo RenderGraph::build(
+	TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene
+) {
+	GraphExplorer explorer(m_data.tasks, m_data.taskData, optionalTasks, scene, m_data.indexer);
+
+	explorer.explore(outputTask);
+
+	auto [resources, references, tasks] = std::move(explorer).getData();
+
+	std::unordered_map<rendergraph::ResourceIndex, ResourceUsage::Type> resourceUsages;
+
+	for (TaskIndex task : tasks) {
+		for (auto [index, usage] : references.inputs[task]) {
+			resourceUsages[index] = usage;
+		}
+		for (auto [index, usage] : references.outputs[task]) {
+			resourceUsages[index] = usage;
+		}
+	}
+
+	std::unordered_map<TaskIndex, std::vector<rendergraph::internal::ExecutionInfo::Barrier>> barriers;
+	std::vector<rendergraph::internal::ExecutionInfo::Barrier> taskBarriers;
+
+	for (TaskIndex task : tasks) {
+		taskBarriers.clear();
+		for (auto [index, usage] : references.inputs[task]) {
+			if (usage == ResourceUsage::Type::None) continue;
+
+			taskBarriers.push_back(
+				{
+					.previousUsage = resourceUsages[index],
+					.currentUsage = usage,
+					.index = index,
+				}
+			);
+
+			resourceUsages[index] = usage;
+		}
+		for (auto [index, usage] : references.outputs[task]) {
+			if (usage == ResourceUsage::Type::None) continue;
+			taskBarriers.push_back(
+				{
+					.previousUsage = resourceUsages[index],
+					.currentUsage = usage,
+					.index = index,
+				}
+			);
+
+			resourceUsages[index] = usage;
+		}
+		barriers[task] = taskBarriers;
+	}
+
+	std::vector<rendergraph::internal::ExecutionInfo::Barrier> initializationBarriers;
+	for (auto [image, _] : resources.images) {
+		initializationBarriers.push_back(
+			{
+				.previousUsage = ResourceUsage::Type::Undefined,
+				.currentUsage = resourceUsages[image],
+				.index = image,
+			}
 		);
 	}
-	if (m_graphUpdated) {
-		m_graphUpdated = false;
-		rendergraph::internal::ExecutionInfo executionInfo =
-			m_builder.getTasks(m_tasks, m_outputImage);
 
-		m_data.finalUsages = std::move(executionInfo.finalUsages);
-
-		m_runner->update(m_outputImage, executionInfo);
-	}
-
-	m_runner->submit(scene);
+	return {
+		.resources = resources,
+		.references = references,
+		.outputImage = references.outputs[outputTask][0].resource,
+		.tasks = tasks,
+		.barriers = barriers,
+		.initializationBarriers = initializationBarriers,
+	};
 }
+
+void RenderGraph::update(TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene) {
+	rendergraph::internal::ExecutionInfo info = build(outputTask, optionalTasks, scene);
+	m_runner.emplace(m_data, m_swapchain, m_resourceManager, m_materialManager, info);
+}
+
+bool RenderGraph::submit(const Scene& scene) { return m_runner->submit(scene); }
