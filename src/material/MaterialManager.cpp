@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
-#include <ranges>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -14,11 +13,9 @@
 #include "Instance.hpp"
 #include "ShaderEngine.hpp"
 #include "material/MaterialManager.hpp"
-#include "resources/Buffer.hpp"
 #include "resources/ResourceManager.hpp"
 
-MaterialManager::MaterialManager(ResourceManager& resourceManager) :
-	m_resourceManager(resourceManager) {
+MaterialManager::MaterialManager(ResourceManager& resourceManager) : m_resourceManager(resourceManager) {
 	vk::Device& device = Instance::Get().device;
 
 	std::array<vk::DescriptorPoolSize, 2> sizes = {
@@ -34,12 +31,10 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) :
 								}
 	};
 
-	vk::DescriptorPoolCreateInfo info {
-		.flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
-		.maxSets = 5,
-		.poolSizeCount = sizes.size(),
-		.pPoolSizes = sizes.data()
-	};
+	vk::DescriptorPoolCreateInfo info { .flags = { vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind },
+										.maxSets = 5,
+										.poolSizeCount = sizes.size(),
+										.pPoolSizes = sizes.data() };
 
 	m_pool = device.createDescriptorPool(info);
 
@@ -117,16 +112,13 @@ void MaterialManager::createTextureDescriptorSet() {
 	};
 
 	std::array<vk::DescriptorBindingFlags, 2> bindingFlags = {
-		vk::DescriptorBindingFlagBits::ePartiallyBound |
-			vk::DescriptorBindingFlagBits::eUpdateAfterBind,
+		vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind,
 		vk::DescriptorBindingFlags {},
 
 	};
 
-	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
-		.bindingCount = bindingFlags.size(),
-		.pBindingFlags = bindingFlags.data()
-	};
+	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo { .bindingCount = bindingFlags.size(),
+															  .pBindingFlags = bindingFlags.data() };
 
 	vk::DescriptorSetLayoutCreateInfo layoutInfo {
 		.pNext = &flagsInfo,
@@ -135,8 +127,7 @@ void MaterialManager::createTextureDescriptorSet() {
 		.pBindings = bindings.data(),
 	};
 
-	vk::DescriptorSetLayout layout =
-		device.createDescriptorSetLayout(layoutInfo);
+	vk::DescriptorSetLayout layout = device.createDescriptorSetLayout(layoutInfo);
 
 	vk::DescriptorSetAllocateInfo allocateInfo {
 		.descriptorPool = m_pool,
@@ -168,9 +159,7 @@ void MaterialManager::createTextureDescriptorSet() {
 }
 
 MaterialIndex MaterialManager::registerComputeMaterial(
-	std::string_view name,
-	ShaderModule module,
-	std::vector<vk::DescriptorType> descriptors
+	std::string_view name, ShaderModule module, std::vector<vk::DescriptorType> descriptors
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;
 	if (descriptors.size() > 0) {
@@ -188,17 +177,14 @@ MaterialIndex MaterialManager::registerComputeMaterial(
 
 		layout = Instance::Get().device.createDescriptorSetLayout(
 			{
-				.flags =
-					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
 				.bindingCount = (uint32_t)bindings.size(),
 				.pBindings = bindings.data(),
 			}
 		);
 	}
 
-	PipelineIndex pipeline = m_shaderEngine->registerComputePipeline(
-		module, { layout, m_textureSetLayout }
-	);
+	PipelineIndex pipeline = m_shaderEngine->registerComputePipeline(module, { layout, m_textureSetLayout });
 
 	MaterialIndex index = m_pipelines.size();
 	m_pipelines.push_back(pipeline);
@@ -228,17 +214,15 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 
 		layout = Instance::Get().device.createDescriptorSetLayout(
 			{
-				.flags =
-					vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
 				.bindingCount = (uint32_t)bindings.size(),
 				.pBindings = bindings.data(),
 			}
 		);
 	}
 
-	PipelineIndex pipeline = m_shaderEngine->registerGraphicPipeline(
-		modules, { layout, m_textureSetLayout }, renderpassConfig
-	);
+	PipelineIndex pipeline =
+		m_shaderEngine->registerGraphicPipeline(modules, { layout, m_textureSetLayout }, renderpassConfig);
 
 	MaterialIndex index = m_pipelines.size();
 	m_pipelines.push_back(pipeline);
@@ -248,9 +232,7 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 
 void MaterialManager::update() { m_shaderEngine->flushRetiredPipelines(); }
 
-uint32_t MaterialManager::registerTextureGroup(
-	ResourceManager::AllocationIndex index
-) {
+uint32_t MaterialManager::registerTextureGroup(ResourceManager::AllocationIndex index) {
 	auto& textures = m_resourceManager.getImages(index);
 
 	std::vector<vk::DescriptorImageInfo> info;
@@ -280,9 +262,7 @@ uint32_t MaterialManager::registerTextureGroup(
 
 void MaterialManager::registerMaterials() {
 	registerComputeMaterial(
-		"transmittanceLUT",
-		{ "resources/shaders/transmittanceLUT.slang" },
-		{ vk::DescriptorType::eStorageImage }
+		"transmittanceLUT", { "resources/shaders/transmittanceLUT.slang" }, { vk::DescriptorType::eStorageImage }
 	);
 
 	registerComputeMaterial(
@@ -339,31 +319,6 @@ void MaterialManager::registerMaterials() {
 		}
 	);
 	registerGraphicMaterial(
-		"shadowmap_alphatested",
-		{
-			.vertex = {
-			    .path = "resources/shaders/shadow_mapping.slang",
-                .entryPoint = "main_vs_alpha",
-			},
-			.fragment = {
-			    .path = "resources/shaders/shadow_mapping.slang",
-				.entryPoint ="main_fs_alpha",
-			},
-        },
-		{
-			.depthFormat = vk::Format::eD16Unorm,
-			.depthWrite = true,
-			.depthOp = vk::CompareOp::eLessOrEqual,
-		},
-		{
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
-		}
-	);
-	registerGraphicMaterial(
 		"gbuffer",
 		{
 			.vertex = {"resources/shaders/gbuffer.slang", "main_vs"},
@@ -399,57 +354,22 @@ void MaterialManager::registerMaterials() {
 	);
 
 	registerGraphicMaterial(
-		"gbuffer_alphatested",
-		{
-			.vertex = {"resources/shaders/gbuffer.slang", "main_vs"},
-			.fragment = {"resources/shaders/gbuffer.slang", "main_fs_alpha"},
-		},
-		{
-			.colorAttachmentFormats = {
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
-				vk::Format::eR16G16B16A16Sfloat,
-
-			},
-			.depthFormat = vk::Format::eD24UnormS8Uint,
-			.depthWrite = true,
-			.depthOp = vk::CompareOp::eLessOrEqual,
-			.stencilEnabled = true,
-			.stencilOp = {
-				.failOp = vk::StencilOp::eKeep,
-				.passOp = vk::StencilOp::eReplace,
-				.compareOp = vk::CompareOp::eAlways,
-				.compareMask = 0xFF,
-				.writeMask = 0xFF,
-				.reference = 1,
-			}
-		},
-		{
-		    vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
-		}
-	);
-
-	registerGraphicMaterial(
 		"lighting_deferred",
 		{
-			.vertex = { "resources/shaders/quad_vert.slang"         },
+			.vertex = { "resources/shaders/quad_vert.slang"			},
 			.fragment = { "resources/shaders/lighting_deferred.slang" },
-    },
+	},
 		{
 			.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
 			.depthFormat = vk::Format::eD24UnormS8Uint,
 			.cullMode = vk::CullModeFlagBits::eNone,
 			.stencilEnabled = true,
 			.stencilOp = { .failOp = vk::StencilOp::eKeep,
-	                       .passOp = vk::StencilOp::eKeep,
-	                       .compareOp = vk::CompareOp::eEqual,
-	                       .compareMask = 0xFF,
-	                       .writeMask = 0,
-	                       .reference = 1 },
+						   .passOp = vk::StencilOp::eKeep,
+						   .compareOp = vk::CompareOp::eEqual,
+						   .compareMask = 0xFF,
+						   .writeMask = 0,
+						   .reference = 1 },
 		},
 		{
 			vk::DescriptorType::eUniformBuffer,

@@ -59,23 +59,15 @@ float3 reconstructNormal(float2 xy) {
 	return normalize(float3(xy, z));
 }
 
-[shader("fragment")] FragmentOutput main_fs_alpha(VertexOutput input) {
-    return output<true>(input,_drawPrimitiveMap[input.drawIndex]);
-}
 [shader("fragment")] FragmentOutput main_fs(VertexOutput input) {
-    return output<false>(input,_drawPrimitiveMap[input.drawIndex]);
-}
+    FragmentOutput output;
 
-FragmentOutput output<bool ALPHA_TEST>(VertexOutput input, uint primitiveID) {
-	FragmentOutput output;
+	PrimitiveInstance instance = _materialData[_materialMap[_drawPrimitiveMap[input.drawIndex]]];
 
-	PrimitiveInstance instance = _materialData[_materialMap[primitiveID]];
-
-	if(ALPHA_TEST)
-       clip(
-            _staticTextures[instance.albedo_texture].Sample(
-            _samplers[SamplerType::LinearRepeat], input.texcoord).w - 0.5
-       );
+    clip(
+        _staticTextures[instance.albedo_texture].Sample(
+        _samplers[SamplerType::LinearRepeat], input.texcoord).w - 0.5
+    );
 
 	output.color = _staticTextures[instance.albedo_texture].Sample(
 					   _samplers[SamplerType::LinearRepeat], input.texcoord
@@ -99,4 +91,4 @@ FragmentOutput output<bool ALPHA_TEST>(VertexOutput input, uint primitiveID) {
 		float2(instance.roughness_value, instance.metallic_value);
 
 	return output;
-};
+}
