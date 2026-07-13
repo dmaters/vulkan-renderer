@@ -115,7 +115,7 @@ static void build(Task::BuildContext& context) {
 		}
 		);
 
-		RenderPass::IndirectDraw(context, data.material, context.scene.buckets.at(data.material), i, 2, 3);
+		RenderPass::IndirectDraw(context, data.material, context.scene.buckets.at(data.material), i, 2);
 
 		RenderPass::End(context.commandBuffer);
 	}

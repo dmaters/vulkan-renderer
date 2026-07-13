@@ -253,8 +253,7 @@ void RenderPass::IndirectDraw(
 	MaterialIndex material,
 	const std::vector<uint32_t>& primitives,
 	uint32_t pushConstant,
-	std::size_t indirectSlot,
-	std::size_t primitiveMapSlot
+	std::size_t indirectSlot
 ) {
 	Buffer& indirectBufferDevice = context.getInput<Buffer&>(indirectSlot);
 
