@@ -272,7 +272,7 @@ PrimitiveData loadPrimitiveData(
 	return {
 	    .primitiveBounds = {
 			.position = averageVertexPosition,
-			.size = sqrt(size2) - glm::length(averageVertexPosition),
+			.size = sqrt(size2) + glm::length(averageVertexPosition),
 		},
 		.vertexCount = vertexAccessor.count,
 		.indexCount = indexCount ,
