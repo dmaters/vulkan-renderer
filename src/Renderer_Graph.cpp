@@ -42,12 +42,17 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto shadowBuffer = core::shadows(context, sceneData);
 	auto gbuffer = core::gbuffer(context, { pbrMaterialData, pbrMaterialInstances }, sceneData);
 
+	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
 	optionalPasses.push_back(lighting);
 
 	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
 	optionalPasses.push_back(skybox);
+
+	auto ssrChain = core::ssrChainGen(context, hdrOutput);
+	auto ssr = core::ssr(context, sceneData, gbuffer, ssrChain, hiz, hdrOutput);
+	optionalPasses.push_back(ssr);
 
 	auto sdrOutput = core::sdrOutput(context);
 	auto composition = post_processing::composition(context, hdrOutput, sdrOutput);

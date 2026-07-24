@@ -19,8 +19,7 @@ ResourceManager::ResourceManager() {
 	m_commandPool = device.createCommandPool(
 		{
 			.flags = vk::CommandPoolCreateFlagBits::eTransient,
-			.queueFamilyIndex =
-				Instance::Get().queueFamiliesIndices.transferIndex,
+			.queueFamilyIndex = Instance::Get().queueFamiliesIndices.transferIndex,
 		}
 	);
 	vk::SemaphoreTypeCreateInfo info {
@@ -46,8 +45,7 @@ void ResourceManager::setName(std::string name, BufferHandle handle) {
 	Instance::Get().device.setDebugUtilsObjectNameEXT(
 		vk::DebugUtilsObjectNameInfoEXT {
 			.objectType = vk::ObjectType::eBuffer,
-			.objectHandle =
-				(uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
+			.objectHandle = (uint64_t)(VkBuffer)m_buffers.at(handle.value).buffer,
 			.pObjectName = name.data(),
 		}
 	);
@@ -67,12 +65,9 @@ vk::Image createImage(const ResourceManager::ImageDescription &description) {
 
 	vk::ImageCreateInfo imageInfo {
 		.flags = {},
-		.imageType = description.depth > 1 ? vk::ImageType::e3D
-		                                   : vk::ImageType::e2D,
+		.imageType = description.depth > 1 ? vk::ImageType::e3D : vk::ImageType::e2D,
 		.format = description.format,
-		.extent = vk::Extent3D(
-			description.width, description.height, description.depth
-		),
+		.extent = vk::Extent3D(description.width, description.height, description.depth),
 		.mipLevels = description.miplevels,
 		.arrayLayers = 1,
 		.samples = vk::SampleCountFlagBits::e1,
@@ -92,13 +87,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 ) {
 	assert(!(imagesDescriptions.empty() && buffersDescriptions.empty()));
 
-	assert(
-		std::find_if(
-			buffersDescriptions.begin(),
-			buffersDescriptions.end(),
-			[](const BufferDescription &desc) { return desc.size == 0; }
-		) == buffersDescriptions.end()
-	);
+	assert(std::find_if(buffersDescriptions.begin(), buffersDescriptions.end(), [](const BufferDescription &desc) {
+			   return desc.size == 0;
+		   }) == buffersDescriptions.end());
 
 	vk::Device &device = Instance::Get().device;
 
@@ -108,9 +99,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	std::vector<BufferHandle> buffers;
 	std::vector<vk::MemoryRequirements> resourcesRequirements;
 
-	resourcesRequirements.reserve(
-		imagesDescriptions.size() + buffersDescriptions.size()
-	);
+	resourcesRequirements.reserve(imagesDescriptions.size() + buffersDescriptions.size());
 
 	AllocationIndex allocIndex = m_allocations.size();
 
@@ -119,13 +108,11 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		vk::Image image = createImage(description);
 
-		vk::MemoryRequirements requirements =
-			device.getImageMemoryRequirements(image);
+		vk::MemoryRequirements requirements = device.getImageMemoryRequirements(image);
 
 		ImageHandle handle = { static_cast<ImageHandle>(m_images.size()) };
 
-		requiredSize = (requiredSize + requirements.alignment - 1) &
-		               ~(requirements.alignment - 1);
+		requiredSize = (requiredSize + requirements.alignment - 1) & ~(requirements.alignment - 1);
 		requiredSize += requirements.size;
 
 		resourcesRequirements.push_back(requirements);
@@ -155,11 +142,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			}
 		);
 
-		vk::MemoryRequirements requirements =
-			device.getBufferMemoryRequirements(buffer);
+		vk::MemoryRequirements requirements = device.getBufferMemoryRequirements(buffer);
 
-		requiredSize = (requiredSize + requirements.alignment - 1) &
-		               ~(requirements.alignment - 1);
+		requiredSize = (requiredSize + requirements.alignment - 1) & ~(requirements.alignment - 1);
 		requiredSize += requirements.size;
 
 		resourcesRequirements.push_back(requirements);
@@ -182,12 +167,10 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			locationFlag = vk::MemoryPropertyFlagBits::eDeviceLocal;
 			break;
 		case ResourceManager::MemoryLocation::HostVisible:
-			locationFlag = vk::MemoryPropertyFlagBits::eDeviceLocal |
-			               vk::MemoryPropertyFlagBits::eHostVisible;
+			locationFlag = vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible;
 			break;
 		case ResourceManager::MemoryLocation::Host:
-			locationFlag = vk::MemoryPropertyFlagBits::eHostCoherent |
-			               vk::MemoryPropertyFlagBits::eHostVisible;
+			locationFlag = vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible;
 			break;
 	}
 
@@ -195,38 +178,61 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 	LinearAllocator &allocation = m_allocations.at(allocIndex);
 	for (int i = 0; i < images.size(); i++) {
 		Image &image = m_images.at(images.at(i).value);
-		image.allocation = m_allocations.at(allocIndex)
-		                       .subAllocate(resourcesRequirements.at(i));
+		image.allocation = m_allocations.at(allocIndex).subAllocate(resourcesRequirements.at(i));
 
 		device.bindImageMemory(
-			image.image,
-			m_allocations.at(allocIndex).getAllocation().memory,
-			image.allocation->offset
+			image.image, m_allocations.at(allocIndex).getAllocation().memory, image.allocation->offset
 		);
 
-		image.view = device.createImageView( {
+		image.views.push_back(device.createImageView( {
     		.image = image.image,
     		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
     		.format = image.format,
     		.subresourceRange = { .aspectMask =
     								Image::GetAspectFlags(image.format),
     							.baseMipLevel = 0,
-    							.levelCount = imagesDescriptions[i].miplevels,
+    							.levelCount = image.mipLevels ,
     							.baseArrayLayer = 0,
     							.layerCount = 1,
     							},
-    	});
+    	}));
+
+		if (Image::GetAspectFlags(image.format) & vk::ImageAspectFlagBits::eStencil) {
+			image.views.push_back(device.createImageView( {
+    		.image = image.image,
+    		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
+    		.format = image.format,
+    		.subresourceRange = { .aspectMask = vk::ImageAspectFlagBits::eDepth,
+    							.baseMipLevel = 0,
+    							.levelCount = image.mipLevels ,
+    							.baseArrayLayer = 0,
+    							.layerCount = 1,
+    							},
+    	    }));
+		}
+
+		if (image.mipLevels > 1) {
+			for (int mip = 0; mip < imagesDescriptions[i].miplevels; mip++) {
+				image.views.push_back(device.createImageView( {
+              		.image = image.image,
+              		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
+              		.format = image.format,
+              		.subresourceRange = { .aspectMask = Image::GetAspectFlags(image.format),
+             							.baseMipLevel = (uint32_t)mip,
+             							.levelCount = 1,
+             							.baseArrayLayer = 0,
+             							.layerCount = 1,
+             							},
+           	    }));
+			}
+		}
 	}
 	for (int i = 0; i < buffers.size(); i++) {
 		Buffer &buffer = m_buffers[buffers[i].value];
-		buffer.allocation =
-			m_allocations.at(allocIndex)
-				.subAllocate(resourcesRequirements.at(images.size() + i));
+		buffer.allocation = m_allocations.at(allocIndex).subAllocate(resourcesRequirements.at(images.size() + i));
 
 		device.bindBufferMemory(
-			buffer.buffer,
-			m_allocations.at(allocIndex).getAllocation().memory,
-			buffer.allocation.offset
+			buffer.buffer, m_allocations.at(allocIndex).getAllocation().memory, buffer.allocation.offset
 		);
 	}
 
@@ -235,8 +241,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		for (BufferHandle bufferHandle : buffers) {
 			Buffer &buffer = m_buffers[bufferHandle.value];
-			buffer.data =
-				static_cast<std::byte *>(address) + buffer.allocation.offset;
+			buffer.data = static_cast<std::byte *>(address) + buffer.allocation.offset;
 		}
 	}
 
@@ -247,7 +252,7 @@ void ResourceManager::freeAllocation(ResourceManager::AllocationIndex index) {
 	vk::Device &device = Instance::Get().device;
 
 	for (auto &image : m_allocationImages[index]) {
-		device.destroyImageView(m_images[image.value].view);
+		for (auto view : m_images[image.value].views) device.destroyImageView(view);
 		device.destroyImage(m_images[image.value].image);
 	}
 
@@ -266,25 +271,16 @@ void writeCopy(
 	const std::vector<Buffer> &buffers,
 	const ResourceManager::ResourceCopyInfo &copyInfo
 ) {
-	bool bufferSource = std::holds_alternative<
-		ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.source);
+	bool bufferSource = std::holds_alternative<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.source);
 
-	bool bufferDestination = std::holds_alternative<
-		ResourceManager::ResourceCopyInfo::BufferReference>(
-		copyInfo.destination
-	);
+	bool bufferDestination =
+		std::holds_alternative<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.destination);
 	bool imageSource = !bufferSource;
 	bool imageDestination = !bufferDestination;
 
 	if (bufferSource && bufferDestination) {
-		auto &srcInfo =
-			std::get<ResourceManager::ResourceCopyInfo::BufferReference>(
-				copyInfo.source
-			);
-		auto &dstInfo =
-			std::get<ResourceManager::ResourceCopyInfo::BufferReference>(
-				copyInfo.destination
-			);
+		auto &srcInfo = std::get<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.source);
+		auto &dstInfo = std::get<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.destination);
 
 		vk::BufferCopy2 region {
 			.srcOffset = srcInfo.offset,
@@ -301,14 +297,8 @@ void writeCopy(
 			}
 		);
 	} else if (bufferSource && imageDestination) {
-		auto &srcInfo =
-			std::get<ResourceManager::ResourceCopyInfo::BufferReference>(
-				copyInfo.source
-			);
-		auto &dstInfo =
-			std::get<ResourceManager::ResourceCopyInfo::ImageReference>(
-				copyInfo.destination
-			);
+		auto &srcInfo = std::get<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.source);
+		auto &dstInfo = std::get<ResourceManager::ResourceCopyInfo::ImageReference>(copyInfo.destination);
 		const Image &destImage = images[dstInfo.handle.value];
 
 		vk::Extent3D mipExtent = destImage.size;
@@ -382,14 +372,8 @@ void writeCopy(
 		);
 
 	} else if (imageSource && bufferDestination) {
-		auto &srcInfo =
-			std::get<ResourceManager::ResourceCopyInfo::ImageReference>(
-				copyInfo.source
-			);
-		auto &dstInfo =
-			std::get<ResourceManager::ResourceCopyInfo::BufferReference>(
-				copyInfo.destination
-			);
+		auto &srcInfo = std::get<ResourceManager::ResourceCopyInfo::ImageReference>(copyInfo.source);
+		auto &dstInfo = std::get<ResourceManager::ResourceCopyInfo::BufferReference>(copyInfo.destination);
 		const Image &srcImage = images[srcInfo.handle.value];
 		vk::Extent3D mipExtent = srcImage.size;
 
@@ -460,14 +444,8 @@ void writeCopy(
 			}
 		);
 	} else if (imageSource && imageDestination) {
-		auto &srcInfo =
-			std::get<ResourceManager::ResourceCopyInfo::ImageReference>(
-				copyInfo.source
-			);
-		auto &dstInfo =
-			std::get<ResourceManager::ResourceCopyInfo::ImageReference>(
-				copyInfo.destination
-			);
+		auto &srcInfo = std::get<ResourceManager::ResourceCopyInfo::ImageReference>(copyInfo.source);
+		auto &dstInfo = std::get<ResourceManager::ResourceCopyInfo::ImageReference>(copyInfo.destination);
 		const Image &srcImage = images[srcInfo.handle.value];
 		const Image &dstImage = images[dstInfo.handle.value];
 
@@ -583,8 +561,7 @@ void writeCopy(
 void ResourceManager::copyResources(const std::vector<ResourceCopyInfo> &info) {
 	auto &device = Instance::Get().device;
 
-	if (device.getSemaphoreCounterValue(m_semaphore) == m_transferCount)
-		device.resetCommandPool(m_commandPool);
+	if (device.getSemaphoreCounterValue(m_semaphore) == m_transferCount) device.resetCommandPool(m_commandPool);
 
 	vk::CommandBuffer commandBuffer = device.allocateCommandBuffers(
 		{
@@ -599,8 +576,7 @@ void ResourceManager::copyResources(const std::vector<ResourceCopyInfo> &info) {
 
 	commandBuffer.begin(beginInfo);
 
-	for (const auto &copyInfo : info)
-		writeCopy(commandBuffer, m_images, m_buffers, copyInfo);
+	for (const auto &copyInfo : info) writeCopy(commandBuffer, m_images, m_buffers, copyInfo);
 
 	commandBuffer.end();
 

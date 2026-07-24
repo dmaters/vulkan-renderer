@@ -14,10 +14,8 @@ Swapchain Swapchain::Create() {
 
 	Instance& instance = Instance::Get();
 
-	vk::SurfaceCapabilitiesKHR capabilities =
-		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
-	if (capabilities.currentExtent.width != UINT32_MAX)
-		swapchain.m_resolution = capabilities.currentExtent;
+	vk::SurfaceCapabilitiesKHR capabilities = instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
+	if (capabilities.currentExtent.width != UINT32_MAX) swapchain.m_resolution = capabilities.currentExtent;
 	if (capabilities.currentExtent == vk::Extent2D(0)) return {};
 	swapchain.createSwapchain();
 	swapchain.createFrames();
@@ -34,8 +32,7 @@ void Swapchain::createSwapchain() {
 	info.imageFormat = instance.surfaceFormat.format;
 	info.imageExtent = m_resolution;
 	info.imageArrayLayers = 1;
-	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst |
-	                  vk::ImageUsageFlagBits::eColorAttachment;
+	info.imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eColorAttachment;
 	info.imageColorSpace = instance.surfaceFormat.colorSpace;
 	info.imageSharingMode = vk::SharingMode::eExclusive;
 	info.presentMode = vk::PresentModeKHR::eFifo;
@@ -52,8 +49,7 @@ void Swapchain::createSwapchain() {
 void Swapchain::createFrames() {
 	Instance& instance = Instance::Get();
 
-	vk::FenceCreateInfo fenceInfo { .flags =
-		                                vk::FenceCreateFlagBits::eSignaled };
+	vk::FenceCreateInfo fenceInfo { .flags = vk::FenceCreateFlagBits::eSignaled };
 
 	vk::CommandPoolCreateInfo poolInfo;
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
@@ -70,23 +66,20 @@ void Swapchain::createFrames() {
 void Swapchain::createImages() {
 	Instance& instance = Instance::Get();
 
-	std::vector<vk::Image> images =
-		instance.device.getSwapchainImagesKHR(m_swapchain);
+	std::vector<vk::Image> images = instance.device.getSwapchainImagesKHR(m_swapchain);
 
 	for (int i = 0; i < 3; i++) {
 		vk::ImageViewCreateInfo viewInfo {
 			.image = images[i],
 			.viewType = vk::ImageViewType::e2D,
 			.format = instance.surfaceFormat.format,
-			.subresourceRange = vk::ImageSubresourceRange(
-				vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
-			),
+			.subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1),
 		};
 		vk::ImageView view = instance.device.createImageView(viewInfo);
 
 		m_images[i] = {
 			.image = images[i],
-			.view = view,
+			.views = { view },
 			.format = instance.surfaceFormat.format,
 			.size = {
 				.width = m_resolution.width,
@@ -100,10 +93,8 @@ void Swapchain::createImages() {
 void Swapchain::rebuild() {
 	Instance& instance = Instance::Get();
 
-	vk::SurfaceCapabilitiesKHR capabilities =
-		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
-	if (capabilities.currentExtent.width != UINT32_MAX)
-		m_resolution = capabilities.currentExtent;
+	vk::SurfaceCapabilitiesKHR capabilities = instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
+	if (capabilities.currentExtent.width != UINT32_MAX) m_resolution = capabilities.currentExtent;
 
 	if (m_resolution == vk::Extent2D(0)) return;
 

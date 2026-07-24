@@ -15,17 +15,13 @@
 
 vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts);
 
-std::optional<Pipeline> PipelineBuilder::BuildComputePipeline(
-	const ComputePipelineBuildInfo& info
-) {
+std::optional<Pipeline> PipelineBuilder::BuildComputePipeline(const ComputePipelineBuildInfo& info) {
 	vk::ComputePipelineCreateInfo pipelineInfo {
 		.stage = info.stage,
 		.layout = getLayout(info.setLayouts),
 	};
 
-	auto res = Instance::Get().device.createComputePipeline(
-		vk::PipelineCache(), pipelineInfo
-	);
+	auto res = Instance::Get().device.createComputePipeline(vk::PipelineCache(), pipelineInfo);
 	if (res.result != vk::Result::eSuccess) return std::nullopt;
 
 	return Pipeline {
@@ -131,13 +127,11 @@ struct PipelineStateCreateInfo {
 												 },
 		};
 
-		vk::PipelineVertexInputStateCreateInfo info {
-			.vertexBindingDescriptionCount = (uint32_t)vertexBindings.size(),
-			.pVertexBindingDescriptions = vertexBindings.data(),
-			.vertexAttributeDescriptionCount =
-				(uint32_t)vertexAttributes.size(),
-			.pVertexAttributeDescriptions = vertexAttributes.data()
-		};
+		vk::PipelineVertexInputStateCreateInfo info { .vertexBindingDescriptionCount = (uint32_t)vertexBindings.size(),
+													  .pVertexBindingDescriptions = vertexBindings.data(),
+													  .vertexAttributeDescriptionCount =
+														  (uint32_t)vertexAttributes.size(),
+													  .pVertexAttributeDescriptions = vertexAttributes.data() };
 
 		return info;
 	};
@@ -147,16 +141,12 @@ struct PipelineStateCreateInfo {
 		states[0] = vk::DynamicState::eViewport;
 		states[1] = vk::DynamicState::eScissor;
 
-		vk::PipelineDynamicStateCreateInfo info {
-			.dynamicStateCount = 2, .pDynamicStates = states.data()
-		};
+		vk::PipelineDynamicStateCreateInfo info { .dynamicStateCount = 2, .pDynamicStates = states.data() };
 
 		return info;
 	};
 
-	vk::PipelineRasterizationStateCreateInfo rasterization(
-		vk::CullModeFlags cullMode
-	) {
+	vk::PipelineRasterizationStateCreateInfo rasterization(vk::CullModeFlags cullMode) {
 		vk::PipelineRasterizationStateCreateInfo info {
 			.polygonMode = vk::PolygonMode::eFill,
 			.cullMode = cullMode,
@@ -174,9 +164,7 @@ struct PipelineStateCreateInfo {
 		};
 	}
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencil(
-		const GraphicPipelineConfiguration& configuration
-	) {
+	vk::PipelineDepthStencilStateCreateInfo depthStencil(const GraphicPipelineConfiguration& configuration) {
 		return vk::PipelineDepthStencilStateCreateInfo {
 			.depthTestEnable = configuration.depthOp != vk::CompareOp::eAlways,
 			.depthWriteEnable = configuration.depthWrite,
@@ -190,9 +178,7 @@ struct PipelineStateCreateInfo {
 	}
 };
 
-std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
-	const GraphicPipelineBuildInfo& info
-) {
+std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(const GraphicPipelineBuildInfo& info) {
 	vk::GraphicsPipelineCreateInfo pipelineInfo;
 	PipelineStateCreateInfo helper;
 
@@ -223,10 +209,8 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 			.blendEnable = false,
 			.srcColorBlendFactor = vk::BlendFactor::eOne,
 			.dstColorBlendFactor = vk::BlendFactor::eZero,
-			.colorWriteMask = vk::ColorComponentFlagBits::eR |
-	                          vk::ColorComponentFlagBits::eG |
-	                          vk::ColorComponentFlagBits::eB |
-	                          vk::ColorComponentFlagBits::eA,
+			.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+							  vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
 		}
 	);
 	vk::PipelineColorBlendStateCreateInfo colorBlendState {
@@ -242,14 +226,11 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 	pipelineInfo.renderPass = nullptr;
 
 	vk::PipelineRenderingCreateInfoKHR renderingInfo {
-		.colorAttachmentCount =
-			(uint8_t)info.configuration.colorAttachmentFormats.size(),
-		.pColorAttachmentFormats =
-			info.configuration.colorAttachmentFormats.data(),
+		.colorAttachmentCount = (uint8_t)info.configuration.colorAttachmentFormats.size(),
+		.pColorAttachmentFormats = info.configuration.colorAttachmentFormats.data(),
 		.depthAttachmentFormat = info.configuration.depthFormat,
-		.stencilAttachmentFormat = info.configuration.stencilEnabled
-		                               ? info.configuration.depthFormat
-		                               : vk::Format::eUndefined,
+		.stencilAttachmentFormat = info.configuration.stencilEnabled ? info.configuration.depthFormat
+																	 : vk::Format::eUndefined,
 
 	};
 	pipelineInfo.pNext = &renderingInfo;
@@ -259,9 +240,7 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 	pipelineInfo.basePipelineHandle = nullptr;
 	pipelineInfo.basePipelineIndex = 0;
 
-	auto res = Instance::Get().device.createGraphicsPipeline(
-		vk::PipelineCache(), pipelineInfo
-	);
+	auto res = Instance::Get().device.createGraphicsPipeline(vk::PipelineCache(), pipelineInfo);
 	if (res.result != vk::Result::eSuccess) return std::nullopt;
 
 	return Pipeline {
@@ -273,8 +252,8 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(
 vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts) {
 	std::array<vk::PushConstantRange, 1> ranges {
 		vk::PushConstantRange {
-							   .stageFlags = vk::ShaderStageFlagBits::eVertex |
-		                  vk::ShaderStageFlagBits::eFragment,
+							   .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment |
+						  vk::ShaderStageFlagBits::eCompute,
 							   .offset = 0,
 							   .size = 4,
 							   },

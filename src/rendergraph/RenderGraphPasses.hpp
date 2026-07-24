@@ -45,6 +45,7 @@ namespace core {
 	};
 
 	TaskIndex gbuffer(PassBuildContext&, const ExternalResources& resources, TaskIndex sceneData);
+	TaskIndex hiz(PassBuildContext&, TaskIndex gbuffer);
 	TaskIndex shadows(PassBuildContext&, TaskIndex sceneData);
 	TaskIndex deferredLighting(
 		PassBuildContext&,
@@ -54,9 +55,20 @@ namespace core {
 		TaskIndex sceneData,
 		TaskIndex skyLighting
 	);
+	TaskIndex ssrChainGen(PassBuildContext& context, TaskIndex hdrOutput);
+	TaskIndex ssr(
+		PassBuildContext& context,
+		TaskIndex sceneData,
+		TaskIndex gbuffer,
+		TaskIndex ssrChain,
+		TaskIndex hiz,
+		TaskIndex hdrOutput
+	);
 	TaskIndex ui(PassBuildContext&, TaskIndex sdrOutput);
+
 	TaskIndex sdrOutput(PassBuildContext&);
 	TaskIndex hdrOutput(PassBuildContext&);
+
 }  // namespace core
 
 namespace post_processing {

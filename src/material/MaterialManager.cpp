@@ -159,7 +159,7 @@ void MaterialManager::createTextureDescriptorSet() {
 }
 
 MaterialIndex MaterialManager::registerComputeMaterial(
-	std::string_view name, ShaderModule module, std::vector<vk::DescriptorType> descriptors
+	std::string_view name, ShaderModule module, std::vector<Descriptor> descriptors
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;
 	if (descriptors.size() > 0) {
@@ -169,8 +169,8 @@ MaterialIndex MaterialManager::registerComputeMaterial(
 			bindings.push_back(
 				{
 					.binding = static_cast<uint32_t>(i),
-					.descriptorType = descriptors[i],
-					.descriptorCount = 1,
+					.descriptorType = descriptors[i].type,
+					.descriptorCount = descriptors[i].count,
 					.stageFlags = vk::ShaderStageFlagBits::eAll,
 				}
 			);
@@ -196,7 +196,7 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 	std::string_view name,
 	GraphicPipelineModules modules,
 	GraphicPipelineConfiguration renderpassConfig,
-	std::vector<vk::DescriptorType> descriptors
+	std::vector<Descriptor> descriptors
 ) {
 	vk::DescriptorSetLayout layout = m_emptySetLayout;
 	if (descriptors.size() > 0) {
@@ -206,8 +206,8 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 			bindings.push_back(
 				{
 					.binding = static_cast<uint32_t>(i),
-					.descriptorType = descriptors[i],
-					.descriptorCount = 1,
+					.descriptorType = descriptors[i].type,
+					.descriptorCount = descriptors[i].count,
 					.stageFlags = vk::ShaderStageFlagBits::eAll,
 				}
 			);
@@ -241,7 +241,7 @@ uint32_t MaterialManager::registerTextureGroup(ResourceManager::AllocationIndex 
 
 		info.push_back(
 			{
-				.imageView = image.view,
+				.imageView = image.views[0],
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			}
 		);
@@ -262,16 +262,16 @@ uint32_t MaterialManager::registerTextureGroup(ResourceManager::AllocationIndex 
 
 void MaterialManager::registerMaterials() {
 	registerComputeMaterial(
-		"transmittanceLUT", { "resources/shaders/transmittanceLUT.slang" }, { vk::DescriptorType::eStorageImage }
+		"transmittanceLUT", { "resources/shaders/transmittanceLUT.slang" }, { { vk::DescriptorType::eStorageImage } }
 	);
 
 	registerComputeMaterial(
 		"multiscatteringLUT",
 		{ "resources/shaders/multiscatteringLUT.slang" },
 		{
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eStorageImage,
-			vk::DescriptorType::eStorageBuffer,
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eStorageImage },
+			{ vk::DescriptorType::eStorageBuffer },
 		}
 	);
 
@@ -279,10 +279,10 @@ void MaterialManager::registerMaterials() {
 		"skyviewLUT",
 		{ "resources/shaders/skyviewLUT.slang" },
 		{
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eStorageImage,
+			{ vk::DescriptorType::eUniformBuffer },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eStorageImage },
 		}
 	);
 
@@ -290,8 +290,8 @@ void MaterialManager::registerMaterials() {
 		"sky_lighting",
 		{ "resources/shaders/sky_lighting.slang" },
 		{
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eStorageBuffer,
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eStorageBuffer },
 		}
 	);
 
@@ -313,9 +313,9 @@ void MaterialManager::registerMaterials() {
 			.depthOp = vk::CompareOp::eLessOrEqual,
 		},
 		{
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eStorageBuffer,
+			{vk::DescriptorType::eUniformBuffer},
+			{vk::DescriptorType::eUniformBuffer},
+			{vk::DescriptorType::eStorageBuffer},
 		}
 	);
 	registerGraphicMaterial(
@@ -346,10 +346,10 @@ void MaterialManager::registerMaterials() {
 			}
 		},
 		{
-		    vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
-			vk::DescriptorType::eStorageBuffer,
+			{vk::DescriptorType::eUniformBuffer},
+			{vk::DescriptorType::eStorageBuffer},
+			{vk::DescriptorType::eStorageBuffer},
+			{vk::DescriptorType::eStorageBuffer},
 		}
 	);
 
@@ -372,14 +372,14 @@ void MaterialManager::registerMaterials() {
 						   .reference = 1 },
 		},
 		{
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eUniformBuffer,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eUniformBuffer,
+			{ vk::DescriptorType::eUniformBuffer },
+			{ vk::DescriptorType::eUniformBuffer },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eUniformBuffer },
 		}
 	);
 
@@ -406,8 +406,8 @@ void MaterialManager::registerMaterials() {
     			}
     	},
         {
-            vk::DescriptorType::eUniformBuffer,
-            vk::DescriptorType::eSampledImage,
+            {vk::DescriptorType::eUniformBuffer},
+            {vk::DescriptorType::eSampledImage},
         }
 	);
 
@@ -415,8 +415,8 @@ void MaterialManager::registerMaterials() {
 		"composition",
 		{ "resources/shaders/composition.slang" },
 		{
-			vk::DescriptorType::eSampledImage,
-			vk::DescriptorType::eStorageImage,
+			{ vk::DescriptorType::eSampledImage },
+			{ vk::DescriptorType::eStorageImage },
 		}
 	);
 	registerGraphicMaterial(
@@ -429,7 +429,7 @@ void MaterialManager::registerMaterials() {
 			.colorAttachmentFormats = { vk::Format::eR8G8B8A8Unorm },
 		},
 		{
-			vk::DescriptorType::eSampledImage,
+			{ vk::DescriptorType::eSampledImage },
 		}
 	);
 }

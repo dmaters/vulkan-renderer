@@ -43,32 +43,28 @@ public:
 
 	void update();
 
+	struct Descriptor {
+		vk::DescriptorType type;
+		uint32_t count = 1;
+	};
 	MaterialIndex registerComputeMaterial(
-		std::string_view name,
-		ShaderModule module,
-		std::vector<vk::DescriptorType> descriptors
+		std::string_view name, ShaderModule module, std::vector<Descriptor> descriptors
 	);
 
 	MaterialIndex registerGraphicMaterial(
 		std::string_view name,
 		GraphicPipelineModules modules,
 		GraphicPipelineConfiguration renderpassConfig,
-		std::vector<vk::DescriptorType> descriptors
+		std::vector<Descriptor> descriptors
 	);
 
-	Pipeline getPipeline(MaterialIndex index) {
-		return m_shaderEngine->getPipeline(m_pipelines[index]);
-	}
+	Pipeline getPipeline(MaterialIndex index) { return m_shaderEngine->getPipeline(m_pipelines[index]); }
 
-	MaterialIndex getMaterialIndex(std::string_view name) const {
-		return m_names.at(name);
-	}
+	MaterialIndex getMaterialIndex(std::string_view name) const { return m_names.at(name); }
 
 	uint32_t registerTextureGroup(ResourceManager::AllocationIndex allocation);
 	vk::DescriptorSet getTextureSet() const { return m_textureSet; }
 	vk::DescriptorSet getEmptySet() const { return m_emptySet; }
 
-	vk::DescriptorSetLayout getTextureSetLayout() const {
-		return m_textureSetLayout;
-	}
+	vk::DescriptorSetLayout getTextureSetLayout() const { return m_textureSetLayout; }
 };

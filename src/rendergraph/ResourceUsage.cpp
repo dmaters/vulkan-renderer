@@ -2,18 +2,14 @@
 
 using namespace ResourceUsage;
 
-std::optional<vk::DescriptorType> ResourceUsage::GetDescriptorType(
-	ResourceUsage::Type usage, bool isBuffer
-) {
+std::optional<vk::DescriptorType> ResourceUsage::GetDescriptorType(ResourceUsage::Type usage, bool isBuffer) {
 	switch (usage) {
 		case ResourceUsage::Type::SampledRead:
 			return vk::DescriptorType::eSampledImage;
 		case ResourceUsage::Type::ShaderWrite:
-			return isBuffer ? vk::DescriptorType::eStorageBuffer
-			                : vk::DescriptorType::eStorageImage;
+			return isBuffer ? vk::DescriptorType::eStorageBuffer : vk::DescriptorType::eStorageImage;
 		case ResourceUsage::Type::ShaderRead:
-			return isBuffer ? vk::DescriptorType::eStorageBuffer
-			                : vk::DescriptorType::eSampledImage;
+			return isBuffer ? vk::DescriptorType::eStorageBuffer : vk::DescriptorType::eSampledImage;
 		case ResourceUsage::Type::StorageBufferWrite:
 		case ResourceUsage::Type::StorageBufferRead:
 			return vk::DescriptorType::eStorageBuffer;
@@ -28,8 +24,7 @@ Access ResourceUsage::GetAccess(Type type) {
 	switch (type) {
 		case Type::SampledRead:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eFragmentShader |
-				         vk::PipelineStageFlagBits2::eComputeShader,
+				.stage = vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
 				.access = vk::AccessFlagBits2::eShaderSampledRead,
 				.layout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
@@ -54,10 +49,10 @@ Access ResourceUsage::GetAccess(Type type) {
 		case Type::DepthStencilRead:
 		case Type::DepthStencilWrite:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
-				         vk::PipelineStageFlagBits2::eLateFragmentTests,
+				.stage =
+					vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
 				.access = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
-				          vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+						  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 				.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
 			};
 		case Type::VertexBuffer:
@@ -74,8 +69,7 @@ Access ResourceUsage::GetAccess(Type type) {
 			};
 		case Type::UniformBuffer:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eVertexShader |
-				         vk::PipelineStageFlagBits2::eFragmentShader,
+				.stage = vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
 				.access = vk::AccessFlagBits2::eUniformRead,
 				.layout = vk::ImageLayout::eUndefined,
 			};

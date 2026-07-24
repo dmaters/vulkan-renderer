@@ -54,7 +54,7 @@ void RenderPass::Begin(Task::BuildContext& context, AttachmentOp color, Attachme
 			auto [loadOp, storeOp] = getAttachmentOps(depth);
 
 			depthAttachment = vk::RenderingAttachmentInfo{
-				.imageView = attachment.view,
+				.imageView = attachment.views[0],
 				.imageLayout =
 					isStencil ? vk::ImageLayout::eDepthStencilAttachmentOptimal : vk::ImageLayout::eDepthAttachmentOptimal,
 				.loadOp = loadOp,
@@ -65,7 +65,7 @@ void RenderPass::Begin(Task::BuildContext& context, AttachmentOp color, Attachme
 			auto [loadOp, storeOp] = getAttachmentOps(color);
 
 			colorAttachments.push_back({
-			.imageView = attachment.view,
+			.imageView = attachment.views[0],
 			.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
 			.loadOp = loadOp,
 			.storeOp = storeOp,
