@@ -8,11 +8,9 @@
 
 [vk_binding(6)] WTexture2D _hdrOutput;
 
+
 [numthreads(1,1,1)]
 [shader("compute")]
-
-
-
 void main(uint3 screenCoord : SV_GroupID){
 
     uint3 res;
@@ -25,57 +23,50 @@ void main(uint3 screenCoord : SV_GroupID){
 
     float3 normal = _world_position.Load(uint3(screenCoord.xy,0)).xyz;
     float3 worldSpaceSampleDir = normalize(reflect(cameraRay, normal));
+
     float reflectionPointDepth = _hiz.Load(screenCoord).r;
     float roughness = _roughness_metallic.Load(screenCoord).r;
-
-    int lowerHiZmip = log2(min(res.x,res.y));
-    int currentHiZmip = lowerHiZmip;
-
-    float4 clipSpaceSampleDir = mul(worldToClip,float4(worldSpaceSampleDir,0));
-    clipSpaceSampleDir.xyz /= clipSpaceSampleDir.w;
-
-    float2 mip0Sizes =  float2(1) / float2(res.xy);
-    float mip0SampleSize = max(mip0Sizes.x, mip0Sizes.y) ;
-    float2 sampleDir = normalize(clipSpaceSampleDir.xy);
-    float2 rayOrigin = float2(screenCoord.xy) / float2(res.xy) * 2.0f - 1.0f;
-    float2 samplePos = rayOrigin;
-
-    float distance = 0;
-
-    while(abs(samplePos.x) < 1 && abs(samplePos.y) < 1 ){
+    if(roughness > 0.9) return;
 
 
-        samplePos = rayOrigin + sampleDir * distance;
+    float3 sampleDir = mul(_camera.view, float4(worldSpaceSampleDir,0)).xyz;
+    float3 rayOriginPos = mul(_camera.view, float4(worldPos,1)).xyz;
+    float3 samplePos = rayOriginPos + sampleDir * 300;
 
-       float2 ndc = samplePos.xy * 0.5 + 0.5;
-       uint2 screenSpaceSamplePos = ndc.xy * ((res.xy) / (1 << currentHiZmip));
-       float depth = _hiz.Load(uint3(screenSpaceSamplePos,currentHiZmip)).r;
-
-       if(samplePos.z >= depth && depth >= reflectionPointDepth){
-
-           if(currentHiZmip > 0){
-               currentHiZmip = max(0, currentHiZmip - 1);
-               continue;
-           }
-           float4 outputColor = _ssrChain.Load(screenCoord);
-           float4 reflectionColor = _ssrChain.Load(uint3(screenSpaceSamplePos.xy,0));
-
-           outputColor += reflectionColor *  (1 - roughness);
-           _hdrOutput.Store(screenCoord.xy, float4(outputColor));
-
-           return;
-       }
+    float4 geometryAlignedPos;
 
 
-       bool isCurrentLevelSampling = (((sampleCount + 1) << currentHiZmip) % (1 << (currentHiZmip + 1))) > 0;
+    uint iter = 0;
+    do{
 
-        if(isCurrentLevelSampling || currentHiZmip == lowerHiZmip) sampleCount += 1 << currentHiZmip;
-        else{
-            currentHiZmip += 1;
-            sampleCount += 1 << (currentHiZmip - 1);
-        }
+        float4 clipSpacePos = mul(_camera.projection, float4(samplePos,1));
+        clipSpacePos.xy /= clipSpacePos.w;
+        if(abs(clipSpacePos.x) > 1 || abs(clipSpacePos.y) > 1) return;
 
-   }
 
+        uint2 screenSpacePos = (clipSpacePos.xy * 0.5 + 0.5) * res.xy;
+
+
+        float sampleDepth = _hiz.Load(uint3(screenSpacePos,0)).r;
+        geometryAlignedPos = mul(_camera.invProj,float4(clipSpacePos.xy, sampleDepth,1));
+        geometryAlignedPos.xyz /= geometryAlignedPos.w;
+        samplePos = sampleDir * dot(geometryAlignedPos.xyz - rayOriginPos, sampleDir) + rayOriginPos;
+
+        iter++;
+    } while(abs(geometryAlignedPos.z - samplePos.z) > 1  && iter < 16 );
+
+
+    float4 clipSpacePos = mul(_camera.projection, float4(samplePos,1));
+    clipSpacePos.xyz /= clipSpacePos.w;
+    if(abs(clipSpacePos.x) > 1 || abs(clipSpacePos.y) > 1) return;
+
+    uint2 screenSpacePos = (clipSpacePos.xy * 0.5 + 0.5) * res.xy;
+
+
+    float4 outputColor = _ssrChain.Load(screenCoord);
+    float4 reflectionColor = _ssrChain.Load(uint3(screenSpacePos.xy,0));
+
+    outputColor += reflectionColor *  (1 - roughness);
+    _hdrOutput.Store(screenCoord.xy, float4(outputColor));
 
 }
