@@ -14,6 +14,8 @@ struct Camera {
 	glm::mat4 projection;
 	glm::mat4 invView;
 	glm::mat4 invProj;
+	glm::vec4 position;
+	glm::vec4 direction;
 };
 
 struct Light {

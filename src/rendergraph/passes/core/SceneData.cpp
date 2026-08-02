@@ -39,6 +39,8 @@ static void build(Task::BuildContext& context) {
 		.projection = proj,
 		.invView = glm::inverse(view),
 		.invProj = glm::inverse(proj),
+		.position = glm::vec4(context.scene.camera.getPosition(), 1),
+		.direction = glm::vec4(context.scene.camera.getOrientation()[2], 0),
 	};
 
 	Buffer& cameraBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Camera);
