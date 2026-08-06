@@ -31,7 +31,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 static void build(Task::BuildContext& context) {
 	auto hdrOutput = context.getInput<Image&>(0);
 	auto ssrchain = context.getOutput<Image&>(0);
-	std::size_t mips = std::log2(std::min(hdrOutput.size.width, hdrOutput.size.height));
+	std::size_t mips = std::log2(std::min(hdrOutput.size.width, hdrOutput.size.height)) + 1;
 
 	vk::ImageBlit blitRegion {
 		.srcSubresource =
@@ -81,6 +81,7 @@ static void build(Task::BuildContext& context) {
 		    {
 			   .aspectMask = ssrchain.getAspectFlags(),
 			   .baseMipLevel = static_cast<uint32_t>(mip - 1),
+				.levelCount = 1,
 			   .layerCount = 1,
 		   },
 		};
@@ -133,7 +134,7 @@ static void build(Task::BuildContext& context) {
 	    {
 			.aspectMask = ssrchain.getAspectFlags(),
 			.baseMipLevel = 0,
-			.levelCount =  static_cast<uint32_t>(mips - 1),
+			.levelCount =  static_cast<uint32_t>(mips),
 			.layerCount = 1,
 	   },
 	};

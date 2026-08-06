@@ -245,7 +245,7 @@ void writeBarrier(
 					.image = image.image,
 					.subresourceRange = {
 										 .aspectMask = image.getAspectFlags(),
-										 .levelCount = 1,
+										 .levelCount = image.mipLevels,
 										 .layerCount = 1,
 					},
                 }
