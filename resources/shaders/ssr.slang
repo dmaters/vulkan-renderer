@@ -1,4 +1,7 @@
 #include "common/camera.slang"
+#include "common/static_textures.slang"
+#include "comp/pbr.slang"
+
 [vk_binding(0)] ConstantBuffer<Camera> _camera;
 [vk_binding(1)] Texture2D _world_position;
 [vk_binding(2)] Texture2D _normal;
@@ -12,6 +15,10 @@
 [numthreads(1,1,1)]
 [shader("compute")]
 void main(uint3 screenCoord : SV_GroupID){
+
+    if(_hiz.Load(uint3(screenCoord.xy,0)).r == 1) return;
+
+
 
     uint3 res;
     _hiz.GetDimensions(0, res.x, res.y, res.z);
@@ -27,9 +34,8 @@ void main(uint3 screenCoord : SV_GroupID){
 
     float3 worldSpaceSampleDir = normalize(reflect(cameraRay, normal));
 
-    if(dot(worldSpaceSampleDir.xyz, -_camera.direction.xyz) < 0) return;
+    float roughness = _roughness_metallic.Load(uint3(screenCoord.xy,0)).r;
 
-    float roughness = _roughness_metallic.Load(screenCoord).r;
     if(roughness > 0.9) return;
 
 
@@ -45,75 +51,81 @@ void main(uint3 screenCoord : SV_GroupID){
     sampleDir /= sampleDir.w;
     sampleDir.xyz -= ndcOrigin.xyz;
     sampleDir.xy = normalize(sampleDir.xy);
-    float2 toEdge;
-    toEdge = saturate(abs(sampleDir.xy * 2 + ndcOrigin.xy));
+    float2 toEdge = abs(-sampleDir.xy / max(abs(sampleDir.x), abs(sampleDir.y)) + ndcOrigin.xy);
 
-    float maxAxis = max(toEdge.x, toEdge.y);
-    uint stepsToX = toEdge.x * res.x / 2;
-    uint stepsToY = toEdge.y * res.y / 2;
-    uint steps = max(stepsToX, stepsToY);
 
-    float stepSize = stepsToX > stepsToY ? (toEdge.x / float(steps)) : (toEdge.y / float(steps)) ;
-    bool maxAxisX = stepsToX > stepsToY;
+    float2 edgePos = sign(sampleDir.xy);
+    float2 t2 = ((edgePos - ndcOrigin.xy) / sampleDir.xy);
+    float t = min(abs(t2.x), abs(t2.y));
+    uint2 stepsToAxis = uint2(ceil(abs(sampleDir.xy * t) * 0.5 * res.xy));
+    uint steps = max(stepsToAxis.x, stepsToAxis.y);
 
-    uint mipLevels = res.z;
-    int currentMip = 0;
+    bool maxAxisX = stepsToAxis.x > stepsToAxis.y;
+    float stepSize =  t / float(steps);
+
+    int mipLevels = res.z;
+
+    int minMip = roughness * (mipLevels - 1);
+
+    int currentMip = minMip;
+
     int i = 1;
+    int backtrackingHead = -1;
+    int backtrackingTail = -1;
 
-    int iter = 0;
-    float averageMip;
-    while(i < steps){
-        iter++;
-        averageMip += float(currentMip) / float(mipLevels);
+    bool toInfinity = false;
+
+    while(i < steps ){
         float2 samplePos = ndcOrigin.xy + sampleDir.xy * i * stepSize;
-
         if(abs(samplePos.x) > 1 || abs(samplePos.y) > 1 ) return;
 
-
         uint2 screenSpacePos = (samplePos.xy * 0.5 + 0.5) * res.xy ;
+
+
         float sampleDepth = _hiz.Load(uint3(screenSpacePos / (1 << currentMip), currentMip)).r;
 
         float4 worldSpaceSamplePos = mul(clipToWorld, float4(samplePos.xy,sampleDepth,1));
         worldSpaceSamplePos.xyz /= worldSpaceSamplePos.w;
         float3 sample = worldSpaceSamplePos.xyz - worldPos.xyz;
 
-        float d = dot(sample, sampleDirNorm);
-        float d1 = dot(sample, worldSpaceSampleDir);
+        float d = dot(sample, sampleDirNorm) ;
+        float d1 = dot(sample, worldSpaceSampleDir) ;
+        bool backtracking = false;
 
-        if(d < 0 || d1 < 0)
+
+        if(d < 0 || d1 < 0 )
         {
-            i += (1 << currentMip);
-            uint previousmip = currentMip;
-            currentMip = min(mipLevels - 1, maxAxisX ? firstbitlow(screenSpacePos.x): firstbitlow(screenSpacePos.y));
+            backtrackingTail = i;
+            uint di = (1 << currentMip);
+            i += di;
 
+            if(backtrackingHead <= backtrackingTail){
+                currentMip = min(mipLevels - 1, maxAxisX ? firstbitlow(screenSpacePos.x + di ) : firstbitlow(screenSpacePos.y + di ) + minMip);
+                currentMip = min(currentMip, firstbithigh(steps - i - 1) + minMip);
+            }
             continue;
         }
 
-        if(currentMip == 0) {
-
-            if(ndcOrigin.z < sampleDepth)
+        if( currentMip <= minMip) {
+            float3 localNormal = _normal.Load(uint3(screenSpacePos.xy,0)).xyz;
                 break;
-
-            i++;
         }
-
-        currentMip = max(0, currentMip - 1);
+        backtrackingHead = i;
+        i = backtrackingTail + (backtrackingHead - backtrackingTail + 1) / 2;
+        currentMip =  max(minMip, currentMip - 1);
     }
 
-   // _hdrOutput.Store(screenCoord.xy, float4(float3((averageMip / iter) < 1.0),1));
 
-    //return;
     if(i >= steps) return;
-
     float2 samplePos = ndcOrigin.xy + sampleDir.xy * i * stepSize;
 
-    uint2 screenSpacePos = (samplePos.xy * 0.5 + 0.5) * res.xy;
+    float2 screenSpacePos = (samplePos.xy * 0.5 + 0.5) ;
 
-    float4 outputColor = _ssrChain.Load(screenCoord);
-    float4 reflectionColor = _ssrChain.Load(uint3(screenSpacePos.xy,0));
+    float4 outputColor = _ssrChain.Load(uint3(screenCoord.xy,0));
+    float4 reflectionColor = _ssrChain.SampleLevel(_samplers[SamplerType::LinearClamp], screenSpacePos.xy, minMip);
 
-    outputColor += reflectionColor *  (1 - roughness);
-    _hdrOutput.Store(screenCoord.xy, float4(reflectionColor));
+    outputColor += reflectionColor * (1 - roughness);
+    _hdrOutput.Store(screenCoord.xy, outputColor);
 
 
 }
