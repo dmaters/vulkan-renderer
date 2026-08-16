@@ -7,4 +7,6 @@ struct Camera {
 	float4x4 invProj;
 	float4 position;
 	float4 direction;
+	float nearPlane;
+	float farPlane;
 };

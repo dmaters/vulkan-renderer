@@ -34,6 +34,7 @@ static void build(Task::BuildContext& context) {
 	glm::mat4 view = context.scene.camera.getViewMatrix();
 	glm::mat4 proj = context.scene.camera.getProjectionMatrix();
 
+	auto planes = context.scene.camera.getCascadeDistances();
 	MaterialDefinitions::Camera cameraView {
 		.view = view,
 		.projection = proj,
@@ -41,6 +42,8 @@ static void build(Task::BuildContext& context) {
 		.invProj = glm::inverse(proj),
 		.position = glm::vec4(context.scene.camera.getPosition(), 1),
 		.direction = glm::vec4(context.scene.camera.getOrientation()[2], 0),
+		.nearPlane = planes.front(),
+		.farPlane = planes.back(),
 	};
 
 	Buffer& cameraBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Camera);
