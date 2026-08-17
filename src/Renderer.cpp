@@ -71,6 +71,21 @@ void Renderer::render() {
 	}
 };
 
+void Renderer::setResolution(int width, int height) {
+	auto& swapchain = Instance::Get().swapchain;
+
+	swapchain.setResolutionHint({ (uint32_t)width, (uint32_t)height });
+	swapchain.rebuild();
+
+	m_currentScene.camera.setResolution(
+		{
+			width,
+			height,
+		}
+	);
+	m_graph.update(m_optionalPasses.back(), m_optionalPasses, m_currentScene);
+}
+
 void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);

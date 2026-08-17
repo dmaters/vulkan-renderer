@@ -479,11 +479,6 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	uint8_t currentFrameInFlight = m_currentFrame % 3;
 	const Frame& frame = m_swapchain.getFrame(currentFrameInFlight);
 
-	auto _ = device.waitForFences({ frame.fence }, vk::True, UINT64_MAX);
-
-	device.resetFences(frame.fence);
-	device.resetCommandPool(frame.commandPool);
-
 	vk::AcquireNextImageInfoKHR acquireInfo;
 	acquireInfo.swapchain = m_swapchain.getSwapchain();
 	acquireInfo.timeout = 1e12;
@@ -500,6 +495,10 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	} catch (vk::OutOfDateKHRError _) {
 		return false;
 	}
+
+	auto _ = device.waitForFences({ frame.fence }, vk::True, UINT64_MAX);
+	device.resetFences(frame.fence);
+	device.resetCommandPool(frame.commandPool);
 
 	bool timingFetched =
 		updateTimings();  // Get last frame timings and reset queryPool

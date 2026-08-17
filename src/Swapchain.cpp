@@ -14,11 +14,9 @@ Swapchain Swapchain::Create() {
 
 	Instance& instance = Instance::Get();
 
-	vk::SurfaceCapabilitiesKHR capabilities =
-		instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
-	if (capabilities.currentExtent.width != UINT32_MAX)
+	vk::SurfaceCapabilitiesKHR capabilities = instance.physicalDevice.getSurfaceCapabilitiesKHR(instance.surface);
+	if (capabilities.currentExtent.width != UINT32_MAX && capabilities.currentExtent != vk::Extent2D(0))
 		swapchain.m_resolution = capabilities.currentExtent;
-	if (capabilities.currentExtent == vk::Extent2D(0)) return {};
 	swapchain.createSwapchain();
 	swapchain.createFrames();
 	swapchain.createImages();

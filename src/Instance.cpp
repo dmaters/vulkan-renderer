@@ -31,7 +31,7 @@ Instance& Instance::Create(SDL_Window* window) {
 	VkSurfaceKHR surface;
 	bool res = SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface);
 
-	if (res) {
+	if (!res) {
 		std::cerr << SDL_GetError() << std::endl;
 	}
 	vk::PhysicalDevice physicalDevice = getPhysicalDevice(instance);
@@ -88,26 +88,27 @@ Instance& Instance::Create(SDL_Window* window) {
 
 //// Instance
 
-const std::vector<const char*> instanceExtensionLayers {
-	vk::EXTDebugUtilsExtensionName,
-	vk::KHRSurfaceExtensionName,
-#ifdef _WIN32
-	"VK_KHR_win32_surface",
-#elif defined(__linux__)
-	"VK_KHR_xlib_surface"
-#endif
-};
-
 vk::Instance createInstance() {
 	vk::ApplicationInfo appInfo {
 		.apiVersion = vk::ApiVersion13,
 	};
 
+	std::vector<const char*> extNames;
+
+	extNames.push_back(vk::EXTDebugUtilsExtensionName);
+
+	uint32_t extCount;
+	auto* extensions = SDL_Vulkan_GetInstanceExtensions(&extCount);
+
+	for (int i = 0; i < extCount; i++) {
+		extNames.push_back(extensions[i]);
+	}
+
 	vk::Instance instance = vk::createInstance(
 		vk::InstanceCreateInfo {
 			.pApplicationInfo = &appInfo,
-			.enabledExtensionCount = (uint32_t)instanceExtensionLayers.size(),
-			.ppEnabledExtensionNames = instanceExtensionLayers.data(),
+			.enabledExtensionCount = (uint32_t)extNames.size(),
+			.ppEnabledExtensionNames = extNames.data(),
 		}
 	);
 
