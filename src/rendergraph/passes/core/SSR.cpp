@@ -6,7 +6,7 @@
 struct SSRData {
 	TaskIndex sceneData;
 	TaskIndex gbuffer;
-	TaskIndex ssrChain;
+	TaskIndex hdrCopy;
 	TaskIndex hiz;
 	TaskIndex hdrOutput;
 
@@ -35,7 +35,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
                 ResourceUsage::Type::SampledRead,
             },
  			{
-                context.getReference(data.ssrChain, 0),
+                context.getReference(data.hdrCopy, 0),
                 ResourceUsage::Type::SampledRead,
             },
  			{
@@ -48,14 +48,14 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 
 static void build(Task::BuildContext& context) {
 	context.scene.camera.getResolution();
-	ComputePass(context, context.getData<SSRData>().material, glm::uvec3(context.scene.camera.getResolution(), 1));
+	ComputePass(context, context.getData<SSRData>().material, glm::uvec3(context.scene.camera.getResolution() / 8, 1));
 }
 
 TaskIndex rendergraph::passes::core::ssr(
 	PassBuildContext& context,
 	TaskIndex sceneData,
 	TaskIndex gbuffer,
-	TaskIndex ssrChain,
+	TaskIndex hdrCopy,
 	TaskIndex hiz,
 	TaskIndex hdrOutput
 ) {
@@ -82,7 +82,7 @@ TaskIndex rendergraph::passes::core::ssr(
 		SSRData {
 			.sceneData = sceneData,
 			.gbuffer = gbuffer,
-			.ssrChain = ssrChain,
+			.hdrCopy = hdrCopy,
 			.hiz = hiz,
 			.hdrOutput = hdrOutput,
 			.material = material,

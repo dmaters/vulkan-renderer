@@ -40,7 +40,7 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 			rendergraph::internal::ResourceIndexer::ResourceType::Image) {
 			Image& image = resourceManager.getImage(images[index]);
 
-			uint depthSamplingOffset = (image.getAspectFlags() & vk::ImageAspectFlagBits::eStencil) ? 1 : 0;
+			uint32_t depthSamplingOffset = (image.getAspectFlags() & vk::ImageAspectFlagBits::eStencil) ? 1 : 0;
 			resources._imageInfo.push_back(
 				{
 					.imageView = image.views[0 + depthSamplingOffset],

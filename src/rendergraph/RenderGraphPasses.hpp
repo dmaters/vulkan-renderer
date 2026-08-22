@@ -55,12 +55,11 @@ namespace core {
 		TaskIndex sceneData,
 		TaskIndex skyLighting
 	);
-	TaskIndex ssrChainGen(PassBuildContext& context, TaskIndex hdrOutput);
 	TaskIndex ssr(
 		PassBuildContext& context,
 		TaskIndex sceneData,
 		TaskIndex gbuffer,
-		TaskIndex ssrChain,
+		TaskIndex hdrCopy,
 		TaskIndex hiz,
 		TaskIndex hdrOutput
 	);
