@@ -24,11 +24,7 @@ struct Light {
 		float padding;
 	};
 
-	FrustumBounds getFrustumBounds(
-		const Camera& camera, float sceneSize, uint8_t cascade
-	) const;
+	FrustumBounds getFrustumBounds(const Camera& camera, float sceneSize, uint8_t cascade) const;
 
-	MaterialDefinitions::Light getShaderObject(
-		const Camera& camera, float sceneSize
-	) const;
+	MaterialDefinitions::Light getShaderObject(const Camera& camera, float sceneSize) const;
 };

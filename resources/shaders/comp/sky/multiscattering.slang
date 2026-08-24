@@ -5,15 +5,11 @@ __include luminance;
 internal void getMultipleScatteringUV(float muS, float height, out float2 uv) {
 	float altitude = height - Atmosphere.BottomRadius;
 	uv.x = 0.5 + 0.5 * muS;
-	uv.y =
-		saturate(altitude / (Atmosphere.TopRadius - Atmosphere.BottomRadius));
+	uv.y = saturate(altitude / (Atmosphere.TopRadius - Atmosphere.BottomRadius));
 }
-internal void getMultipleScatteringParams(
-	float2 uv, out float muS, out float height
-) {
+internal void getMultipleScatteringParams(float2 uv, out float muS, out float height) {
 	muS = uv.x * 2.0 - 1.0;
-	height = (uv.y * (Atmosphere.TopRadius - Atmosphere.BottomRadius)) +
-	         Atmosphere.BottomRadius;
+	height = (uv.y * (Atmosphere.TopRadius - Atmosphere.BottomRadius)) + Atmosphere.BottomRadius;
 }
 
 // TODO: Few problems on defining this in a shared module, keep it duplicate
@@ -52,14 +48,11 @@ internal float3 computeMultipleScattering(
 	const float phase = 1.0 / angle;
 
 	float3 dir = -fibonacciSampling<false>(sampleIndex, samples);
-	ScatteredLuminanceResult res = getScatteredLuminance<
-		IsotropicPhase,
-		DummyMultiscatteringProvider,
-		false,
-		true>(transmittanceLUT, height, dir, sunDirection);
+	ScatteredLuminanceResult res = getScatteredLuminance<IsotropicPhase, DummyMultiscatteringProvider, false, true>(
+		transmittanceLUT, height, dir, sunDirection
+	);
 
-	float3 sampleLuminance =
-		(res.luminance / samples) / (1.0 - res.luminanceFactor / samples);
+	float3 sampleLuminance = (res.luminance / samples) / (1.0 - res.luminanceFactor / samples);
 	cache[cacheOffset + sampleIndex * 3 + 0] = sampleLuminance.r;
 	cache[cacheOffset + sampleIndex * 3 + 1] = sampleLuminance.g;
 	cache[cacheOffset + sampleIndex * 3 + 2] = sampleLuminance.b;
@@ -70,11 +63,8 @@ internal float3 computeMultipleScattering(
 
 	float3 luminance = float3(0);
 	for (int i = 0; i < samples; i++) {
-		luminance += float3(
-			cache[cacheOffset + i * 3 + 0],
-			cache[cacheOffset + i * 3 + 1],
-			cache[cacheOffset + i * 3 + 2]
-		);
+		luminance +=
+			float3(cache[cacheOffset + i * 3 + 0], cache[cacheOffset + i * 3 + 1], cache[cacheOffset + i * 3 + 2]);
 	}
 
 	return luminance;

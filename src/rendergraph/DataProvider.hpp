@@ -7,10 +7,7 @@ private:
 	std::unordered_map<TaskIndex, std::vector<std::byte>>& m_taskData;
 
 public:
-	DataProvider(
-		std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData
-	) :
-		m_taskData(taskData) {}
+	DataProvider(std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData) : m_taskData(taskData) {}
 
 	template <typename T>
 	T& getData(TaskIndex task) {

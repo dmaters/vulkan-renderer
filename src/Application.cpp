@@ -26,14 +26,11 @@ static void check_vk_result(VkResult err) {
 
 Application::Application(const std::filesystem::path& path) {
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
-		std::cerr << "Failed to initialize SDL: " << SDL_GetError()
-				  << std::endl;
+		std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
 		throw;
 	}
 
-	m_window = SDL_CreateWindow(
-		"SDLVulk Test", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
-	);
+	m_window = SDL_CreateWindow("SDLVulk Test", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 	if (!m_window) {
 		std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;
 		SDL_Quit();
@@ -53,8 +50,7 @@ Application::Application(const std::filesystem::path& path) {
 	ImGui_ImplVulkan_LoadFunctions(
 		vk::ApiVersion13,
 		[](const char* function_name, void* vulkan_instance) {
-			return static_cast<vk::Instance*>(vulkan_instance)
-		        ->getProcAddr(function_name);
+			return static_cast<vk::Instance*>(vulkan_instance)->getProcAddr(function_name);
 		},
 		static_cast<void*>(&instance.instance)
 	);
@@ -111,37 +107,30 @@ int Application::run() {
 		float deltaTime = static_cast<float>(currentTime - lastFrameTime) / 1e3;
 		lastFrameTime = currentTime;
 		Camera& camera = m_renderer->getScene().camera;
-		glm::vec2 centerCoords =
-			glm::vec2(camera.getResolution()) / glm::vec2(2.0);
+		glm::vec2 centerCoords = glm::vec2(camera.getResolution()) / glm::vec2(2.0);
 
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
 
 			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
-				m_renderer->setResolution(
-					event.window.data1, event.window.data2
-				);
+				m_renderer->setResolution(event.window.data1, event.window.data2);
 			}
 
 			if (event.type == SDL_EVENT_QUIT) {
 				running = false;
 			}
 
-			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-			    event.button.button == SDL_BUTTON_RIGHT) {
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_RIGHT) {
 				SDL_GetMouseState(&prelockCoordinates.x, &prelockCoordinates.y);
 				SDL_SetWindowRelativeMouseMode(m_window, true);
 				SDL_HideCursor();
 				SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
 				cameraLocked = true;
 			}
-			if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-			    event.button.button == SDL_BUTTON_RIGHT) {
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_RIGHT) {
 				SDL_SetWindowRelativeMouseMode(m_window, false);
 				SDL_ShowCursor();
-				SDL_WarpMouseInWindow(
-					nullptr, prelockCoordinates.x, prelockCoordinates.y
-				);
+				SDL_WarpMouseInWindow(nullptr, prelockCoordinates.x, prelockCoordinates.y);
 				cameraLocked = false;
 			}
 		}
@@ -157,10 +146,7 @@ int Application::run() {
 		if (keyStates[SDL_SCANCODE_LCTRL]) accel = 0.2;
 
 		glm::vec3 dir2 = direction * direction;
-		if ((dir2.x + dir2.y + dir2.z) > 0)
-			camera.translate(
-				glm::normalize(direction) * deltaTime * accel * 150.0f
-			);
+		if ((dir2.x + dir2.y + dir2.z) > 0) camera.translate(glm::normalize(direction) * deltaTime * accel * 150.0f);
 
 		if (cameraLocked) {
 			glm::vec2 coordinates;

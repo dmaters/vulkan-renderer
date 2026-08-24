@@ -53,8 +53,7 @@ void main(uint3 dispatch : SV_GroupID) {
 		for (uint y = 0; y < _subSamples; y++) {
 			float3 direction = fibonacciSampling<true>(y, _subSamples);
 			direction = mul(rotation, direction);
-			color += readSkyViewLUT(_skyviewLUT, direction) *
-			         saturate(dot(direction, up));
+			color += readSkyViewLUT(_skyviewLUT, direction) * saturate(dot(direction, up));
 		}
 
 		float weight = 4 * PI / (_samples * _subSamples);

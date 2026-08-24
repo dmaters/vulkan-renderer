@@ -27,9 +27,7 @@ private:
 
 public:
 	void rotate(glm::vec2 rotation);
-	void translate(glm::vec3 deltaPos) {
-		m_position += getOrientation() * deltaPos;
-	}
+	void translate(glm::vec3 deltaPos) { m_position += getOrientation() * deltaPos; }
 	void setResolution(glm::ivec2 resolution);
 	glm::ivec2 getResolution() const { return m_resolution; }
 
@@ -48,8 +46,6 @@ public:
 
 	Fov getFov() const { return m_fov; };
 
-	std::array<float, 4> getCascadeDistances() const {
-		return m_frustumPlanesDistances;
-	}
+	std::array<float, 4> getCascadeDistances() const { return m_frustumPlanesDistances; }
 	std::array<glm::vec4, 6> getFrustumPlanes() const;
 };

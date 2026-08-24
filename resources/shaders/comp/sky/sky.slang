@@ -29,8 +29,7 @@ float3 readSkyViewLUT(Texture2D skyviewLUT, float3 direction) {
 	uv.x = lon / PI;
 	uv.y = (1.0 + sign(lat) * sqrt(2.0 * abs(lat) / PI)) / 2;
 	uv.x = abs(uv.x);
-	return skyviewLUT.SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0)
-	    .rgb;
+	return skyviewLUT.SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0).rgb;
 }
 
 public
@@ -49,23 +48,13 @@ void writeSkyViewLUT(
 	float t = uv.y * 2 - 1;
 	float lat = sign(t) * t * t * PI / 2;
 
-	float3 direction =
-		float3(cos(lon) * cos(lat), sin(lat), cos(lat) * sin(lon));
+	float3 direction = float3(cos(lon) * cos(lat), sin(lat), cos(lat) * sin(lon));
 
 	float height = Atmosphere.BottomRadius + 0.1;
-	float3 luminance = getScatteredLuminance<
-						   AnisotropicPhase,
-						   LUTMultiscatteringProvider,
-						   true,
-						   false>(
-						   transmittanceLUT,
-						   height,
-						   direction,
-						   sunDirection,
-						   1,
-						   { multitransferLUT }
+	float3 luminance = getScatteredLuminance<AnisotropicPhase, LUTMultiscatteringProvider, true, false>(
+						   transmittanceLUT, height, direction, sunDirection, 1, { multitransferLUT }
 	)
-	                       .luminance;
+						   .luminance;
 	skyviewLUT.Store(coord, float4(luminance, 1));
 }
 
@@ -91,9 +80,7 @@ void writeMultiscatteringLUT(
 
 	uint cacheOffset = (coord.y * uint(res.x) + coord.x) * _samples * 3;
 
-	float3 multiscattering = computeMultipleScattering(
-		transmittanceLUT, height, sunDir, _samples, thread, cacheOffset, cache
-	);
-	if (thread == 0)
-		multiscatteringLUT.Store(coord, float4(multiscattering, 1));
+	float3 multiscattering =
+		computeMultipleScattering(transmittanceLUT, height, sunDir, _samples, thread, cacheOffset, cache);
+	if (thread == 0) multiscatteringLUT.Store(coord, float4(multiscattering, 1));
 }

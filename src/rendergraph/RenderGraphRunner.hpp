@@ -41,9 +41,7 @@ private:
 	uint64_t m_currentFrame = 0;
 
 	bool updateTimings() const;
-	void outputToSwapchain(
-		vk::CommandBuffer& commandBuffer, uint32_t imageIndex
-	) const;
+	void outputToSwapchain(vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
 public:
 	RenderGraphRunner(

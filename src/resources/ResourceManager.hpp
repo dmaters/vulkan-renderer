@@ -34,10 +34,8 @@ private:
 	std::vector<Buffer> m_buffers;
 
 	std::vector<LinearAllocator> m_allocations;
-	std::unordered_map<AllocationIndex, std::vector<ImageHandle>>
-		m_allocationImages;
-	std::unordered_map<AllocationIndex, std::vector<BufferHandle>>
-		m_allocationBuffers;
+	std::unordered_map<AllocationIndex, std::vector<ImageHandle>> m_allocationImages;
+	std::unordered_map<AllocationIndex, std::vector<BufferHandle>> m_allocationBuffers;
 
 	vk::CommandPool m_commandPool;
 	vk::Semaphore m_semaphore;
@@ -49,28 +47,18 @@ public:
 	ResourceManager();
 
 	Image& getImage(ImageHandle handle) { return m_images.at(handle.value); }
-	Buffer& getBuffer(BufferHandle handle) {
-		return m_buffers.at(handle.value);
-	}
+	Buffer& getBuffer(BufferHandle handle) { return m_buffers.at(handle.value); }
 
-	const Image& getImage(ImageHandle handle) const {
-		return m_images[handle.value];
-	}
-	const Buffer& getBuffer(BufferHandle handle) const {
-		return m_buffers[handle.value];
-	}
+	const Image& getImage(ImageHandle handle) const { return m_images[handle.value]; }
+	const Buffer& getBuffer(BufferHandle handle) const { return m_buffers[handle.value]; }
 
 	const std::span<const ImageHandle> getImages(AllocationIndex index) const {
-		if (!m_allocationImages.contains(index))
-			return std::span<ImageHandle, 0>();
+		if (!m_allocationImages.contains(index)) return std::span<ImageHandle, 0>();
 		auto& images = m_allocationImages.at(index);
 		return std::span<const ImageHandle>(images);
 	}
-	const std::span<const BufferHandle> getBuffers(
-		AllocationIndex index
-	) const {
-		if (!m_allocationBuffers.contains(index))
-			return std::span<BufferHandle, 0>();
+	const std::span<const BufferHandle> getBuffers(AllocationIndex index) const {
+		if (!m_allocationBuffers.contains(index)) return std::span<BufferHandle, 0>();
 
 		auto& buffers = m_allocationBuffers.at(index);
 		return std::span<const BufferHandle>(buffers);

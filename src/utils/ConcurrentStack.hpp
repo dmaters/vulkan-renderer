@@ -12,9 +12,7 @@ public:
 		ConcurrentStack& m_baseStack;
 
 	public:
-		Inserter(ConcurrentStack& baseStack) : m_baseStack(baseStack) {
-			baseStack.registerProvider();
-		}
+		Inserter(ConcurrentStack& baseStack) : m_baseStack(baseStack) { baseStack.registerProvider(); }
 		~Inserter() { m_baseStack.unregisterProvider(); }
 
 		void push(T value) { m_baseStack.push(value); }
@@ -45,9 +43,7 @@ private:
 		m_cv.notify_one();
 	}
 
-	bool isRetired() {
-		return (m_activated && m_providerCount.load() == 0 && m_values.empty());
-	}
+	bool isRetired() { return (m_activated && m_providerCount.load() == 0 && m_values.empty()); }
 
 public:
 	ConcurrentStack() {}

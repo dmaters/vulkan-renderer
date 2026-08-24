@@ -16,14 +16,10 @@ std::array<glm::vec3, 4> computeFrustumDirections(Camera::Fov fov) {
 	return directions;
 }
 
-std::array<glm::float3, 4> computeFrustumPlanes(
-	std::array<glm::float3, 4>& frustumDirections
-) {
+std::array<glm::float3, 4> computeFrustumPlanes(std::array<glm::float3, 4>& frustumDirections) {
 	std::array<glm::float3, 4> planesDirection;
 	for (int i = 0; i < 4; i++) {
-		planesDirection[i] = glm::normalize(
-			glm::cross(frustumDirections[i], frustumDirections[(i + 1) % 4])
-		);
+		planesDirection[i] = glm::normalize(glm::cross(frustumDirections[i], frustumDirections[(i + 1) % 4]));
 	}
 
 	return planesDirection;
@@ -47,8 +43,7 @@ void Camera::setResolution(glm::ivec2 resolution) {
 }
 
 glm::mat3 Camera::getOrientation() const {
-	glm::quat pitchQuat =
-		glm::angleAxis(glm::radians(m_pitch), glm::vec3(1, 0, 0));
+	glm::quat pitchQuat = glm::angleAxis(glm::radians(m_pitch), glm::vec3(1, 0, 0));
 	glm::quat yawQuat = glm::angleAxis(glm::radians(m_yaw), glm::vec3(0, 1, 0));
 	glm::mat3 orientation = glm::mat3_cast(yawQuat * pitchQuat);
 	return orientation;
@@ -65,10 +60,7 @@ glm::mat4 Camera::getViewMatrix() const {
 
 glm::mat4 Camera::getProjectionMatrix() const {
 	glm::mat4 proj = glm::perspectiveRH_ZO(
-		glm::radians(getFov().vertical),
-		(float)m_resolution.x / m_resolution.y,
-		0.1f,
-		m_frustumPlanesDistances[3]
+		glm::radians(getFov().vertical), (float)m_resolution.x / m_resolution.y, 0.1f, m_frustumPlanesDistances[3]
 	);
 	proj[1][1] *= -1;
 	return proj;
@@ -81,8 +73,7 @@ std::array<glm::vec4, 6> Camera::getFrustumPlanes() const {
 	}
 	glm::vec3 direction = glm::vec3(0, 0, -1);
 
-	planes[4] =
-		glm::vec4(orientation * -direction, m_frustumPlanesDistances[0]);
+	planes[4] = glm::vec4(orientation * -direction, m_frustumPlanesDistances[0]);
 	planes[5] = glm::vec4(orientation * direction, m_frustumPlanesDistances[3]);
 	return planes;
 }

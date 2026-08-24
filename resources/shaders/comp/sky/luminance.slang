@@ -15,8 +15,7 @@ internal struct AnisotropicPhase : IPhaseProvider {
 		static const float _g = .8;
 
 		float k = 3.0 / (8.0 * PI) * (1.0 - _g * _g) / (2.0 + _g * _g);
-		return k * (1.0 + cosTheta * cosTheta) /
-		       pow(1.0 + _g * _g - 2.0 * _g * cosTheta, 1.5);
+		return k * (1.0 + cosTheta * cosTheta) / pow(1.0 + _g * _g - 2.0 * _g * cosTheta, 1.5);
 	}
 	static float rayleighPhase(float cosTheta) {
 		float factor = 3.0f / (16.0f * PI);
@@ -41,9 +40,7 @@ struct LUTMultiscatteringProvider : IMultiscatteringProvider {
 	float3 getMultiscattering(float height, float muS) {
 		float2 uv;
 		getMultipleScatteringUV(muS, height, uv);
-		return multiscatteringLUT
-		    .SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0)
-		    .rgb;
+		return multiscatteringLUT.SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0).rgb;
 	}
 }
 
@@ -94,15 +91,11 @@ internal ScatteredLuminanceResult getScatteredLuminance<
 
 		MediumSample sample = MediumSample::Get(pHeight);
 		const float3 T = exp(-sample.extinction * dt);
-		float3 transmittanceToSun =
-			getTransmittance(transmittanceLUT, pHeight, muS);
-		float3 phaseScattering = miePhase * sample.scatteringMie +
-		                         rayleighPhase * sample.scatteringRay;
+		float3 transmittanceToSun = getTransmittance(transmittanceLUT, pHeight, muS);
+		float3 phaseScattering = miePhase * sample.scatteringMie + rayleighPhase * sample.scatteringRay;
 		float3 shadow = 1.0 - saturate(sign(distanceToGround(pHeight, muS)));
 		float3 MS = multiscatteringProvider.getMultiscattering(pHeight, muS);
-		float3 S =
-			sunIlluminance * transmittanceToSun * shadow * phaseScattering +
-			MS * sample.scattering;
+		float3 S = sunIlluminance * transmittanceToSun * shadow * phaseScattering + MS * sample.scattering;
 		float3 Sint = (S - S * T) / sample.extinction;
 
 		float3 Sf = sample.scattering;
@@ -112,8 +105,7 @@ internal ScatteredLuminanceResult getScatteredLuminance<
 		if (Ground && dg > 0 && (i == _sampleCount - 1)) {
 			float NdL = saturate(dot(up, sunDirection));
 
-			L += sunIlluminance * transmittanceToSun * throughput * NdL *
-			     GroundAlbedo / PI;
+			L += sunIlluminance * transmittanceToSun * throughput * NdL * GroundAlbedo / PI;
 		}
 
 		L += throughput * Sint;

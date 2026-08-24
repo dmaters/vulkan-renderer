@@ -13,27 +13,23 @@
 
 #include "Instance.hpp"
 
-Allocation::Allocation(
-	vk::MemoryPropertyFlags requiredType, uint32_t requiredSize
-) {
+Allocation::Allocation(vk::MemoryPropertyFlags requiredType, uint32_t requiredSize) {
 	auto& physicalDevice = Instance::Get().physicalDevice;
 	auto& device = Instance::Get().device;
 
 	auto properties = physicalDevice.getMemoryProperties();
 
 	for (int i = 0; i < properties.memoryTypeCount; i++) {
-		if ((properties.memoryTypes[i].propertyFlags & requiredType) !=
-		    requiredType)
-			continue;
-		memory = device.allocateMemory(vk::MemoryAllocateInfo {
-			.allocationSize = requiredSize,
-			.memoryTypeIndex = (uint32_t)i,
-		});
+		if ((properties.memoryTypes[i].propertyFlags & requiredType) != requiredType) continue;
+		memory = device.allocateMemory(
+			vk::MemoryAllocateInfo {
+				.allocationSize = requiredSize,
+				.memoryTypeIndex = (uint32_t)i,
+			}
+		);
 
 		if (requiredType & vk::MemoryPropertyFlagBits::eHostVisible)
-			address = static_cast<std::byte*>(
-				device.mapMemory(memory, 0, requiredSize)
-			);
+			address = static_cast<std::byte*>(device.mapMemory(memory, 0, requiredSize));
 
 		size = requiredSize;
 

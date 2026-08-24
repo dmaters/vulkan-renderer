@@ -52,21 +52,17 @@ Instance& Instance::Create(SDL_Window* window) {
 
 	vk::SurfaceFormatKHR format = formats[0];
 	for (vk::SurfaceFormatKHR f : formats) {
-		if ((f.format == vk::Format::eB8G8R8A8Srgb ||
-		     f.format == vk::Format::eB8G8R8A8Srgb) &&
-		    f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+		if ((f.format == vk::Format::eB8G8R8A8Srgb || f.format == vk::Format::eB8G8R8A8Srgb) &&
+			f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
 			format = f;
 			break;
 		}
 	}
 
-	vk::PhysicalDeviceLimits physicalDeviceLimits =
-		physicalDevice.getProperties().limits;
+	vk::PhysicalDeviceLimits physicalDeviceLimits = physicalDevice.getProperties().limits;
 	Instance::PhysicalDeviceLimits limitCache {
-		.minStorageBufferOffsetAlignment =
-			physicalDeviceLimits.minStorageBufferOffsetAlignment,
-		.minUniformBufferOffsetAlignment =
-			physicalDeviceLimits.minUniformBufferOffsetAlignment,
+		.minStorageBufferOffsetAlignment = physicalDeviceLimits.minStorageBufferOffsetAlignment,
+		.minUniformBufferOffsetAlignment = physicalDeviceLimits.minUniformBufferOffsetAlignment,
 	};
 
 	Instance::_instance = {
@@ -117,9 +113,7 @@ vk::Instance createInstance() {
 //// Debug
 
 // vkbootstrap debug output
-std::string_view to_string_message_severity(
-	VkDebugUtilsMessageSeverityFlagBitsEXT s
-) {
+std::string_view to_string_message_severity(VkDebugUtilsMessageSeverityFlagBitsEXT s) {
 	switch (s) {
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 			return "VERBOSE";
@@ -137,13 +131,10 @@ std::string_view to_string_message_type(VkDebugUtilsMessageTypeFlagsEXT s) {
 	if (s == 7) return "General | Validation | Performance";
 	if (s == 6) return "Validation | Performance";
 	if (s == 5) return "General | Performance";
-	if (s == 4 /*VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT*/)
-		return "Performance";
+	if (s == 4 /*VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT*/) return "Performance";
 	if (s == 3) return "General | Validation";
-	if (s == 2 /*VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT*/)
-		return "Validation";
-	if (s == 1 /*VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT*/)
-		return "General";
+	if (s == 2 /*VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT*/) return "Validation";
+	if (s == 1 /*VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT*/) return "General";
 	return "Unknown";
 }
 
@@ -153,11 +144,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 	const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void*
 ) {
-	auto ms = to_string_message_severity(
-		(VkDebugUtilsMessageSeverityFlagBitsEXT)messageSeverity
-	);
-	auto mt =
-		to_string_message_type((VkDebugUtilsMessageTypeFlagsEXT)messageType);
+	auto ms = to_string_message_severity((VkDebugUtilsMessageSeverityFlagBitsEXT)messageSeverity);
+	auto mt = to_string_message_type((VkDebugUtilsMessageTypeFlagsEXT)messageType);
 	printf("[%s: %s]\n%s\n", ms.data(), mt.data(), pCallbackData->pMessage);
 
 	return VK_FALSE;  // Applications must return false here
@@ -176,8 +164,7 @@ void setupDebug(vk::Instance instance) {
 //// PhysicalDevice
 
 vk::PhysicalDevice getPhysicalDevice(vk::Instance instance) {
-	std::vector<vk::PhysicalDevice> devices =
-		instance.enumeratePhysicalDevices();
+	std::vector<vk::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
 
 	std::optional<vk::PhysicalDevice> integrated;
 
@@ -186,10 +173,8 @@ vk::PhysicalDevice getPhysicalDevice(vk::Instance instance) {
 		vk::PhysicalDeviceFeatures features = device.getFeatures();
 
 		if (!features.geometryShader) continue;
-		if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
-			return device;
-		if (properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu)
-			integrated = device;
+		if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) return device;
+		if (properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) integrated = device;
 	}
 
 	if (integrated.has_value()) return *integrated;
@@ -202,8 +187,7 @@ vk::PhysicalDevice getPhysicalDevice(vk::Instance instance) {
 Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 	Instance::QueueFamilies families;
 
-	std::vector<vk::QueueFamilyProperties> properties =
-		device.getQueueFamilyProperties();
+	std::vector<vk::QueueFamilyProperties> properties = device.getQueueFamilyProperties();
 
 	for (int i = 0; i < properties.size(); i++) {
 		auto property = properties[i];
@@ -213,14 +197,13 @@ Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 			families.presentIndex = i;
 		}
 		if (property.queueFlags & vk::QueueFlagBits::eTransfer &&
-		    !(property.queueFlags & vk::QueueFlagBits::eGraphics)) {
+			!(property.queueFlags & vk::QueueFlagBits::eGraphics)) {
 			families.transferIndex = i;
 			families.transferAvailable = true;
 		}
 	}
 
-	if (!families.transferAvailable)
-		families.transferIndex = families.graphicsIndex;
+	if (!families.transferAvailable) families.transferIndex = families.graphicsIndex;
 
 	return families;
 }
@@ -228,23 +211,17 @@ Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 //// Device
 const std::vector<const char*> deviceLayers {};
 const std::vector<const char*> deviceExtensions {
-	"VK_KHR_swapchain",
-	"VK_KHR_dynamic_rendering",
-	"VK_KHR_depth_stencil_resolve",
-	"VK_KHR_create_renderpass2",
-	"VK_KHR_multiview",
-	"VK_KHR_maintenance2",
-	"VK_KHR_synchronization2",
-	"VK_EXT_descriptor_indexing",
-	"VK_KHR_push_descriptor",
+	"VK_KHR_swapchain",			 "VK_KHR_dynamic_rendering",   "VK_KHR_depth_stencil_resolve",
+	"VK_KHR_create_renderpass2", "VK_KHR_multiview",		   "VK_KHR_maintenance2",
+	"VK_KHR_synchronization2",	 "VK_EXT_descriptor_indexing", "VK_KHR_push_descriptor",
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
 	std::vector<vk::DeviceQueueCreateInfo> queueInfo {
 		{
-         .queueFamilyIndex = (uint32_t)queueFamilies.graphicsIndex,
-         .queueCount = 1,
-         .pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }.data(),
+			.queueFamilyIndex = (uint32_t)queueFamilies.graphicsIndex,
+			.queueCount = 1,
+			.pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }.data(),
 		 },
 	};
 
@@ -253,10 +230,9 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 			{
 				.queueFamilyIndex = (uint32_t)queueFamilies.transferIndex,
 				.queueCount = 1,
-				.pQueuePriorities =
-					std::array<float, 3> { 1.f, 1.f, 1.f }
-                      .data()
-        }
+				.pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }
+					  .data()
+		  }
 		);
 
 	vk::PhysicalDeviceVulkan11Features vulkan11Features {
@@ -279,9 +255,8 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.pNext = &vulkan12Features,
 		.dynamicRendering = true,
 	};
-	vk::PhysicalDeviceSynchronization2FeaturesKHR syncronizationFeature {
-		.pNext = &dynamicRenderingFeature, .synchronization2 = true
-	};
+	vk::PhysicalDeviceSynchronization2FeaturesKHR syncronizationFeature { .pNext = &dynamicRenderingFeature,
+																		  .synchronization2 = true };
 
 	vk::PhysicalDeviceFeatures features {
 		.multiDrawIndirect = true,

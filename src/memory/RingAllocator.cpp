@@ -3,20 +3,14 @@
 #include "Instance.hpp"
 #include "memory/Allocation.hpp"
 
-RingAllocator::RingAllocator(
-	vk::MemoryPropertyFlags memoryType, uint32_t size
-) :
-	m_allocation(memoryType, size) {}
+RingAllocator::RingAllocator(vk::MemoryPropertyFlags memoryType, uint32_t size) : m_allocation(memoryType, size) {}
 
 SubAllocation RingAllocator::subAllocate(vk::MemoryRequirements requirements) {
 	uint32_t startingOffset = m_occupiedOffset;
 	if (requirements.alignment > 1)
-		startingOffset +=
-			(requirements.alignment - (startingOffset % requirements.alignment)
-		    );
+		startingOffset += (requirements.alignment - (startingOffset % requirements.alignment));
 
-	if (m_allocation.size - startingOffset < requirements.size)
-		startingOffset = 0;
+	if (m_allocation.size - startingOffset < requirements.size) startingOffset = 0;
 
 	SubAllocation subAllocation = {
 		.offset = startingOffset,
@@ -27,6 +21,4 @@ SubAllocation RingAllocator::subAllocate(vk::MemoryRequirements requirements) {
 	return subAllocation;
 }
 
-RingAllocator::~RingAllocator() {
-	Instance::Get().device.freeMemory(m_allocation.memory);
-}
+RingAllocator::~RingAllocator() { Instance::Get().device.freeMemory(m_allocation.memory); }

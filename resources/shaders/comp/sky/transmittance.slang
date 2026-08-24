@@ -5,13 +5,9 @@ internal void transmittanceParams(float2 uv, out float height, out float mu) {
 	float x_mu = uv.x;
 	float x_r = uv.y;
 
-	float H = sqrt(
-		Atmosphere.TopRadius * Atmosphere.TopRadius -
-		Atmosphere.BottomRadius * Atmosphere.BottomRadius
-	);
+	float H = sqrt(Atmosphere.TopRadius * Atmosphere.TopRadius - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
 	float rho = H * x_r;
-	height =
-		sqrt(rho * rho + Atmosphere.BottomRadius * Atmosphere.BottomRadius);
+	height = sqrt(rho * rho + Atmosphere.BottomRadius * Atmosphere.BottomRadius);
 
 	float d_min = Atmosphere.TopRadius - height;
 	float d_max = rho + H;
@@ -21,13 +17,8 @@ internal void transmittanceParams(float2 uv, out float height, out float mu) {
 }
 
 internal void transmittanceUV(float height, float mu, out float2 uv) {
-	float H = sqrt(
-		Atmosphere.TopRadius * Atmosphere.TopRadius -
-		Atmosphere.BottomRadius * Atmosphere.BottomRadius
-	);
-	float rho = sqrt(
-		height * height - Atmosphere.BottomRadius * Atmosphere.BottomRadius
-	);
+	float H = sqrt(Atmosphere.TopRadius * Atmosphere.TopRadius - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
+	float rho = sqrt(height * height - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
 
 	float d = distanceToAtmosphere(height, mu);
 
@@ -39,14 +30,10 @@ internal void transmittanceUV(float height, float mu, out float2 uv) {
 	uv = float2(x_mu, x_r);
 }
 
-float3 getTransmittance(
-	uniform Texture2D transmittanceLUT, float height, float mus
-) {
+float3 getTransmittance(uniform Texture2D transmittanceLUT, float height, float mus) {
 	float2 uv;
 	transmittanceUV(height, mus, uv);
-	return transmittanceLUT
-	    .SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0)
-	    .rgb;
+	return transmittanceLUT.SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0).rgb;
 }
 
 internal float3 computeTrasmittance(float height, float mu) {
@@ -58,8 +45,7 @@ internal float3 computeTrasmittance(float height, float mu) {
 
 	for (uint i = 0; i < _sampleCount; i++) {
 		float d = i * dx;
-		float sampleHeight =
-			sqrt(d * d + 2.0 * height * mu * d + height * height);
+		float sampleHeight = sqrt(d * d + 2.0 * height * mu * d + height * height);
 
 		MediumSample sample = MediumSample::Get(sampleHeight);
 		opticalLength += sample.extinction;

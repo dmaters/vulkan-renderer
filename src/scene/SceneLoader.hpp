@@ -11,11 +11,8 @@ class SceneLoader {
 	MaterialManager& m_materialManager;
 
 public:
-	SceneLoader(
-		ResourceManager& resourceManager, MaterialManager& materialManager
-	) :
-		m_resourceManager(resourceManager),
-		m_materialManager(materialManager) {}
+	SceneLoader(ResourceManager& resourceManager, MaterialManager& materialManager) :
+		m_resourceManager(resourceManager), m_materialManager(materialManager) {}
 
 	Scene load(const std::filesystem::path& path);
 };

@@ -11,8 +11,7 @@
 using namespace UI;
 UI::UIData UI::Data = {};
 void UI::Setup() {
-	vk::PhysicalDeviceProperties2 properties =
-		Instance::Get().physicalDevice.getProperties2();
+	vk::PhysicalDeviceProperties2 properties = Instance::Get().physicalDevice.getProperties2();
 
 	Data.systemData.currentGpu = std::string(properties.properties.deviceName);
 }
@@ -35,10 +34,7 @@ void UI::Render(vk::CommandBuffer commandBuffer) {
 	ImGui::SeparatorText("Scene Data");
 	ImGui::LabelText("Current scene", Data.sceneData.scenePath.c_str());
 	ImGui::LabelText(
-		"Primitives (visible/total)",
-		"%i / %i",
-		Data.sceneData.gbufferCount,
-		Data.sceneData.primitiveCount
+		"Primitives (visible/total)", "%i / %i", Data.sceneData.gbufferCount, Data.sceneData.primitiveCount
 	);
 
 	ImGui::SeparatorText("Lighting Data");

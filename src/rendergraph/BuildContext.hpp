@@ -28,12 +28,8 @@ struct Task::BuildContext {
 	template <typename T>
 	T getOutput(std::size_t slot);
 
-	Image& getImage(rendergraph::ResourceIndex index) {
-		return resourceManager.getImage(images[index]);
-	}
-	Buffer& getBuffer(rendergraph::ResourceIndex index) {
-		return resourceManager.getBuffer(buffers[index]);
-	}
+	Image& getImage(rendergraph::ResourceIndex index) { return resourceManager.getImage(images[index]); }
+	Buffer& getBuffer(rendergraph::ResourceIndex index) { return resourceManager.getBuffer(buffers[index]); }
 
 	struct Descriptors {
 		std::vector<vk::DescriptorImageInfo> _imageInfo = {};
@@ -60,8 +56,7 @@ T Task::BuildContext::getInput(std::size_t slot) {
 	} else if constexpr (std::same_as<T, Image&>) {
 		return resourceManager.getImage(images[inputs[slot].resource]);
 	} else {
-		Buffer& buffer =
-			resourceManager.getBuffer(buffers[inputs[slot].resource]);
+		Buffer& buffer = resourceManager.getBuffer(buffers[inputs[slot].resource]);
 
 		return static_cast<T>(buffer.data);
 	}
@@ -74,8 +69,7 @@ T Task::BuildContext::getOutput(std::size_t slot) {
 	} else if constexpr (std::same_as<T, Image&>) {
 		return resourceManager.getImage(images[outputs[slot].resource]);
 	} else {
-		Buffer& buffer =
-			resourceManager.getBuffer(buffers[outputs[slot].resource]);
+		Buffer& buffer = resourceManager.getBuffer(buffers[outputs[slot].resource]);
 
 		return static_cast<T>(buffer.data);
 	}

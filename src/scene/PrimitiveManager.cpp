@@ -5,10 +5,7 @@
 #include <vulkan/vulkan.hpp>
 
 void PrimitiveManager::addPrimitive(
-	std::vector<Vertex>& vertices,
-	std::vector<uint32_t>& indices,
-	uint32_t& vertexByteOffset,
-	uint32_t& indexByteOffset
+	std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, uint32_t& vertexByteOffset, uint32_t& indexByteOffset
 ) {
 	vertexByteOffset = m_positions.size();
 

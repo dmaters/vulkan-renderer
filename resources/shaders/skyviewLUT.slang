@@ -9,14 +9,8 @@
 [vk_binding(3)] WTexture2D<float4> _skyviewLUT;
 
 void main(uint3 dispatch : SV_GroupID) {
-	float3 sunDirection = transpose(_lightData.view)[2].xyz
-	    * float3(1,1,-1); //TODO: fix, probably handness issues
+	float3 sunDirection = transpose(_lightData.view)[2].xyz * float3(1, 1, -1);	 // TODO: fix, probably handness issues
 	writeSkyViewLUT(
-		_skyviewLUT,
-		_transmittanceLUT,
-		_multiscatteringLUT,
-		dispatch.xy,
-		sunDirection,
-		_lightData.intensity
+		_skyviewLUT, _transmittanceLUT, _multiscatteringLUT, dispatch.xy, sunDirection, _lightData.intensity
 	);
 }

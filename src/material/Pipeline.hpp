@@ -40,16 +40,12 @@ public:
 		vk::PipelineShaderStageCreateInfo stage;
 		std::vector<vk::DescriptorSetLayout>& setLayouts;
 	};
-	static std::optional<Pipeline> BuildComputePipeline(
-		const ComputePipelineBuildInfo& info
-	);
+	static std::optional<Pipeline> BuildComputePipeline(const ComputePipelineBuildInfo& info);
 
 	struct GraphicPipelineBuildInfo {
 		std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
 		std::vector<vk::DescriptorSetLayout>& setLayouts;
 		GraphicPipelineConfiguration& configuration;
 	};
-	static std::optional<Pipeline> BuildGraphicPipeline(
-		const GraphicPipelineBuildInfo& info
-	);
+	static std::optional<Pipeline> BuildGraphicPipeline(const GraphicPipelineBuildInfo& info);
 };

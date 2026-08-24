@@ -45,10 +45,8 @@ struct ExecutionInfo {
 	Resources resources;
 
 	struct References {
-		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>>
-			inputs;
-		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>>
-			outputs;
+		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>> inputs;
+		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>> outputs;
 	};
 	References references;
 	ResourceIndex outputImage;

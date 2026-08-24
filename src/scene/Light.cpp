@@ -42,9 +42,7 @@ glm::mat4 getViewMatrix(glm::mat3 orientation, glm::vec3 position) {
 	return view;
 };
 
-Light::FrustumBounds Light::getFrustumBounds(
-	const Camera& camera, float sceneSize, uint8_t cascade
-) const {
+Light::FrustumBounds Light::getFrustumBounds(const Camera& camera, float sceneSize, uint8_t cascade) const {
 	FrustumPoints fp = getFrustumPoints(camera);
 	std::array<glm::vec4, 8> lightSpaceBounds;
 
@@ -57,8 +55,7 @@ Light::FrustumBounds Light::getFrustumBounds(
 		lightSpaceBounds[i] = cameraToLightView * fp[0][i];
 		lightSpaceBounds[4 + i] = cameraToLightView * fp[cascade + 1][i];
 	}
-	float right = -1e9, left = 1e9, top = -1e9, bottom = 1e9, far = -1e9,
-		  near = 1e9;
+	float right = -1e9, left = 1e9, top = -1e9, bottom = 1e9, far = -1e9, near = 1e9;
 
 	for (int i = 0; i < 8; i++) {
 		right = fmax(right, lightSpaceBounds[i].x);
@@ -98,8 +95,7 @@ Light::FrustumBounds Light::getFrustumBounds(
 	top = center.y + boundsHSize * 0.5;
 
 	worldUnitsPerTexel = boundsVSize / 2048.0;
-	float vCenter =
-		floor((far + near) * 0.5 / worldUnitsPerTexel) * worldUnitsPerTexel;
+	float vCenter = floor((far + near) * 0.5 / worldUnitsPerTexel) * worldUnitsPerTexel;
 
 	near = vCenter - boundsVSize * 0.5;
 	far = vCenter + boundsVSize * 0.5;
@@ -115,22 +111,13 @@ Light::FrustumBounds Light::getFrustumBounds(
 	};
 }
 
-MaterialDefinitions::Light Light::getShaderObject(
-	const Camera& camera, float sceneSize
-) const {
+MaterialDefinitions::Light Light::getShaderObject(const Camera& camera, float sceneSize) const {
 	std::array<glm::mat4, 3> shadowProjections;
 	std::array<float, 3> shadowPaddings;
 	for (int i = 0; i < 3; i++) {
 		Light::FrustumBounds bounds = getFrustumBounds(camera, sceneSize, i);
 		// Top bottom swapped for y-down
-		glm::mat4 proj = glm::orthoRH_ZO(
-			bounds.left,
-			bounds.right,
-			bounds.bottom,
-			bounds.top,
-			bounds.near,
-			bounds.far
-		);
+		glm::mat4 proj = glm::orthoRH_ZO(bounds.left, bounds.right, bounds.bottom, bounds.top, bounds.near, bounds.far);
 		shadowProjections[i] = proj;
 		shadowPaddings[i] = bounds.padding;
 	}
