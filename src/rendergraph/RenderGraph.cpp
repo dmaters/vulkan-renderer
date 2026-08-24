@@ -93,6 +93,7 @@ public:
 	}
 
 	void explore(TaskIndex task) {
+		if (m_exploredTasks[task]) return;
 		m_exploredTasks[task] = true;
 
 		Task::DataProvider dataProvider(m_taskData);
@@ -113,7 +114,7 @@ public:
 	}
 
 	rendergraph::ResourceIndex getResource(TaskIndex index, std::size_t slot) override {
-		if (!m_exploredTasks[index]) explore(index);
+		explore(index);
 		return m_data.references.outputs[index][slot].resource;
 	}
 
