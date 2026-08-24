@@ -12,7 +12,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
 			.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled |
-					 vk::ImageUsageFlagBits::eStorage,
+					 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
 		}
 	);
 

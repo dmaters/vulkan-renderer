@@ -17,7 +17,8 @@ TaskIndex rendergraph::passes::core::sdrOutput(PassBuildContext &context) {
 					.miplevels = 1,
 					.format = vk::Format::eR8G8B8A8Unorm,
 					.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-							 vk::ImageUsageFlagBits::eTransferSrc,
+							 vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment |
+							 vk::ImageUsageFlagBits::eTransferDst,
 				}
 
 			);

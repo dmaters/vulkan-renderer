@@ -138,7 +138,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eD24UnormS8Uint,
-			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+			.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransferSrc |
+					 vk::ImageUsageFlagBits::eSampled,
 
 		}
 	);

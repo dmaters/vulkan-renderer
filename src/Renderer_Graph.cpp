@@ -42,6 +42,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto shadowBuffer = core::shadows(context, sceneData);
 	auto gbuffer = core::gbuffer(context, { pbrMaterialData, pbrMaterialInstances }, sceneData);
 
+	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
 	optionalPasses.push_back(lighting);
@@ -49,18 +50,23 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
 	optionalPasses.push_back(skybox);
 
+	auto hdrCopyTask = core::hdrOutput(context);
+	auto hdrCopy = util::imageCopy(context, hdrOutput,0,hdrCopyTask,0);
+	auto ssr = core::ssr(context, sceneData, gbuffer, hdrCopy, hiz, hdrOutput);
+	optionalPasses.push_back(ssr);
+
 	auto sdrOutput = core::sdrOutput(context);
 	auto composition = post_processing::composition(context, hdrOutput, sdrOutput);
 	optionalPasses.push_back(composition);
 
-	auto sdrCopy = core::sdrOutput(context);
-	auto copy = util::imageCopy(context, sdrOutput, 0, sdrCopy, 0);
+	auto sdrCopyTask = core::sdrOutput(context);
+	auto sdrCopy = util::imageCopy(context, sdrOutput, 0, sdrCopyTask, 0);
 
-	auto fxaa = post_processing::fxaa(context, copy, sdrOutput);
+	auto fxaa = post_processing::fxaa(context, sdrCopy, sdrOutput);
 	optionalPasses.push_back(fxaa);
 
 	auto ui = core::ui(context, sdrOutput);
-
+	optionalPasses.push_back(ui);
 	m_optionalPasses = optionalPasses;
 	m_graph.update(ui, m_optionalPasses, scene);
 
