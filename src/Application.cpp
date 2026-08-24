@@ -116,6 +116,13 @@ int Application::run() {
 
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
+
+			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
+				m_renderer->setResolution(
+					event.window.data1, event.window.data2
+				);
+			}
+
 			if (event.type == SDL_EVENT_QUIT) {
 				running = false;
 			}

@@ -16,7 +16,7 @@ private:
 	vk::SwapchainKHR m_swapchain = nullptr;
 	std::optional<vk::SwapchainKHR> m_oldSwapchain;
 
-	vk::Extent2D m_resolution;
+	vk::Extent2D m_resolution = vk::Extent2D { 1280, 720 };
 
 	std::array<Frame, 3> m_frames;
 	std::array<Image, 3> m_images;
@@ -32,6 +32,8 @@ public:
 	Image& getImage(uint8_t index) { return m_images.at(index); }
 	const vk::SwapchainKHR& getSwapchain() const { return m_swapchain; };
 	vk::Extent2D getResolution() { return m_resolution; }
+	void setResolutionHint(vk::Extent2D resolution) { m_resolution = resolution; }
+
 	void rebuild();
 	void flush();
 };

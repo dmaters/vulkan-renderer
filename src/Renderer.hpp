@@ -33,6 +33,6 @@ public:
 	Renderer(SDL_Window* window);
 	void load(const std::filesystem::path& path);
 	void render();
-
+	void setResolution(int width, int height);
 	Scene& getScene() { return m_currentScene; }
 };
