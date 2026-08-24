@@ -6,7 +6,7 @@
 [vk_binding(1)] Texture2D _world_position;
 [vk_binding(2)] Texture2D _normal;
 [vk_binding(3)] Texture2D _roughness_metallic;
-[vk_binding(4)] Texture2D _ssrChain;
+[vk_binding(4)] Texture2D _hdrCopy;
 [vk_binding(5)] Texture2D _hiz;
 
 [vk_binding(6)] WTexture2D _hdrOutput;
@@ -104,9 +104,9 @@
 
 	float2 screenSpacePos = (samplePos.xy * 0.5 + 0.5);
 
-	float4 outputColor = _ssrChain.Load(uint3(screenCoord.xy, 0));
+	float4 outputColor = _hdrCopy.Load(uint3(screenCoord.xy, 0));
 
-	float4 reflectionColor = _ssrChain.SampleLevel(_samplers[SamplerType::LinearClamp], screenSpacePos.xy, 0);
+	float4 reflectionColor = _hdrCopy.SampleLevel(_samplers[SamplerType::LinearClamp], screenSpacePos.xy, 0);
 
 	outputColor += reflectionColor * (1 - roughness);
 	_hdrOutput.Store(screenCoord.xy, outputColor);
