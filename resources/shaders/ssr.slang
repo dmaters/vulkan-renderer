@@ -68,7 +68,7 @@
 
 		float3 samplePos = ndcOrigin.xyz + rayStep.xyz * i;
 
-		uint2 screenSpacePos = (samplePos.xy * 0.5 + 0.5) * res.xy;
+		uint2 screenSpacePos = uint2((samplePos.xy * 0.5 + 0.5) * res.xy);
 
 		float bufferDepth = _hiz.Load(uint3(screenSpacePos >> currentMip, currentMip)).r;
 		bool hit = bufferDepth < samplePos.z;
