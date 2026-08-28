@@ -2,7 +2,7 @@
 #include "rendergraph/SetupContext.hpp"
 
 static Task::Dependencies setup(Task::SetupContext& context) {
-	auto resolution = context.scene.camera.getResolution();
+	auto resolution = context.renderingConfiguration.resolution;
 	rendergraph::ResourceIndex hdr_output = context.createImage(
 		"hdr_output",
 		{

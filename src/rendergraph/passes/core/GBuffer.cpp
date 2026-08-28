@@ -7,7 +7,7 @@
 #include "rendergraph/SetupContext.hpp"
 #include "ui/UI.hpp"
 
-struct GBUfferPass {
+struct GBufferPass {
 	TaskIndex sceneData;
 	MaterialIndex material;
 	rendergraph::ResourceIndex pbrMaterialData;
@@ -29,7 +29,7 @@ struct GBUfferPass {
 };
 
 static Task::Dependencies setup(Task::SetupContext& context) {
-	auto& data = context.getData<GBUfferPass>();
+	auto& data = context.getData<GBufferPass>();
 	uint32_t indirectBufferSize =
 		static_cast<uint32_t>(context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand));
 
@@ -74,12 +74,11 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	);
 	auto cameraBuffer = context.getReference(data.sceneData, rendergraph::passes::core::SceneDataSlots::Camera);
 
-	auto resolution = context.scene.camera.getResolution();
 	auto albedo = context.createImage(
 		"gbuffer_albedo",
 		{
-			.width = static_cast<uint32_t>(resolution.x),
-			.height = static_cast<uint32_t>(resolution.y),
+			.width = static_cast<uint32_t>(context.renderingConfiguration.resolution.x),
+			.height = static_cast<uint32_t>(context.renderingConfiguration.resolution.y),
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -91,8 +90,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto normal = context.createImage(
 		"gbuffer_normal",
 		{
-			.width = static_cast<uint32_t>(resolution.x),
-			.height = static_cast<uint32_t>(resolution.y),
+			.width = static_cast<uint32_t>(context.renderingConfiguration.resolution.x),
+			.height = static_cast<uint32_t>(context.renderingConfiguration.resolution.y),
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -105,8 +104,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto worldPos = context.createImage(
 		"gbuffer_worldpos",
 		{
-			.width = static_cast<uint32_t>(resolution.x),
-			.height = static_cast<uint32_t>(resolution.y),
+			.width = static_cast<uint32_t>(context.renderingConfiguration.resolution.x),
+			.height = static_cast<uint32_t>(context.renderingConfiguration.resolution.y),
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -119,8 +118,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto roughnessMetallic = context.createImage(
 		"gbuffer_roughnessMetallic",
 		{
-			.width = static_cast<uint32_t>(resolution.x),
-			.height = static_cast<uint32_t>(resolution.y),
+			.width = static_cast<uint32_t>(context.renderingConfiguration.resolution.x),
+			.height = static_cast<uint32_t>(context.renderingConfiguration.resolution.y),
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eR16G16B16A16Sfloat,
@@ -133,8 +132,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto depth = context.createImage(
 		"depth",
 		{
-			.width = static_cast<uint32_t>(resolution.x),
-			.height = static_cast<uint32_t>(resolution.y),
+			.width = static_cast<uint32_t>(context.renderingConfiguration.resolution.x),
+			.height = static_cast<uint32_t>(context.renderingConfiguration.resolution.y),
 			.depth = 1,
 			.miplevels = 1,
 			.format = vk::Format::eD24UnormS8Uint,
@@ -162,10 +161,14 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	};
 }
 static void build(Task::BuildContext& context) {
-	auto& data = context.getData<GBUfferPass>();
+	auto& data = context.getData<GBufferPass>();
 
-	auto visiblePrimitives =
-		FrustumCulling(context.scene, context.scene.buckets.at(data.material), context.scene.camera.getFrustumPlanes());
+	auto visiblePrimitives = FrustumCulling(
+		context.scene,
+		context.scene.buckets.at(data.material),
+		context.scene.camera.position,
+		context.scene.camera.getFrustumPlanes(context.scene.size)
+	);
 
 	UI::Data.sceneData.gbufferCount = visiblePrimitives.size();
 
@@ -195,7 +198,7 @@ TaskIndex rendergraph::passes::core::gbuffer(
 			.setup = setup,
 			.build = build,
 		},
-		GBUfferPass {
+		GBufferPass {
 			.sceneData = sceneData,
 			.material = context.materialManager.getMaterialIndex("gbuffer"),
 			.pbrMaterialData = resources.pbrMaterialData,

@@ -5,6 +5,7 @@
 
 #include "GraphData.hpp"
 #include "RenderGraphRunner.hpp"
+#include "RenderingConfiguration.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/Task.hpp"
@@ -16,6 +17,7 @@ private:
 	Swapchain& m_swapchain;
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
+	const RenderingConfiguration& m_renderingConfiguration;
 
 	rendergraph::internal::GraphData m_data;
 	std::optional<rendergraph::internal::RenderGraphRunner> m_runner;
@@ -25,7 +27,12 @@ private:
 	);
 
 public:
-	RenderGraph(Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager);
+	RenderGraph(
+		const RenderingConfiguration& renderingConfiguration,
+		Swapchain& swapchain,
+		ResourceManager& resourceManager,
+		MaterialManager& materialManager
+	);
 
 	rendergraph::ResourceIndex registerImage(std::string name, ImageHandle handle);
 	rendergraph::ResourceIndex registerBuffer(std::string name, BufferHandle handle);

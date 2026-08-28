@@ -7,6 +7,7 @@
 #include "DataProvider.hpp"
 #include "GraphData.hpp"
 #include "RenderGraph.hpp"
+#include "RenderingConfiguration.hpp"
 #include "ResourceIndex.hpp"
 #include "ResourceUsage.hpp"
 #include "SetupContext.hpp"
@@ -18,10 +19,15 @@
 #include "scene/Scene.hpp"
 
 RenderGraph::RenderGraph(
-	Swapchain& swapchain, ResourceManager& resourceManager, MaterialManager& materialManager
-
+	const RenderingConfiguration& renderingConfiguration,
+	Swapchain& swapchain,
+	ResourceManager& resourceManager,
+	MaterialManager& materialManager
 ) :
-	m_swapchain(swapchain), m_resourceManager(resourceManager), m_materialManager(materialManager) {}
+	m_swapchain(swapchain),
+	m_resourceManager(resourceManager),
+	m_materialManager(materialManager),
+	m_renderingConfiguration(renderingConfiguration) {}
 
 rendergraph::ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
 	rendergraph::ResourceIndex index =
@@ -68,6 +74,7 @@ struct ExplorationData {
 
 class GraphExplorer : Task::SetupContext::ResourceProvider::TaskManager {
 private:
+	const RenderingConfiguration& m_renderingConfiguration;
 	const std::unordered_map<TaskIndex, Task>& m_tasks;
 	std::unordered_map<TaskIndex, std::vector<std::byte>>& m_taskData;
 	const Scene& m_scene;
@@ -79,13 +86,18 @@ private:
 
 public:
 	GraphExplorer(
+		const RenderingConfiguration& renderingConfiguration,
 		const std::unordered_map<TaskIndex, Task>& tasks,
 		std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData,
 		const std::vector<TaskIndex>& optionalTasks,
 		const Scene& scene,
 		rendergraph::internal::ResourceIndexer indexer
 	) :
-		m_tasks(tasks), m_taskData(taskData), m_scene(scene), m_resourceProvider(indexer, *this) {
+		m_renderingConfiguration(renderingConfiguration),
+		m_tasks(tasks),
+		m_taskData(taskData),
+		m_scene(scene),
+		m_resourceProvider(indexer, *this) {
 		m_exploredTasks = std::vector<bool>(tasks.size());
 		for (auto optionalTask : optionalTasks) {
 			explore(optionalTask);
@@ -103,6 +115,7 @@ public:
 			.scene = m_scene,
 			.resourceProvider = m_resourceProvider,
 			.dataProvider = dataProvider,
+			.renderingConfiguration = m_renderingConfiguration,
 		};
 
 		Task::Dependencies deps = m_tasks.at(task).setup(context);
@@ -129,7 +142,9 @@ public:
 rendergraph::internal::ExecutionInfo RenderGraph::build(
 	TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene
 ) {
-	GraphExplorer explorer(m_data.tasks, m_data.taskData, optionalTasks, scene, m_data.indexer);
+	GraphExplorer explorer(
+		m_renderingConfiguration, m_data.tasks, m_data.taskData, optionalTasks, scene, m_data.indexer
+	);
 
 	explorer.explore(outputTask);
 
@@ -202,7 +217,7 @@ rendergraph::internal::ExecutionInfo RenderGraph::build(
 
 void RenderGraph::update(TaskIndex outputTask, const std::vector<TaskIndex>& optionalTasks, const Scene& scene) {
 	rendergraph::internal::ExecutionInfo info = build(outputTask, optionalTasks, scene);
-	m_runner.emplace(m_data, m_swapchain, m_resourceManager, m_materialManager, info);
+	m_runner.emplace(m_data, m_swapchain, m_resourceManager, m_materialManager, m_renderingConfiguration, info);
 }
 
 bool RenderGraph::submit(const Scene& scene) { return m_runner->submit(scene); }

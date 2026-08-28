@@ -148,9 +148,14 @@ RenderGraphRunner::RenderGraphRunner(
 	Swapchain& swapchain,
 	ResourceManager& resourceManager,
 	MaterialManager& materialManager,
+	const RenderingConfiguration& renderingConfiguration,
 	ExecutionInfo execInfo
 ) :
-	m_data(graphData), m_swapchain(swapchain), m_resourceManager(resourceManager), m_materialManager(materialManager) {
+	m_data(graphData),
+	m_swapchain(swapchain),
+	m_resourceManager(resourceManager),
+	m_materialManager(materialManager),
+	m_renderingConfiguration(renderingConfiguration) {
 	vk::Device& device = Instance::Get().device;
 	m_renderSemaphores = {
 		device.createSemaphore({}),
@@ -497,6 +502,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 			.buffers = m_buffers,
 			.inputs = m_execInfo.references.inputs[taskIndex],
 			.outputs = m_execInfo.references.outputs[taskIndex],
+			.renderingConfiguration = m_renderingConfiguration,
 			.resourceManager = m_resourceManager,
 			.materialManager = m_materialManager,
 			.scene = scene,

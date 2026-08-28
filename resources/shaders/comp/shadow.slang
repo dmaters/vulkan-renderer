@@ -5,7 +5,6 @@
 
 namespace Shadow {
 
-static const float CASCADE_BOUNDS[3] = { 125, 700, 4000 };
 float getValue(Texture2D shadowMap, float3 worldPos, float3 normal, uint cascade, Camera camera, LightData light) {
 	float4 lightSpacePos = mul(mul(light.cascadeProjections[cascade], light.view), float4(worldPos, 1));
 
@@ -23,16 +22,16 @@ float getValue(Texture2D shadowMap, float3 worldPos, float3 normal, uint cascade
 }
 float shadowPercentage(Texture2D shadowmap, float3 worldPos, float3 normal, Camera camera, LightData light) {
 	float distance = -mul(camera.view, float4(worldPos, 1)).z;
-	if (distance > CASCADE_BOUNDS[2]) return 1;
+	if (distance > light.cascadeDistances[3]) return 1;
 
 	uint cascade = 2;
 
-	if (distance < (CASCADE_BOUNDS[1] + light.paddings[1])) cascade = 1;
-	if (distance < (CASCADE_BOUNDS[0] + light.paddings[0])) cascade = 0;
+	if (distance < (light.cascadeDistances[2] + light.paddings[1])) cascade = 1;
+	if (distance < (light.cascadeDistances[1] + light.paddings[0])) cascade = 0;
 
 	// We use the padding of the stabilization alignment for the blending
 	// This way we access the full cascade resolution before using the next
-	float weight = saturate((distance - CASCADE_BOUNDS[cascade]) / light.paddings[cascade]);
+	float weight = saturate((distance - light.cascadeDistances[cascade + 1]) / light.paddings[cascade]);
 	float shadow = getValue(shadowmap, worldPos, normal, cascade, camera, light);
 
 	if (weight > 0 && cascade < 2) {

@@ -9,7 +9,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto cameraBuffer = context.createBuffer(
 		"camera_buffer",
 		ResourceManager::BufferDescription {
-			.size = sizeof(MaterialDefinitions::Camera),
+			.size = sizeof(Camera::ShaderObject),
 			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
 		},
 		ResourceManager::MemoryLocation::Device
@@ -17,7 +17,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	auto lightBuffer = context.createBuffer(
 		"light_buffer",
 		ResourceManager::BufferDescription {
-			.size = sizeof(MaterialDefinitions::Light),
+			.size = sizeof(Light::ShaderObject),
 			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eUniformBuffer,
 		},
 		ResourceManager::MemoryLocation::Device
@@ -32,29 +32,29 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 
 static void build(Task::BuildContext& context) {
 	glm::mat4 view = context.scene.camera.getViewMatrix();
-	glm::mat4 proj = context.scene.camera.getProjectionMatrix();
+	glm::mat4 proj =
+		context.scene.camera.getProjectionMatrix(context.renderingConfiguration.resolution, context.scene.size);
 
-	auto planes = context.scene.camera.getCascadeDistances();
-	MaterialDefinitions::Camera cameraView {
+	Camera::ShaderObject cameraObject {
 		.view = view,
 		.projection = proj,
 		.invView = glm::inverse(view),
 		.invProj = glm::inverse(proj),
-		.position = glm::vec4(context.scene.camera.getPosition(), 1),
+		.position = glm::vec4(context.scene.camera.position, 1),
 		.direction = glm::vec4(context.scene.camera.getOrientation()[2], 0),
-		.nearPlane = planes.front(),
-		.farPlane = planes.back(),
+		.nearPlane = 0.1f,
+		.farPlane = context.scene.camera.getFrustumSize(context.scene.size),
 	};
 
 	Buffer& cameraBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Camera);
 
-	context.commandBuffer.updateBuffer(cameraBuffer.buffer, 0, sizeof(cameraView), &cameraView);
+	context.commandBuffer.updateBuffer(cameraBuffer.buffer, 0, sizeof(Camera::ShaderObject), &cameraObject);
 
-	MaterialDefinitions::Light light =
-		context.scene.lights[0].getShaderObject(context.scene.camera, context.scene.size);
+	Light::ShaderObject light =
+		context.scene.lights[0].getShaderObject(context.scene.camera, cameraObject, context.scene.size);
 	Buffer& lightBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Lights);
 
-	context.commandBuffer.updateBuffer(lightBuffer.buffer, 0, sizeof(MaterialDefinitions::Light), &light);
+	context.commandBuffer.updateBuffer(lightBuffer.buffer, 0, sizeof(Light::ShaderObject), &light);
 }
 
 TaskIndex rendergraph::passes::core::sceneData(PassBuildContext& context) {

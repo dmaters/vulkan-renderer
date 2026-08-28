@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vulkan/vulkan.hpp>
 
+#include "RenderingConfiguration.hpp"
 #include "Swapchain.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/GraphData.hpp"
@@ -24,6 +25,7 @@ private:
 	Swapchain& m_swapchain;
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
+	const RenderingConfiguration& m_renderingConfiguration;
 
 	std::optional<ResourceManager::AllocationIndex> m_deviceAllocation;
 	std::optional<ResourceManager::AllocationIndex> m_sharedAllocation;
@@ -49,6 +51,7 @@ public:
 		Swapchain& swapchain,
 		ResourceManager& resourceManager,
 		MaterialManager& materialManager,
+		const RenderingConfiguration& renderingConfiguration,
 		ExecutionInfo execInfo
 	);
 	~RenderGraphRunner();

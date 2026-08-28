@@ -2,6 +2,7 @@
 
 #include "DataProvider.hpp"
 #include "GraphData.hpp"
+#include "RenderingConfiguration.hpp"
 #include "Task.hpp"
 #include "scene/Scene.hpp"
 
@@ -13,8 +14,9 @@ struct Task::SetupContext {
 	const Scene& scene;
 
 	ResourceProvider& resourceProvider;
-
 	DataProvider& dataProvider;
+
+	const RenderingConfiguration& renderingConfiguration;
 
 	rendergraph::ResourceIndex createImage(
 		std::string name,

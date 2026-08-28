@@ -9,7 +9,7 @@ struct HiZData {
 };
 
 Task::Dependencies setup(Task::SetupContext& context) {
-	auto resolution = context.scene.camera.getResolution();
+	auto resolution = context.renderingConfiguration.resolution;
 
 	uint32_t minSize = std::min(resolution.x, resolution.y);
 	minSize = minSize > 0 ? minSize : 1;

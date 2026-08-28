@@ -107,7 +107,7 @@ int Application::run() {
 		float deltaTime = static_cast<float>(currentTime - lastFrameTime) / 1e3;
 		lastFrameTime = currentTime;
 		Camera& camera = m_renderer->getScene().camera;
-		glm::vec2 centerCoords = glm::vec2(camera.getResolution()) / glm::vec2(2.0);
+		glm::vec2 centerCoords = glm::vec2(m_renderer->getResolution()) / glm::vec2(2.0);
 
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
@@ -146,13 +146,17 @@ int Application::run() {
 		if (keyStates[SDL_SCANCODE_LCTRL]) accel = 0.2;
 
 		glm::vec3 dir2 = direction * direction;
-		if ((dir2.x + dir2.y + dir2.z) > 0) camera.translate(glm::normalize(direction) * deltaTime * accel * 150.0f);
+		if ((dir2.x + dir2.y + dir2.z) > 0)
+			camera.position += camera.getOrientation() * (glm::normalize(direction) * deltaTime * accel * 150.0f);
 
 		if (cameraLocked) {
 			glm::vec2 coordinates;
 			SDL_GetMouseState(&coordinates.x, &coordinates.y);
 
-			camera.rotate((centerCoords - coordinates) * deltaTime);
+			glm::vec2 rotation = (centerCoords - coordinates) * deltaTime;
+			camera.yaw += rotation.x * 10;
+			camera.pitch += rotation.y * 10;
+			camera.pitch = glm::clamp(camera.pitch, -89.0f, 89.0f);
 			SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
 		}
 

@@ -9,30 +9,6 @@ struct EnvironmentData {
 	float sceneSize;
 };
 
-struct Camera {
-	glm::mat4 view;
-	glm::mat4 projection;
-	glm::mat4 invView;
-	glm::mat4 invProj;
-	glm::vec4 position;
-	glm::vec4 direction;
-	float nearPlane;
-	float farPlane;
-};
-
-struct Light {
-	glm::mat4 view;
-	std::array<glm::mat4, 3> cascadeProjections;
-	glm::vec3 color;
-	float intensity;
-	std::array<float, 3> cascadePaddings;
-	int32_t _padding;
-};
-
-struct Lights {
-	Light light;
-};
-
 struct PBRInstance {
 	uint32_t albedoTexture = 0;
 	uint32_t normalTexture = 1;

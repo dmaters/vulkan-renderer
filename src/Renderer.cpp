@@ -6,15 +6,14 @@
 #include <vulkan/vulkan_core.h>
 
 #include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/glm.hpp>
+#include <glm/trigonometric.hpp>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_structs.hpp>
 
 #include "Instance.hpp"
 #include "Swapchain.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/trigonometric.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "resources/ResourceManager.hpp"
@@ -26,7 +25,7 @@ Renderer::Renderer(SDL_Window* window) :
 	m_instance(Instance::Create(window)),
 	m_resourceManager(),
 	m_materialManager(m_resourceManager),
-	m_graph(Instance::Get().swapchain, m_resourceManager, m_materialManager) {
+	m_graph(m_configuration, Instance::Get().swapchain, m_resourceManager, m_materialManager) {
 	if (window == nullptr) return;
 
 	m_graphicsQueue = m_instance.device.getQueue(m_instance.queueFamiliesIndices.graphicsIndex, 0);
@@ -43,12 +42,10 @@ void Renderer::render() {
 		return;
 	}
 
-	m_currentScene.camera.setResolution(
-		{
-			swapchainResolution.width,
-			swapchainResolution.height,
-		}
-	);
+	m_configuration.resolution = {
+		swapchainResolution.width,
+		swapchainResolution.height,
+	};
 
 	glm::mat3 orientation =
 		glm::mat3(glm::rotate(glm::mat4(1.0f), UI::Data.lightingData.sunAngleRad, glm::vec3(1, 0, 0)));
@@ -61,12 +58,10 @@ void Renderer::render() {
 		Instance::Get().swapchain.rebuild();
 		auto swapchainResolution = Instance::Get().swapchain.getResolution();
 
-		m_currentScene.camera.setResolution(
-			{
-				swapchainResolution.width,
-				swapchainResolution.height,
-			}
-		);
+		m_configuration.resolution = {
+			swapchainResolution.width,
+			swapchainResolution.height,
+		};
 		m_graph.update(m_optionalPasses.back(), m_optionalPasses, m_currentScene);
 	}
 };
@@ -77,12 +72,10 @@ void Renderer::setResolution(int width, int height) {
 	swapchain.setResolutionHint({ (uint32_t)width, (uint32_t)height });
 	swapchain.rebuild();
 
-	m_currentScene.camera.setResolution(
-		{
-			width,
-			height,
-		}
-	);
+	m_configuration.resolution = {
+		width,
+		height,
+	};
 	m_graph.update(m_optionalPasses.back(), m_optionalPasses, m_currentScene);
 }
 
@@ -122,14 +115,15 @@ void Renderer::load(const std::filesystem::path& path) {
 	m_currentScene.buckets[fxaa].push_back(m_currentScene.primitives.size() - 1);
 
 	auto swapchainResolution = Instance::Get().swapchain.getResolution();
-	m_currentScene.camera.setResolution(
-		{
-			swapchainResolution.width,
-			swapchainResolution.height,
-		}
-	);
+	m_configuration.resolution = {
+		swapchainResolution.width,
+		swapchainResolution.height,
+	};
 
-	m_currentScene.camera.setFov(70);
+	m_currentScene.camera.fov = {
+		70 * m_configuration.resolution.x / m_configuration.resolution.y,
+		70,
+	};
 
 	UI::Data.sceneData.scenePath = path.string();
 	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();

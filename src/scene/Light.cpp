@@ -11,24 +11,14 @@
 static const uint16_t SHADOWMAP_RES = 2048;
 
 using FrustumPoints = std::array<std::array<glm::vec4, 4>, 4>;
-FrustumPoints getFrustumPoints(const Camera& camera) {
-	Camera::Fov fov = camera.getFov();
+FrustumPoints getFrustumPoints(const Camera& camera, const std::array<float, 4>& cascadeDistances) {
+	std::array<glm::vec3, 4> frustumVectors = camera.getFrustumDirections();
 
-	float tanV = tan(glm::radians(fov.vertical / 2.0));
-	float tanH = tan(glm::radians(fov.horizontal / 2.0));
+	FrustumPoints points;
 
-	glm::vec3 frustumVectors[4];
-
-	frustumVectors[0] = glm::vec3(tanH, tanV, -1.0f);
-	frustumVectors[1] = glm::vec3(-tanH, tanV, -1.0f);
-	frustumVectors[2] = glm::vec3(tanH, -tanV, -1.0f);
-	frustumVectors[3] = glm::vec3(-tanH, -tanV, -1.0f);
-
-	std::array<std::array<glm::vec4, 4>, 4> points;
 	for (int pl = 0; pl < 4; pl++) {
 		for (int pi = 0; pi < 4; pi++) {
-			float distance = camera.getCascadeDistances()[pl];
-			points[pl][pi] = glm::vec4(frustumVectors[pi] * distance, 1.0);
+			points[pl][pi] = glm::vec4(frustumVectors[pi] * cascadeDistances[pl] + camera.position, 1.0);
 		}
 	}
 
@@ -42,18 +32,32 @@ glm::mat4 getViewMatrix(glm::mat3 orientation, glm::vec3 position) {
 	return view;
 };
 
-Light::FrustumBounds Light::getFrustumBounds(const Camera& camera, float sceneSize, uint8_t cascade) const {
-	FrustumPoints fp = getFrustumPoints(camera);
+struct FrustumBounds {
+	float near;
+	float far;
+	float right;
+	float left;
+	float top;
+	float bottom;
+	float padding;
+};
+
+FrustumBounds getFrustumBounds(
+	const Light& light,
+	const Camera& camera,
+	const Camera::ShaderObject& cameraObject,
+	const std::array<float, 4>& cascadeDistances,
+	float sceneSize,
+	uint8_t cascade
+) {
+	FrustumPoints fp = getFrustumPoints(camera, cascadeDistances);
 	std::array<glm::vec4, 8> lightSpaceBounds;
 
-	glm::mat4 cameraToWorld = glm::inverse(camera.getViewMatrix());
-	glm::mat4 lightView = getViewMatrix(orientation, position);
-
-	glm::mat4 cameraToLightView = lightView * cameraToWorld;
+	glm::mat4 lightView = getViewMatrix(light.orientation, light.position);
 
 	for (int i = 0; i < 4; i++) {
-		lightSpaceBounds[i] = cameraToLightView * fp[0][i];
-		lightSpaceBounds[4 + i] = cameraToLightView * fp[cascade + 1][i];
+		lightSpaceBounds[i] = lightView * fp[0][i];
+		lightSpaceBounds[4 + i] = lightView * fp[cascade + 1][i];
 	}
 	float right = -1e9, left = 1e9, top = -1e9, bottom = 1e9, far = -1e9, near = 1e9;
 
@@ -111,11 +115,19 @@ Light::FrustumBounds Light::getFrustumBounds(const Camera& camera, float sceneSi
 	};
 }
 
-MaterialDefinitions::Light Light::getShaderObject(const Camera& camera, float sceneSize) const {
+Light::ShaderObject Light::getShaderObject(
+	const Camera& camera, const Camera::ShaderObject& cameraObject, float sceneSize
+) const {
 	std::array<glm::mat4, 3> shadowProjections;
+	float cameraFrustumSize = camera.getFrustumSize(sceneSize);
+	std::array<float, 4> cascadeDistances {
+		0.1, cameraFrustumSize * 0.05f, cameraFrustumSize * 0.15f, cameraFrustumSize * 1.0f
+	};
+
 	std::array<float, 3> shadowPaddings;
+
 	for (int i = 0; i < 3; i++) {
-		Light::FrustumBounds bounds = getFrustumBounds(camera, sceneSize, i);
+		FrustumBounds bounds = getFrustumBounds(*this, camera, cameraObject, cascadeDistances, sceneSize, i);
 		// Top bottom swapped for y-down
 		glm::mat4 proj = glm::orthoRH_ZO(bounds.left, bounds.right, bounds.bottom, bounds.top, bounds.near, bounds.far);
 		shadowProjections[i] = proj;
@@ -123,11 +135,12 @@ MaterialDefinitions::Light Light::getShaderObject(const Camera& camera, float sc
 	}
 	glm::mat4 view = getViewMatrix(orientation, position);
 
-	return MaterialDefinitions::Light {
+	return ShaderObject {
 		.view = view,
 		.cascadeProjections = shadowProjections,
 		.color = glm::vec3(color),
 		.intensity = intensity,
+		.cascadeDistances = cascadeDistances,
 		.cascadePaddings = shadowPaddings,
 	};
 }

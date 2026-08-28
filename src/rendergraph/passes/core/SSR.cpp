@@ -47,8 +47,9 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 }
 
 static void build(Task::BuildContext& context) {
-	context.scene.camera.getResolution();
-	ComputePass(context, context.getData<SSRData>().material, glm::uvec3(context.scene.camera.getResolution() / 8, 1));
+	ComputePass(
+		context, context.getData<SSRData>().material, glm::uvec3(context.renderingConfiguration.resolution / 8, 1)
+	);
 }
 
 TaskIndex rendergraph::passes::core::ssr(

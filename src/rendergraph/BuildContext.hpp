@@ -1,5 +1,6 @@
 #pragma once
 #include "DataProvider.hpp"
+#include "RenderingConfiguration.hpp"
 #include "ResourceIndex.hpp"
 #include "Task.hpp"
 #include "material/MaterialManager.hpp"
@@ -17,6 +18,8 @@ struct Task::BuildContext {
 
 	std::span<ResourceDependency> inputs;
 	std::span<ResourceDependency> outputs;
+
+	const RenderingConfiguration& renderingConfiguration;
 
 	ResourceManager& resourceManager;
 	MaterialManager& materialManager;

@@ -6,7 +6,7 @@ TaskIndex rendergraph::passes::core::sdrOutput(PassBuildContext &context) {
 	return context.renderGraph.addTask(
 		"sdr_output",
 		{ .setup = [](Task::SetupContext &context) -> Task::Dependencies {
-			auto resolution = context.scene.camera.getResolution();
+			auto resolution = context.renderingConfiguration.resolution;
 
 			rendergraph::ResourceIndex sdrOutput = context.createImage(
 				"sdr_output",

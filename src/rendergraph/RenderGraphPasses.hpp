@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderGraph.hpp"
+#include "RenderingConfiguration.hpp"
 
 namespace rendergraph::passes {
 struct ExternalResources {
@@ -9,6 +10,8 @@ struct ExternalResources {
 struct PassBuildContext {
 	RenderGraph& renderGraph;
 	MaterialManager& materialManager;
+
+	const RenderingConfiguration& renderingConfiguration;
 };
 
 namespace util {

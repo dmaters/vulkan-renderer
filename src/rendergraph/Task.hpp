@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <variant>
 #include <vulkan/vulkan.hpp>
 
 #include "ResourceIndex.hpp"

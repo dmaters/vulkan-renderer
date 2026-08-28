@@ -31,6 +31,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	PassBuildContext context {
 		.renderGraph = m_graph,
 		.materialManager = m_materialManager,
+		.renderingConfiguration = m_configuration,
 	};
 	auto sceneData = core::sceneData(context);
 
@@ -51,7 +52,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	optionalPasses.push_back(skybox);
 
 	auto hdrCopyTask = core::hdrOutput(context);
-	auto hdrCopy = util::imageCopy(context, hdrOutput,0,hdrCopyTask,0);
+	auto hdrCopy = util::imageCopy(context, hdrOutput, 0, hdrCopyTask, 0);
 	auto ssr = core::ssr(context, sceneData, gbuffer, hdrCopy, hiz, hdrOutput);
 	optionalPasses.push_back(ssr);
 

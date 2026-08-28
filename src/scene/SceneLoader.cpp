@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "material/MaterialDefinitions.hpp"
 #include "utils/ConcurrentStack.hpp"
 
 struct VertexAttributes {
