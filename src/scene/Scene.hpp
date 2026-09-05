@@ -1,26 +1,27 @@
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 
-#include "Camera.hpp"
-#include "Light.hpp"
 #include "Primitive.hpp"
-#include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 
 struct Scene {
-	Camera camera;
-	std::vector<Light> lights;
+	enum MaterialHintBits : uint8_t {
+		None = 0,
+		Opaque = 1 << 0,
+		AlphaMask = 1 << 1,
+		ShadowCasting = 1 << 2,
+	};
+	using MaterialHint = uint8_t;
+
 	std::vector<Primitive> primitives;
+	std::vector<MaterialHint> materialHint;
 
 	struct PrimitiveBound {
 		glm::vec3 position;
 		float size;
 	};
+
 	std::vector<PrimitiveBound> primitiveBounds;
 	float size;
-
-	ResourceManager::AllocationIndex allocation;
-	std::unordered_map<MaterialIndex, std::vector<uint32_t>> buckets;
 };

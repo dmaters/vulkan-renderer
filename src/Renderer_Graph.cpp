@@ -17,16 +17,17 @@ struct ProceduralSkyRequiredPasses {
 using namespace rendergraph::passes;
 std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	std::vector<TaskIndex> optionalPasses;
-	auto buffers = m_resourceManager.getBuffers(scene.allocation);
+	auto sceneBuffers = m_resourceManager.getBuffers(scene.allocation);
 
-	m_graph.registerBuffer("vertex_positions_buffer", buffers[0]);
+	m_graph.registerBuffer("vertex_positions_buffer", sceneBuffers[Scene::BufferIndex::Vertices]);
 
-	m_graph.registerBuffer("vertex_attributes_buffer", buffers[1]);
-	m_graph.registerBuffer("index_buffer", buffers[2]);
-	m_graph.registerBuffer("instance_buffer", buffers[3]);
+	m_graph.registerBuffer("vertex_attributes_buffer", sceneBuffers[Scene::BufferIndex::VertexAttributes]);
+	m_graph.registerBuffer("index_buffer", sceneBuffers[Scene::BufferIndex::Indices]);
+	m_graph.registerBuffer("instance_buffer", sceneBuffers[Scene::BufferIndex::Transforms]);
 
-	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
-	auto pbrMaterialInstances = m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
+	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", sceneBuffers[Scene::BufferIndex::Materials]);
+	auto pbrMaterialInstances =
+		m_graph.registerBuffer("pbr_instances_buffer", sceneBuffers[Scene::BufferIndex::MaterialInstances]);
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -48,7 +49,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
 	optionalPasses.push_back(lighting);
 
-	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
+	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, fhdrOutput, gbuffer);
 	optionalPasses.push_back(skybox);
 
 	auto hdrCopyTask = core::hdrOutput(context);

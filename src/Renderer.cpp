@@ -29,8 +29,49 @@ Renderer::Renderer(SDL_Window* window) :
 	if (window == nullptr) return;
 
 	m_graphicsQueue = m_instance.device.getQueue(m_instance.queueFamiliesIndices.graphicsIndex, 0);
-
 	m_presentQueue = m_instance.device.getQueue(m_instance.queueFamiliesIndices.presentIndex, 0);
+
+	std::vector<ResourceManager::BufferDescription> dummyBuffers(5);
+
+	for (auto& buffer : dummyBuffers) {
+		buffer = { 1, vk::BufferUsageFlagBits::eTransferSrc };
+	}
+
+	m_resourceManager.createResources({}, dummyBuffers, ResourceManager::MemoryLocation::Device);
+
+	glm::mat3 orientation = glm::mat3(1);
+	orientation[0] = glm::vec3(1, 0, 0);
+	orientation[1] = glm::vec3(0, 0, 1);
+	orientation[2] = glm::vec3(0, 1, 0);
+	orientation = glm::rotate_slow(glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0));
+
+	m_currentScene.lights.push_back(
+		{
+			.position = glm::vec3(0, 0, 600),
+			.orientation = orientation,
+			.intensity = 25.0f,
+		}
+	);
+
+	m_currentScene.primitives.push_back(
+		{
+			.baseVertex = 0,
+			.baseIndex = 0,
+			.indexCount = 3,
+		}
+	);
+
+	auto swapchainResolution = Instance::Get().swapchain.getResolution();
+	m_configuration.resolution = {
+		swapchainResolution.width,
+		swapchainResolution.height,
+	};
+
+	m_currentScene.camera.fov = {
+		70 * m_configuration.resolution.x / m_configuration.resolution.y,
+		70,
+	};
+	m_optionalPasses = createRenderGraph(m_currentScene);
 }
 
 void Renderer::render() {
@@ -83,28 +124,6 @@ void Renderer::load(const std::filesystem::path& path) {
 	SceneLoader loader(m_resourceManager, m_materialManager);
 	m_currentScene = loader.load(path);
 
-	glm::mat3 orientation = glm::mat3(1);
-	orientation[0] = glm::vec3(1, 0, 0);
-	orientation[1] = glm::vec3(0, 0, 1);
-	orientation[2] = glm::vec3(0, 1, 0);
-	orientation = glm::rotate_slow(glm::mat4(orientation), (float)glm::radians(-80.0), glm::vec3(1, 0, 0));
-
-	m_currentScene.lights.push_back(
-		{
-			.position = glm::vec3(0, 0, 600),
-			.orientation = orientation,
-			.intensity = 25.0f,
-		}
-	);
-
-	m_currentScene.primitives.push_back(
-		{
-			.baseVertex = 0,
-			.baseIndex = 0,
-			.indexCount = 3,
-		}
-	);
-
 	MaterialIndex lighting = m_materialManager.getMaterialIndex("lighting_deferred");
 	m_currentScene.buckets[lighting].push_back(m_currentScene.primitives.size() - 1);
 
@@ -114,19 +133,6 @@ void Renderer::load(const std::filesystem::path& path) {
 	MaterialIndex fxaa = m_materialManager.getMaterialIndex("fxaa");
 	m_currentScene.buckets[fxaa].push_back(m_currentScene.primitives.size() - 1);
 
-	auto swapchainResolution = Instance::Get().swapchain.getResolution();
-	m_configuration.resolution = {
-		swapchainResolution.width,
-		swapchainResolution.height,
-	};
-
-	m_currentScene.camera.fov = {
-		70 * m_configuration.resolution.x / m_configuration.resolution.y,
-		70,
-	};
-
 	UI::Data.sceneData.scenePath = path.string();
 	UI::Data.sceneData.primitiveCount = m_currentScene.primitives.size();
-
-	m_optionalPasses = createRenderGraph(m_currentScene);
 }

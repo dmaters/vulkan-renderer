@@ -15,6 +15,14 @@
 
 #include "material/MaterialDefinitions.hpp"
 #include "utils/ConcurrentStack.hpp"
+enum TextureUsage : uint8_t {
+	Albedo,
+	AlbedoWithAlpha,
+	Normal,
+	RoughnessMetallic,
+};
+
+using TextureUsageType = uint8_t;
 
 struct VertexAttributes {
 	glm::vec3 normal;
@@ -23,20 +31,27 @@ struct VertexAttributes {
 	glm::vec2 texcoord;
 };
 
-struct Sizes {
-	std::size_t vertex = 0;
-	std::size_t vertexAttributes = 0;
-	std::size_t indices = 0;
-	std::size_t transforms = 0;
-	std::size_t materialInstances = 0;
-	std::size_t materials = 0;
-	std::size_t textures = 0;
-
-	std::vector<ResourceManager::ImageDescription> imageDescriptions;
-	std::vector<std::size_t> imageBaseSizes;
-
-	std::size_t total = 0;
+enum GeometryBuffers {
+	Vertex,
+	VertexAttribute,
+	Indices,
+	Transforms,
+	MaterialInstances,
+	Materials,
 };
+
+inline texture_compressor::Format getFormatFromUsage(TextureUsageType usage) {
+	switch (usage) {
+		case TextureUsage::Albedo:
+			return texture_compressor::Format::BC1;
+		case TextureUsage::AlbedoWithAlpha:
+			return texture_compressor::Format::BC1_ALPHA;
+		case TextureUsage::Normal:
+		case TextureUsage::RoughnessMetallic:
+			return texture_compressor::Format::BC5;
+	}
+	return texture_compressor::Format::BC1;
+}
 
 vk::Format getFormat(texture_compressor::Format format) {
 	switch (format) {
@@ -51,30 +66,30 @@ vk::Format getFormat(texture_compressor::Format format) {
 	return vk::Format::eUndefined;
 }
 
-std::vector<texture_compressor::Format> getSceneTexturesFormats(const fastgltf::Asset& asset) {
-	std::vector<texture_compressor::Format> formats(asset.images.size());
+std::vector<TextureUsageType> getTextureUsages(const fastgltf::Asset& asset) {
+	std::vector<TextureUsageType> formats(asset.images.size());
 
 	for (auto& material : asset.materials) {
 		if (material.pbrData.baseColorTexture.has_value()) {
 			std::size_t baseColor = asset.textures[material.pbrData.baseColorTexture->textureIndex].imageIndex.value();
 
 			if (material.alphaMode == fastgltf::AlphaMode::Mask)
-				formats[baseColor] = texture_compressor::Format::BC1_ALPHA;
+				formats[baseColor] = TextureUsage::AlbedoWithAlpha;
 			else
-				formats[baseColor] = texture_compressor::Format::BC1;
+				formats[baseColor] = TextureUsage::Albedo;
 		}
 
 		if (material.normalTexture.has_value()) {
 			std::size_t normal = asset.textures[material.normalTexture->textureIndex].imageIndex.value();
 
-			formats[normal] = texture_compressor::Format::BC5;
+			formats[normal] = TextureUsage::Normal;
 		}
 
 		if (material.pbrData.metallicRoughnessTexture.has_value()) {
 			std::size_t roughnessMetallic =
 				asset.textures[material.pbrData.metallicRoughnessTexture->textureIndex].imageIndex.value();
 
-			formats[roughnessMetallic] = texture_compressor::Format::BC5;
+			formats[roughnessMetallic] = TextureUsage::RoughnessMetallic;
 		}
 	}
 
@@ -87,48 +102,55 @@ uint8_t getMipLevels(int width, int height) {
 	return mipLevels;
 }
 
-Sizes getStagingAllocationSize(
-	const fastgltf::Asset& asset,
-	const std::vector<texture_compressor::Format>& formats,
-	const std::filesystem::path& assetPath
-) {
-	// Size
+struct SceneResourceInfo {
+	std::array<std::size_t, 6> geometryBufferSizes { 0 };
+	std::size_t buffersAllocationSize = 0;
 
-	Sizes sizes;
+	std::vector<SceneLoader::SceneResources::MemorySpan> imageDataLocations;
+	std::vector<vk::Format> imageFormats;
+	std::vector<glm::ivec2> imageResolution;
+
+	std::size_t textureAllocationSize = 0;
+};
+// Convert the function so that it gives the correct values
+SceneResourceInfo getSceneResourceInfo(
+	const fastgltf::Asset& asset, const std::filesystem::path& assetPath, const std::vector<uint8_t> textureUsages
+) {
+	SceneResourceInfo resourceInfo;
+
 	for (auto& mesh : asset.nodes) {
 		if (!mesh.meshIndex.has_value()) continue;
 
 		for (auto& primitive : asset.meshes[mesh.meshIndex.value()].primitives) {
 			std::size_t vertexCount = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex].count;
 
-			sizes.vertex += vertexCount * sizeof(glm::vec3);
-			sizes.vertexAttributes += vertexCount * sizeof(VertexAttributes);
+			resourceInfo.geometryBufferSizes[GeometryBuffers::Vertex] += vertexCount * sizeof(glm::vec3);
+			resourceInfo.geometryBufferSizes[GeometryBuffers::VertexAttribute] +=
+				vertexCount * sizeof(VertexAttributes);
 
 			if (primitive.indicesAccessor.has_value()) {
-				sizes.indices += asset.accessors[primitive.indicesAccessor.value()].count * sizeof(uint32_t);
+				resourceInfo.geometryBufferSizes[GeometryBuffers::Indices] +=
+					asset.accessors[primitive.indicesAccessor.value()].count * sizeof(uint32_t);
 			} else {
-				sizes.indices += vertexCount * sizeof(uint32_t);
+				resourceInfo.geometryBufferSizes[GeometryBuffers::Indices] += vertexCount * sizeof(uint32_t);
 			}
 
-			sizes.transforms += sizeof(glm::mat4);
-			sizes.materialInstances += sizeof(uint32_t);
+			resourceInfo.geometryBufferSizes[GeometryBuffers::Transforms] += sizeof(glm::mat4);
+			resourceInfo.geometryBufferSizes[GeometryBuffers::MaterialInstances] += sizeof(uint32_t);
 		}
 	}
 
-	sizes.materials = asset.materials.size() * sizeof(MaterialDefinitions::PBRInstance);
+	resourceInfo.geometryBufferSizes[GeometryBuffers::Materials] =
+		asset.materials.size() * sizeof(MaterialDefinitions::PBRInstance);
+
+	for (int i = 0; i < 6; i++) resourceInfo.buffersAllocationSize += resourceInfo.geometryBufferSizes[i];
 
 	for (int i = 0; i < 3; i++) {
-		sizes.imageBaseSizes.push_back(4);
-		sizes.imageDescriptions.push_back(
-			{
-				.width = 1,
-				.height = 1,
-				.format = vk::Format::eR8G8B8A8Unorm,
-				.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			}
-		);
+		resourceInfo.imageDataLocations.push_back({ .size = 4, .offset = (std::size_t)(4 * i) });
+		resourceInfo.imageResolution.push_back({ 1, 1 });
+		resourceInfo.imageFormats.push_back(vk::Format::eR8G8B8A8Unorm);
 	}
-	sizes.textures += 16;
+	resourceInfo.textureAllocationSize += 16;
 
 	for (int i = 0; i < asset.images.size(); i++) {
 		auto& image = asset.images[i];
@@ -165,27 +187,26 @@ Sizes getStagingAllocationSize(
 		);
 
 		uint8_t mipLevels = getMipLevels(width, height);
-		std::size_t imageSize = texture_compressor::query_size(width, height, formats[i]);
+		auto compressedFormat = getFormatFromUsage(textureUsages[i]);
+		std::size_t imageSize = texture_compressor::query_size(width, height, compressedFormat);
+		imageSize = std::max(imageSize, std::size_t(16));
 
-		sizes.imageDescriptions.push_back(
+		resourceInfo.imageDataLocations.push_back(
 			{
-				.width = static_cast<uint32_t>(width),
-				.height = static_cast<uint32_t>(height),
-				.miplevels = mipLevels,
-				.format = getFormat(formats[i]),
-				.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				.size = imageSize,
+				.offset = (std::size_t)resourceInfo.textureAllocationSize,
 			}
 		);
-		imageSize = std::max(imageSize, std::size_t(16));
-		sizes.imageBaseSizes.push_back(imageSize);
+
+		resourceInfo.imageFormats.push_back(getFormat(compressedFormat));
+		resourceInfo.imageResolution.push_back({ width, height });
+
 		for (int i = 0; i < mipLevels; i++) {
-			sizes.textures += imageSize >> (i * 2);
+			resourceInfo.textureAllocationSize += imageSize >> (i * 2);
 		}
 	}
 
-	sizes.total = sizes.vertex + sizes.vertexAttributes + sizes.indices + sizes.transforms + sizes.materials +
-				  sizes.materialInstances + sizes.textures;
-	return sizes;
+	return resourceInfo;
 }
 
 struct PrimitiveData {
@@ -196,19 +217,13 @@ struct PrimitiveData {
 
 PrimitiveData loadPrimitiveData(
 	const fastgltf::Asset& asset,
-	const Sizes& offsets,
 	const fastgltf::Primitive& primitive,
 	std::size_t vertexOffset,
 	std::size_t indexOffset,
-	void* stagingAddress
+	glm::vec3* vertices,
+	VertexAttributes* vertexAttributes,
+	uint32_t* indices
 ) {
-	glm::vec3* vertices = reinterpret_cast<glm::vec3*>(((std::byte*)stagingAddress) + offsets.vertex) + vertexOffset;
-
-	VertexAttributes* vertexAttributes =
-		reinterpret_cast<VertexAttributes*>(((std::byte*)stagingAddress) + offsets.vertexAttributes) + vertexOffset;
-
-	uint32_t* indices = reinterpret_cast<uint32_t*>(((std::byte*)stagingAddress) + offsets.indices) + indexOffset;
-
 	auto& vertexAccessor = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex];
 	float size2 = 0;
 	glm::vec3 averageVertexPosition = glm::vec3(0);
@@ -280,23 +295,25 @@ PrimitiveData loadPrimitiveData(
 	};
 }
 
-struct MeshData {
+struct SceneGeometry {
 	std::vector<Primitive> primitives;
 	std::vector<Scene::PrimitiveBound> primitivesBounds;
 	float sceneSize;
 
-	std::vector<uint32_t> opaquePrimitives;
-	std::vector<uint32_t> alphaTestedPrimitives;
+	std::vector<Scene::MaterialHint> materials;
 };
 
-MeshData loadMeshes(const fastgltf::Asset& asset, const Sizes& offsets, void* stagingAddress) {
-	MeshData meshData;
+SceneGeometry loadMeshes(
+	const fastgltf::Asset& asset,
+	glm::vec3* vertices,
+	VertexAttributes* vertexAttributes,
+	uint32_t* indices,
+	glm::mat4* transforms,
+	uint32_t* materialInstances
+) {
+	SceneGeometry meshData;
 	meshData.primitives.reserve(asset.meshes.size());
 	meshData.primitivesBounds.reserve(asset.meshes.size());
-
-	glm::mat4* transforms = reinterpret_cast<glm::mat4*>(((std::byte*)stagingAddress) + offsets.transforms);
-
-	uint32_t* materialInstances = reinterpret_cast<uint32_t*>(((std::byte*)stagingAddress) + offsets.materialInstances);
 
 	std::size_t vertexOffset = 0, indexOffset = 0;
 	float sceneSize = 0;
@@ -307,7 +324,7 @@ MeshData loadMeshes(const fastgltf::Asset& asset, const Sizes& offsets, void* st
 			const fastgltf::Mesh& mesh = asset.meshes[node.meshIndex.value()];
 			for (auto& primitive : mesh.primitives) {
 				PrimitiveData primitiveData =
-					loadPrimitiveData(asset, offsets, primitive, vertexOffset, indexOffset, stagingAddress);
+					loadPrimitiveData(asset, primitive, vertexOffset, indexOffset, vertices, vertexAttributes, indices);
 
 				*materialInstances = primitive.materialIndex.value_or(0);
 				materialInstances += 1;
@@ -329,9 +346,9 @@ MeshData loadMeshes(const fastgltf::Asset& asset, const Sizes& offsets, void* st
 				indexOffset += primitiveData.indexCount;
 
 				if (asset.materials[primitive.materialIndex.value()].alphaMode == fastgltf::AlphaMode::Mask)
-					meshData.alphaTestedPrimitives.push_back(meshData.primitives.size() - 1);
+					meshData.materials.push_back(Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::AlphaMask);
 				else
-					meshData.opaquePrimitives.push_back(meshData.primitives.size() - 1);
+					meshData.materials.push_back(Scene::MaterialHintBits::Opaque);
 			}
 		}
 	);
@@ -339,11 +356,7 @@ MeshData loadMeshes(const fastgltf::Asset& asset, const Sizes& offsets, void* st
 	return meshData;
 }
 
-std::vector<bool> loadMaterialInstances(const fastgltf::Asset& asset, const Sizes& offsets, void* stagingAddress) {
-	MaterialDefinitions::PBRInstance* materials =
-		reinterpret_cast<MaterialDefinitions::PBRInstance*>(((std::byte*)stagingAddress) + offsets.materials);
-	std::vector<bool> roughnessMetallicImageMap(asset.images.size());
-
+void loadMaterialInstances(const fastgltf::Asset& asset, MaterialDefinitions::PBRInstance* materials) {
 	for (int i = 0; i < asset.materials.size(); i++) {
 		auto& material = asset.materials[i];
 		materials[i] = {};
@@ -361,13 +374,10 @@ std::vector<bool> loadMaterialInstances(const fastgltf::Asset& asset, const Size
 		if (material.pbrData.metallicRoughnessTexture.has_value()) {
 			materials[i].roughnessMetallicTexture =
 				asset.textures[material.pbrData.metallicRoughnessTexture.value().textureIndex].imageIndex.value() + 3;
-
-			roughnessMetallicImageMap[materials[i].roughnessMetallicTexture - 3] = true;
 		}
 		materials[i].roughnessValue = material.pbrData.roughnessFactor;
 		materials[i].metallicValue = material.pbrData.metallicFactor;
 	}
-	return roughnessMetallicImageMap;
 }
 
 std::vector<std::byte> getRawImageData(
@@ -418,24 +428,19 @@ struct ProcessedImageData {
 	std::size_t width;
 	std::size_t height;
 };
-
-ProcessedImageData processImage(
-	std::size_t image,
-	const std::vector<texture_compressor::Format>& formats,
-	const std::vector<bool>& roughnessMetallicImageMap,
-	const std::vector<std::byte>& imageData
-) {
+ProcessedImageData processImage(const std::vector<std::byte>& imageData, TextureUsageType textureUsage) {
 	int width, height, channels;
 
 	int expectedChannels = 0;
-	switch (formats[image]) {
-		case texture_compressor::Format::BC1:
-		case texture_compressor::Format::BC5:
-			expectedChannels = 3;
-			break;
-		case texture_compressor::Format::BC1_ALPHA:
+	switch (textureUsage) {
+		case TextureUsage::Albedo:
 			expectedChannels = 4;
 			break;
+		case TextureUsage::RoughnessMetallic:
+		case TextureUsage::Normal:
+			expectedChannels = 3;
+			break;
+
 		default:
 			expectedChannels = 0;
 	}
@@ -447,17 +452,15 @@ ProcessedImageData processImage(
 	assert(imageProcessedData);
 
 	// Roughness/metallic compression
-	if (formats[image] == texture_compressor::Format::BC5) {
-		if (roughnessMetallicImageMap[image]) {
-			for (int c = 0; c < width * height; c++) {
-				imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 1];
-				imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 2];
-			}
-		} else {
-			for (int c = 0; c < width * height; c++) {
-				imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 0];
-				imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 1];
-			}
+	if (textureUsage == TextureUsage::RoughnessMetallic) {
+		for (int c = 0; c < width * height; c++) {
+			imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 1];
+			imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 2];
+		}
+	} else if (textureUsage == TextureUsage::Normal) {
+		for (int c = 0; c < width * height; c++) {
+			imageProcessedData[c * 2 + 0] = imageProcessedData[c * 3 + 0];
+			imageProcessedData[c * 2 + 1] = imageProcessedData[c * 3 + 1];
 		}
 	}
 	return {
@@ -467,352 +470,153 @@ ProcessedImageData processImage(
 	};
 }
 
-std::vector<std::size_t> loadImages(
-	const fastgltf::Asset& asset,
-	const Sizes& offsets,
-	const std::vector<texture_compressor::Format>& formats,
-	const std::vector<bool>& roughnessMetallicImageMap,
-	const std::filesystem::path& assetPath,
-	void* stagingAddress
-) {
-	auto stagingTextures = reinterpret_cast<std::array<uint8_t, 4>*>((std::byte*)stagingAddress + offsets.textures);
+SceneLoader::SceneResources SceneLoader::querySceneResources() {
+	fastgltf::Parser parser;
+	auto data = fastgltf::GltfDataBuffer::FromPath(m_path);
+	auto asset = parser.loadGltf(data.get(), m_path.parent_path(), fastgltf::Options::LoadExternalBuffers);
+	m_textureUsages = getTextureUsages(asset.get());
+	SceneResourceInfo resourceInfo = getSceneResourceInfo(asset.get(), m_path.parent_path(), m_textureUsages);
+
+	std::array<SceneResources::MemorySpan, 6> bufferDataLocations;
+
+	std::size_t offset = 0;
+	for (int i = 0; i < bufferDataLocations.size(); i++) {
+		bufferDataLocations[i] = {
+			.size = resourceInfo.geometryBufferSizes[i],
+			.offset = offset,
+		};
+
+		offset += resourceInfo.geometryBufferSizes[i];
+	}
+
+	m_bufferDataLocations = bufferDataLocations;
+	m_imageDataLocations = resourceInfo.imageDataLocations;
+
+	return SceneResources {
+		.bufferDataLocations = bufferDataLocations,
+		.imageDataLocations = resourceInfo.imageDataLocations,
+		.imageFormats = resourceInfo.imageFormats,
+		.imageResolution = resourceInfo.imageResolution,
+		.buffersStagingSize = resourceInfo.buffersAllocationSize,
+		.imageStagingSize = resourceInfo.textureAllocationSize,
+	};
+}
+
+void SceneLoader::beginBufferLoad(void* stagingAddress) {
+	std::jthread([&bufferData = m_bufferDataLocations,
+				  &asset = m_asset,
+				  stagingAddress,
+				  &loaded = m_buffersLoaded,
+				  &scene = m_scene] {
+		auto* vertexAddress = (glm::vec3*)stagingAddress;
+		auto* vertexAttributes =
+			(VertexAttributes*)((std::byte*)stagingAddress + bufferData[GeometryBuffers::VertexAttribute].offset);
+		auto* indices = (uint32_t*)((std::byte*)stagingAddress + bufferData[GeometryBuffers::Indices].offset);
+		auto* transforms = (glm::mat4*)((std::byte*)stagingAddress + bufferData[GeometryBuffers::Transforms].offset);
+		auto* materialInstances =
+			(uint32_t*)((std::byte*)stagingAddress + bufferData[GeometryBuffers::MaterialInstances].offset);
+
+		auto sceneData = loadMeshes(asset, vertexAddress, vertexAttributes, indices, transforms, materialInstances);
+
+		scene.primitives = std::move(sceneData.primitives);
+		scene.primitiveBounds = std::move(sceneData.primitivesBounds);
+		scene.materialHint = std::move(sceneData.materials);
+
+		scene.size = sceneData.sceneSize;
+
+		auto* materialsAddress = (MaterialDefinitions::PBRInstance*)((std::byte*)stagingAddress +
+																	 bufferData[GeometryBuffers::Materials].offset);
+		loadMaterialInstances(asset, materialsAddress);
+		loaded = true;
+	}).detach();
+}
+
+void SceneLoader::beginImageLoad(void* address) {
+	auto stagingTextures = reinterpret_cast<std::array<uint8_t, 4>*>((std::byte*)address);
 
 	stagingTextures[0] = { 255, 255, 255, 255 };
 	stagingTextures[1] = { 128, 128, 255, 255 };
 	stagingTextures[2] = { 255, 0, 0, 255 };
-
 	using ImageIndex = std::size_t;
-	std::vector<std::vector<std::byte>> rawImageData(asset.images.size());
 
-	std::vector<ProcessedImageData> processedImageData(asset.images.size());
-	std::vector<std::size_t> compressedImagesOffsets(asset.images.size());
+	auto rawDataStack = std::make_shared<ConcurrentStack<ImageIndex>>();
+	auto processImageStack = std::make_shared<ConcurrentStack<ImageIndex>>();
+	auto compressImageStack = std::make_shared<ConcurrentStack<ImageIndex>>();
+	auto readyImages = std::make_shared<ConcurrentStack<ImageIndex>>();
 
-	ConcurrentStack<ImageIndex> rawDataStack;
-	ConcurrentStack<ImageIndex> processImageStack;
-	ConcurrentStack<ImageIndex> compressImageStack;
-	ConcurrentStack<ImageIndex> readyImages;
+	auto rawImageData = std::make_shared<std::vector<std::vector<std::byte>>>();
+	auto processedImageData = std::make_shared<std::vector<ProcessedImageData>>();
+	auto compressedImagesOffsets = std::make_shared<std::vector<std::size_t>>();
 
-	for (int i = 0; i < asset.images.size(); i++) rawDataStack.container().push_back(i);
+	auto& textureUsages = reinterpret_cast<std::vector<TextureUsage>&>(m_textureUsages);
+
+	for (int i = 0; i < m_asset.images.size(); i++) rawDataStack->container().push_back(i);
 
 	for (int i = 0; i < 16; i++) {
-		std::jthread([&]() {
-			auto stackInserter = processImageStack.getInserter();
-			while (auto image = rawDataStack.pop()) {
-				rawImageData[image.value()] = getRawImageData(image.value(), asset, assetPath);
+		std::jthread([rawDataStack, processImageStack, rawImageData, &asset = m_asset, &path = m_path]() {
+			auto stackInserter = processImageStack->getInserter();
+			while (auto image = rawDataStack->pop()) {
+				(*rawImageData)[image.value()] = getRawImageData(image.value(), asset, path);
 
 				stackInserter.push(image.value());
 			}
 		}).detach();
 	}
 	for (int i = 0; i < 2; i++) {
-		std::jthread([&] {
-			auto stackInserter = compressImageStack.getInserter();
+		std::jthread([compressImageStack, processImageStack, rawImageData, processedImageData, &textureUsages] {
+			auto stackInserter = compressImageStack->getInserter();
 
-			while (auto popValue = processImageStack.pop_wait()) {
+			while (auto popValue = processImageStack->pop_wait()) {
 				auto image = popValue.value();
-				auto& data = rawImageData[image];
+				auto& data = (*rawImageData)[image];
 
-				processedImageData[image] = processImage(image, formats, roughnessMetallicImageMap, data);
+				(*processedImageData)[image] = processImage(data, textureUsages[image]);
 
 				stackInserter.push(image);
-				rawImageData[image] = {};
+				(*rawImageData)[image] = {};
 			}
 		}).detach();
 	}
 
-	std::atomic_uint stagingOffset = 16;
-
 	for (int i = 0; i < 4; i++) {
-		std::jthread([&] {
-			auto stackInserter = readyImages.getInserter();
-			while (auto workElement = compressImageStack.pop_wait()) {
+		std::jthread([compressImageStack,
+					  readyImages,
+					  processedImageData,
+					  &textureUsages,
+					  &imageDataLocations = m_imageDataLocations,
+					  address] {
+			auto stackInserter = readyImages->getInserter();
+			while (auto workElement = compressImageStack->pop_wait()) {
 				auto image = workElement.value();
-
-				auto& data = processedImageData[image];
+				auto format = getFormatFromUsage(textureUsages[image]);
+				auto& data = (*processedImageData)[image];
 
 				uint8_t mipLevels = getMipLevels(data.width, data.height);
-				std::size_t imageSize =
-					texture_compressor::query_size(data.width, data.height, formats[image], mipLevels);
-				imageSize = std::max(imageSize, std::size_t(16));
-				std::size_t loadOffset = stagingOffset.fetch_add(imageSize);
+
 				texture_compressor::compress(
 					data.width,
 					data.height,
-					formats[image],
+					format,
 					data.ptr,
-					(std::byte*)stagingAddress + offsets.textures + loadOffset,
+					static_cast<std::byte*>(address) + imageDataLocations[image].offset,
 					mipLevels
 				);
 
 				stbi_image_free(data.ptr);
 
-				compressedImagesOffsets[image] = loadOffset;
 				stackInserter.push(image);
 			}
 		}).detach();
 	}
-
-	while (auto image = readyImages.pop_wait());  // Wait until all images have been processed
-
-	return compressedImagesOffsets;
+	m_readyImages = readyImages;
 }
 
-std::vector<ResourceManager::ResourceCopyInfo> buildAllocationCopyInfo(
-	BufferHandle stagingBuffer,
-	std::span<const BufferHandle> sceneBuffers,
-	std::span<const ImageHandle> sceneImages,
-	const std::vector<std::size_t>& imageOffsets,
-	const Sizes& sizes,
-	const Sizes& offsets
-) {
-	std::vector<ResourceManager::ResourceCopyInfo> copies;
+SceneLoader::LoadStatus SceneLoader::queryLoadStatus() {
+	SceneLoader::LoadStatus status;
 
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.vertex),
-																	.offset = static_cast<uint32_t>(offsets.vertex),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[0],
-																	.size = static_cast<uint32_t>(sizes.vertex),
-																	.offset = 0,
+	while (auto processedImage = m_readyImages->pop()) status.imageLoadedDelta.push_back(*processedImage);
 
-																	}
-	  }
-	);
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.vertexAttributes),
-																	.offset = static_cast<uint32_t>(offsets.vertexAttributes),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[1],
-																	.size = static_cast<uint32_t>(sizes.vertexAttributes),
-																	.offset = 0,
-
-																	}
-	  }
-	);
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.indices),
-																	.offset = static_cast<uint32_t>(offsets.indices),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[2],
-																	.size = static_cast<uint32_t>(sizes.indices),
-																	.offset = 0,
-
-																	}
-	  }
-	);
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.transforms),
-																	.offset = static_cast<uint32_t>(offsets.transforms),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[3],
-																	.size = static_cast<uint32_t>(sizes.transforms),
-																	.offset = 0,
-
-																	}
-	  }
-	);
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.materialInstances),
-																	.offset = static_cast<uint32_t>(offsets.materialInstances),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[4],
-																	.size = static_cast<uint32_t>(sizes.materialInstances),
-																	.offset = 0,
-
-																	}
-	  }
-	);
-	copies.push_back(
-		{
-			.source =
-				ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = stagingBuffer,
-																	.size = static_cast<uint32_t>(sizes.materials),
-																	.offset = static_cast<uint32_t>(offsets.materials),
-																	},
-			.destination = ResourceManager::ResourceCopyInfo::BufferReference {
-																	.handle = sceneBuffers[5],
-																	.size = static_cast<uint32_t>(sizes.materials),
-																	.offset = 0,
-
-																	}
-	  }
-	);
-
-	for (int i = 0; i < 3; i++) {
-		copies.push_back(
-			{
-				.source =
-					ResourceManager::ResourceCopyInfo::BufferReference {
-																		.handle = stagingBuffer,
-																		.size = 4,
-																		.offset = static_cast<uint32_t>(offsets.textures) + 4 * i,
-																		},
-				.destination = ResourceManager::ResourceCopyInfo::ImageReference {
-																		.handle = sceneImages[i],
-																		.mipLevel = 0,
-																		.initialLayout = vk::ImageLayout::eUndefined,
-																		.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-																		}
-		  }
-		);
-	}
-
-	for (int i = 3; i < sizes.imageDescriptions.size(); i++) {
-		uint32_t mipOffset = 0;
-
-		uint32_t imageOffset = imageOffsets[i - 3];
-		for (int mip = 0; mip < sizes.imageDescriptions[i].miplevels; mip++) {
-			std::size_t mipSize = sizes.imageBaseSizes[i] >> (mip * 2);
-			copies.push_back(
-				{
-					.source =
-						ResourceManager::ResourceCopyInfo::BufferReference {
-																			.handle = stagingBuffer,
-																			.size = static_cast<uint32_t>(mipSize),
-																			.offset = static_cast<uint32_t>(offsets.textures) + imageOffset + mipOffset,
-																			},
-					.destination = ResourceManager::ResourceCopyInfo::ImageReference {
-																			.handle = sceneImages[i],
-																			.mipLevel = static_cast<uint32_t>(mip),
-																			.initialLayout = vk::ImageLayout::eUndefined,
-																			.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-																			}
-			  }
-			);
-			mipOffset += mipSize;
-		}
-	}
-
-	return copies;
+	status.buffersLoaded = m_buffersLoaded;
+	return status;
 }
-
-Scene SceneLoader::load(const std::filesystem::path& path) {
-	fastgltf::Parser parser;
-
-	if (!std::filesystem::exists(path)) {
-		std::printf("Selected file does not exist. Closing... \n");
-		exit(-1);
-	}
-
-	auto data = fastgltf::GltfDataBuffer::FromPath(path);
-	auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::LoadExternalBuffers);
-	auto formats = getSceneTexturesFormats(asset.get());
-	Sizes sizes = getStagingAllocationSize(asset.get(), formats, path.parent_path());
-
-	auto stagingAllocation = m_resourceManager.createResources(
-		{
-	},
-		{ {
-			.size = static_cast<uint32_t>(sizes.total),
-			.usage = vk::BufferUsageFlagBits::eTransferSrc,
-		} },
-		ResourceManager::MemoryLocation::Host
-	);
-
-	Buffer& stagingBuffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(stagingAllocation)[0]);
-
-	Sizes offsets;
-	offsets.textures = 0;
-	offsets.vertex = offsets.textures + sizes.textures;
-	offsets.vertexAttributes = offsets.vertex + sizes.vertex;
-	offsets.indices = offsets.vertexAttributes + sizes.vertexAttributes;
-	offsets.transforms = offsets.indices + sizes.indices;
-	offsets.materialInstances = offsets.transforms + sizes.transforms;
-	offsets.materials = offsets.materialInstances + sizes.materialInstances;
-	auto roughnessMetallicImageMap = loadMaterialInstances(asset.get(), offsets, stagingBuffer.data);
-
-	auto meshData = loadMeshes(asset.get(), offsets, stagingBuffer.data);
-
-	auto imageMap =
-		loadImages(asset.get(), offsets, formats, roughnessMetallicImageMap, path.parent_path(), stagingBuffer.data);
-
-	std::vector<ResourceManager::BufferDescription> buffers {
-		{
-			.size = static_cast<uint32_t>(sizes.vertex),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-		 },
-		{
-			.size = static_cast<uint32_t>(sizes.vertexAttributes),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-		 },
-		{
-			.size = static_cast<uint32_t>(sizes.indices),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-		 },
-		{
-			.size = static_cast<uint32_t>(sizes.transforms),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-		 },
-		{
-			.size = static_cast<uint32_t>(sizes.materialInstances),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-		 },
-		{
-			.size = static_cast<uint32_t>(sizes.materials),
-			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-		 }
-	};
-
-	ResourceManager::AllocationIndex sceneAllocation =
-		m_resourceManager.createResources(sizes.imageDescriptions, buffers, ResourceManager::MemoryLocation::Device);
-	auto copies = buildAllocationCopyInfo(
-		m_resourceManager.getBuffers(stagingAllocation)[0],
-		m_resourceManager.getBuffers(sceneAllocation),
-		m_resourceManager.getImages(sceneAllocation),
-		imageMap,
-		sizes,
-		offsets
-	);
-
-	m_resourceManager.copyResources(copies);
-
-	m_materialManager.registerTextureGroup(sceneAllocation);
-	Scene scene {
-		.camera = Camera(),
-		.lights = {},
-		.primitives = meshData.primitives,
-		.primitiveBounds = meshData.primitivesBounds,
-		.size = meshData.sceneSize,
-		.allocation = sceneAllocation,
-	};
-
-	MaterialIndex gbufferMaterial = m_materialManager.getMaterialIndex("gbuffer");
-	MaterialIndex shadowMapMaterial = m_materialManager.getMaterialIndex("shadowmap");
-
-	std::vector<uint32_t> totalPrimitives;
-	totalPrimitives.insert(totalPrimitives.end(), meshData.opaquePrimitives.begin(), meshData.opaquePrimitives.end());
-	totalPrimitives.insert(
-		totalPrimitives.end(), meshData.alphaTestedPrimitives.begin(), meshData.alphaTestedPrimitives.end()
-	);
-
-	scene.buckets[gbufferMaterial] = totalPrimitives;
-	scene.buckets[shadowMapMaterial] = meshData.opaquePrimitives;
-
-	return scene;
-}
+Scene SceneLoader::getScene() && { return m_scene; }
