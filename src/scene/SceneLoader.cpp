@@ -1,5 +1,7 @@
 #include "SceneLoader.hpp"
 
+#include <memory>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -106,7 +108,7 @@ struct SceneResourceInfo {
 	std::array<std::size_t, 6> geometryBufferSizes { 0 };
 	std::size_t buffersAllocationSize = 0;
 
-	std::vector<SceneLoader::SceneResources::MemorySpan> imageDataLocations;
+	std::vector<MemorySpan> imageDataLocations;
 	std::vector<vk::Format> imageFormats;
 	std::vector<glm::ivec2> imageResolution;
 
@@ -477,7 +479,7 @@ SceneLoader::SceneResources SceneLoader::querySceneResources() {
 	m_textureUsages = getTextureUsages(asset.get());
 	SceneResourceInfo resourceInfo = getSceneResourceInfo(asset.get(), m_path.parent_path(), m_textureUsages);
 
-	std::array<SceneResources::MemorySpan, 6> bufferDataLocations;
+	std::array<MemorySpan, 6> bufferDataLocations;
 
 	std::size_t offset = 0;
 	for (int i = 0; i < bufferDataLocations.size(); i++) {
@@ -506,7 +508,7 @@ void SceneLoader::beginBufferLoad(void* stagingAddress) {
 	std::jthread([&bufferData = m_bufferDataLocations,
 				  &asset = m_asset,
 				  stagingAddress,
-				  &loaded = m_buffersLoaded,
+				  &loadedBuffers = m_readyBuffers,
 				  &scene = m_scene] {
 		auto* vertexAddress = (glm::vec3*)stagingAddress;
 		auto* vertexAttributes =
@@ -527,7 +529,9 @@ void SceneLoader::beginBufferLoad(void* stagingAddress) {
 		auto* materialsAddress = (MaterialDefinitions::PBRInstance*)((std::byte*)stagingAddress +
 																	 bufferData[GeometryBuffers::Materials].offset);
 		loadMaterialInstances(asset, materialsAddress);
-		loaded = true;
+
+		auto inserter = loadedBuffers.getInserter();
+		for (int i = 0; i < 6; i++) inserter.push(i);
 	}).detach();
 }
 
@@ -542,7 +546,6 @@ void SceneLoader::beginImageLoad(void* address) {
 	auto rawDataStack = std::make_shared<ConcurrentStack<ImageIndex>>();
 	auto processImageStack = std::make_shared<ConcurrentStack<ImageIndex>>();
 	auto compressImageStack = std::make_shared<ConcurrentStack<ImageIndex>>();
-	auto readyImages = std::make_shared<ConcurrentStack<ImageIndex>>();
 
 	auto rawImageData = std::make_shared<std::vector<std::vector<std::byte>>>();
 	auto processedImageData = std::make_shared<std::vector<ProcessedImageData>>();
@@ -580,12 +583,12 @@ void SceneLoader::beginImageLoad(void* address) {
 
 	for (int i = 0; i < 4; i++) {
 		std::jthread([compressImageStack,
-					  readyImages,
+					  &readyImages = m_readyImages,
 					  processedImageData,
 					  &textureUsages,
 					  &imageDataLocations = m_imageDataLocations,
 					  address] {
-			auto stackInserter = readyImages->getInserter();
+			auto stackInserter = readyImages.getInserter();
 			while (auto workElement = compressImageStack->pop_wait()) {
 				auto image = workElement.value();
 				auto format = getFormatFromUsage(textureUsages[image]);
@@ -608,15 +611,14 @@ void SceneLoader::beginImageLoad(void* address) {
 			}
 		}).detach();
 	}
-	m_readyImages = readyImages;
 }
 
 SceneLoader::LoadStatus SceneLoader::queryLoadStatus() {
 	SceneLoader::LoadStatus status;
 
-	while (auto processedImage = m_readyImages->pop()) status.imageLoadedDelta.push_back(*processedImage);
+	while (auto processedImage = m_readyImages.pop()) status.loadedImages.push_back(*processedImage);
+	while (auto processedBuffer = m_readyBuffers.pop()) status.loadedBuffers.push_back(*processedBuffer);
 
-	status.buffersLoaded = m_buffersLoaded;
 	return status;
 }
 Scene SceneLoader::getScene() && { return m_scene; }

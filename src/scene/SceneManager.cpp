@@ -1,6 +1,20 @@
 #include "scene/SceneManager.hpp"
 
+#include <stdlib.h>
+
+#include <array>
+#include <cstddef>
+#include <iostream>
+#include <optional>
+#include <vector>
+
+#include "Common.hpp"
 #include "Instance.hpp"
+#include "resources/ResourceManager.hpp"
+#include "scene/Primitive.hpp"
+#include "scene/Scene.hpp"
+#include "scene/SceneLoader.hpp" #include "scene/SceneManager.hpp"
+#include "scene/SceneLoader.hpp"
 
 struct GeometryAllocationData {
 	std::vector<ResourceManager::BufferDescription> buffers;
@@ -88,64 +102,98 @@ std::vector<ResourceManager::ImageDescription> getImageDescriptions(
 
 	return descriptions;
 }
-
-std::vector<ResourceManager::ResourceCopyInfo> getMergeInfo(
+struct MergeInfo {
+	std::array<MemorySpan, 6> buffersLayout;
+	std::vector<ResourceManager::ResourceCopyInfo> copyInfo;
+};
+MergeInfo getMergeInfo(
 	std::span<const BufferHandle> previousBuffers,
 	std::span<const BufferHandle> newBuffers,
 	const std::vector<SceneLoader::SceneResources>& sceneData,
 	std::size_t skipIndex
 ) {
 	// Merge previous buffers to new buffers
+	MergeInfo mergeInfo;
+	for (int i = 0; i < skipIndex; i++) {
+		for (int b = 0; b < 6; b++) {
+			mergeInfo.buffersLayout[b].size += sceneData[i].bufferDataLocations[b].size;
+			if (b > 1) mergeInfo.buffersLayout[b].offset += sceneData[i].bufferDataLocations[b - 1].size;
+		}
+	}
+	mergeInfo.copyInfo.resize(6);
+	for (int b = 0; b < 6; b++) {
+		mergeInfo.copyInfo[b] = {
+			.source =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = previousBuffers[b],
+																	.size = (uint32_t)mergeInfo.buffersLayout[b].size,
+																	.offset = (uint32_t)mergeInfo.buffersLayout[b].offset,
+																	},
 
-	std::array<SceneLoader::SceneResources::MemorySpan, 6> bufferDataLocations;
-	for (int i = 0; i < sceneData.size(); i++) {
-	    bufferDataLocations{}
-	
+			.destination =
+				ResourceManager::ResourceCopyInfo::BufferReference {
+																	.handle = newBuffers[b],
+																	.size = (uint32_t)mergeInfo.buffersLayout[b].size,
+																	.offset = (uint32_t)mergeInfo.buffersLayout[b].offset,
+																	}
+		};
 	}
 
-	for (int i = 0; i < 6; i++) {
-		copyInfo.push_back(
-			{
-				.source =
-					ResourceManager::ResourceCopyInfo::BufferReference {
-																		.handle = previousBuffers[i],
-																		.size = 0,
-																		.offset = 0,
-																		},
-				.source = ResourceManager::ResourceCopyInfo::BufferReference {
-																		.handle = newBuffers[i],
-																		.size = 0,
-																		.offset = 0,
-																		}
-		  }
-		)
+	if (skipIndex < sceneData.size() - 1) {
+		for (int b = 0; b < 6; b++) mergeInfo.buffersLayout[b].size = 0;
+
+		for (int i = skipIndex + 1; i < sceneData.size(); i++) {
+			for (int b = 0; b < 6; b++) {
+				mergeInfo.buffersLayout[b].size += sceneData[i].bufferDataLocations[b].size;
+				if (b > 1) mergeInfo.buffersLayout[b].offset += sceneData[i].bufferDataLocations[b - 1].size;
+			}
+		}
+
+		for (int b = 0; b < 6; b++) {
+			mergeInfo.copyInfo.push_back(
+				{
+					.source =
+						ResourceManager::ResourceCopyInfo::BufferReference {
+																			.handle = previousBuffers[b],
+																			.size = (uint32_t)mergeInfo.buffersLayout[b].size,
+																			.offset = (uint32_t)mergeInfo.buffersLayout[b].offset,
+																			},
+
+					.destination = ResourceManager::ResourceCopyInfo::BufferReference {
+																			.handle = newBuffers[b],
+																			.size = (uint32_t)mergeInfo.buffersLayout[b].size,
+																			.offset = (uint32_t)mergeInfo.buffersLayout[b].offset,
+																			}
+			  }
+			);
+		}
 	}
-	for (int i = 0; i < sceneData.size(); i++) {
-	}
+
+	return mergeInfo;
 }
 
 std::vector<ResourceManager::ResourceCopyInfo> getBuffersUploadInfo(
 	BufferHandle stagingBuffer,
-	const std::array<SceneLoader::SceneResources::MemorySpan, 6> newSceneBuffers,
-	const std::array<std::size_t, 6> mainBuffersOffsets,
+	const std::array<MemorySpan, 6> stagingLayout,
+	const std::array<MemorySpan, 6> currentLayout,
 	std::span<const BufferHandle> bufferHandles
 ) {
 	std::vector<ResourceManager::ResourceCopyInfo> copies;
-	copies.reserve(newSceneBuffers.size());
+	copies.reserve(stagingLayout.size());
 
-	for (int i = 0; i < newSceneBuffers.size(); i++) {
+	for (int i = 0; i < stagingLayout.size(); i++) {
 		copies.push_back(
 			{
 				.source =
 					ResourceManager::ResourceCopyInfo::BufferReference {
 																		.handle = stagingBuffer,
-																		.size = static_cast<uint32_t>(newSceneBuffers[i].size),
-																		.offset = static_cast<uint32_t>(newSceneBuffers[i].offset),
+																		.size = static_cast<uint32_t>(stagingLayout[i].size),
+																		.offset = static_cast<uint32_t>(stagingLayout[i].offset),
 																		},
 				.destination = ResourceManager::ResourceCopyInfo::BufferReference {
 																		.handle = bufferHandles[i],
-																		.size = static_cast<uint32_t>(newSceneBuffers[i].size),
-																		.offset = static_cast<uint32_t>(mainBuffersOffsets[i]),
+																		.size = static_cast<uint32_t>(stagingLayout[i].size),
+																		.offset = static_cast<uint32_t>(currentLayout[i].offset + stagingLayout[i].offset),
 
 																		}
 		  }
@@ -156,27 +204,28 @@ std::vector<ResourceManager::ResourceCopyInfo> getBuffersUploadInfo(
 
 std::vector<ResourceManager::ResourceCopyInfo> getImagesUploadInfo(
 	BufferHandle stagingBuffer,
-	const std::vector<SceneLoader::SceneResources::MemorySpan>& images,
-	const std::vector<uint8_t>& mips,
+	std::vector<std::size_t> images,
+	const std::vector<MemorySpan>& dataLocations,
+	const std::vector<glm::ivec2>& resolutions,
 	std::span<const ImageHandle> handles
 ) {
 	std::vector<ResourceManager::ResourceCopyInfo> copies;
 
-	for (int i = 0; i < images.size(); i++) {
+	for (auto image : images) {
 		std::size_t mipOffset = 0;
-
-		for (int mip = 0; mip < mips[i]; mip++) {
-			std::size_t mipSize = images[i].size >> (mip * 2);
+		std::size_t mipLevels = getMipLevels(resolutions[image].x, resolutions[image].y);
+		for (int mip = 0; mip < mipLevels; mip++) {
+			std::size_t mipSize = dataLocations[image].size >> (mip * 2);
 			copies.push_back(
 				{
 					.source =
 						ResourceManager::ResourceCopyInfo::BufferReference {
 																			.handle = stagingBuffer,
 																			.size = static_cast<uint32_t>(mipSize),
-																			.offset = static_cast<uint32_t>(images[i].offset + mipOffset),
+																			.offset = static_cast<uint32_t>(dataLocations[image].offset + mipOffset),
 																			},
 					.destination = ResourceManager::ResourceCopyInfo::ImageReference {
-																			.handle = handles[i],
+																			.handle = handles[image],
 																			.mipLevel = static_cast<uint32_t>(mip),
 																			.initialLayout = vk::ImageLayout::eUndefined,
 																			.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -190,12 +239,14 @@ std::vector<ResourceManager::ResourceCopyInfo> getImagesUploadInfo(
 	return copies;
 }
 
-std::optional<SceneManager::SceneIndex> SceneManager::loadAsync(const std::filesystem::path& scene) {
-	if (!std::filesystem::exists(scene)) return std::nullopt;
+void SceneManager::loadAsync(const std::filesystem::path& scene) {
+	if (!std::filesystem::exists(scene)) {
+		std::cout << "Scene not found : " + scene.relative_path().string() << std::endl;
+		abort();
+	}
+	m_loadingData.emplace(scene);
 
-	SceneLoader loader(scene);
-
-	m_sceneData.push_back(loader.querySceneResources());
+	m_sceneData.push_back(m_loadingData->sceneLoader.querySceneResources());
 	auto& resources = m_sceneData.back();
 
 	auto stagingAllocation = m_resourceManager.createResources(
@@ -212,18 +263,111 @@ std::optional<SceneManager::SceneIndex> SceneManager::loadAsync(const std::files
 	auto geometryAllocation = m_resourceManager.createResources(
 		{}, geometryBuffersDescription.buffers, ResourceManager::MemoryLocation::Device
 	);
+	auto mergeInfo = getMergeInfo(
+		m_resourceManager.getBuffers(m_geometryAllocation),
+		m_resourceManager.getBuffers(geometryAllocation),
+		m_sceneData,
+		m_sceneData.size() - 1
+	);
 
-	m_resourceManager.copyResources(const std::vector<ResourceCopyInfo>& info) auto imageDescriptions =
-		getImageDescriptions(resources.imageResolution, resources.imageFormats);
+	m_resourceManager.copyResources(mergeInfo.copyInfo);
+
+	auto imageDescriptions = getImageDescriptions(resources.imageResolution, resources.imageFormats);
 	auto textureAllocation =
 		m_resourceManager.createResources(imageDescriptions, {}, ResourceManager::MemoryLocation::Device);
 
 	Buffer& stagingBuffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(stagingAllocation)[0]);
 
-	loader.beginImageLoad(stagingBuffer.data);
-	loader.beginBufferLoad(stagingBuffer.data);
+	m_loadingData->sceneLoader.beginImageLoad(stagingBuffer.data);
+	m_loadingData->sceneLoader.beginBufferLoad(stagingBuffer.data);
 
 	m_sceneTextureAllocations.push_back(textureAllocation);
 }
 
-void SceneManager::uploadResourceBatch(SceneIndex index) { auto delta = m_loaders[index].queryLoadStatus(); }
+SceneManager::LoadedPercentage SceneManager::sync() {
+	auto delta = m_loadingData->sceneLoader.queryLoadStatus();
+	std::size_t sceneIndex = m_sceneData.size() - 1;
+	auto& currentSceneData = m_sceneData[sceneIndex];
+
+	SceneManager::LoadedPercentage percentage = 0;
+
+	std::size_t totalResourceCount =
+		(currentSceneData.imageDataLocations.size() + currentSceneData.bufferDataLocations.size());
+
+	percentage += (float)(m_loadingData->resourceLoadedCount + delta.loadedImages.size() + delta.loadedBuffers.size()) /
+				  totalResourceCount;
+
+	m_loadingData->resourceLoadedCount += delta.loadedImages.size();
+	m_loadingData->resourceLoadedCount += delta.loadedBuffers.size();
+
+	if (delta.loadedImages.size() > 0) {
+		auto imageUploadInfo = getImagesUploadInfo(
+			m_loadingData->stagingBuffer,
+			delta.loadedImages,
+			currentSceneData.imageDataLocations,
+			currentSceneData.imageResolution,
+			m_resourceManager.getImages(m_sceneTextureAllocations[sceneIndex])
+		);
+		m_resourceManager.copyResources(imageUploadInfo);
+	}
+	if (delta.loadedBuffers.size() > 0) {
+		auto bufferUploadInfo = getBuffersUploadInfo(
+			m_loadingData->stagingBuffer,
+			currentSceneData.bufferDataLocations,
+			m_buffersLayout,
+			m_resourceManager.getBuffers(m_sceneTextureAllocations[sceneIndex])
+		);
+	}
+
+	return percentage;
+}
+
+struct Offsets {
+	uint32_t vertexOffset = 0;
+	uint32_t indexOffset = 0;
+};
+
+void loadPrimitives(
+	const std::vector<Primitive>& scenePrimitives, std::vector<Primitive>& outputPrimitives, Offsets baseOffsets
+) {
+	outputPrimitives.reserve(outputPrimitives.size() + scenePrimitives.size());
+	for (const auto& primitive : scenePrimitives) {
+		outputPrimitives.push_back(
+			{
+				.baseVertex = primitive.baseVertex + baseOffsets.vertexOffset,
+				.baseIndex = primitive.baseIndex + baseOffsets.indexOffset,
+				.indexCount = primitive.indexCount,
+			}
+		);
+	}
+}
+
+Scene SceneManager::getScene() {
+	if (m_loadingData) {
+		m_scenes.push_back(std::move(m_loadingData->sceneLoader).getScene());
+		m_loadingData = std::nullopt;
+	}
+	Scene res;
+
+	Offsets offsets;
+	for (int i = 0; i < m_scenes.size(); i++) {
+		auto& scene = m_scenes[i];
+
+		res.materialHint.insert(res.materialHint.end(), scene.materialHint.begin(), scene.materialHint.end());
+		res.primitiveBounds.insert(
+			res.primitiveBounds.end(), scene.primitiveBounds.begin(), scene.primitiveBounds.end()
+		);
+
+		res.size = std::max(res.size, scene.size);
+		loadPrimitives(scene.primitives, res.primitives, offsets);
+
+		auto& sceneData = m_sceneData[i];
+		std::size_t vertexCount = sceneData.bufferDataLocations[GeometryBufferType::Vertex].size / sizeof(Vertex);
+		std::size_t indexCount = sceneData.bufferDataLocations[GeometryBufferType::Index].size / sizeof(uint32_t);
+
+		offsets.vertexOffset += vertexCount;
+		offsets.indexOffset += indexCount;
+	}
+
+	return res;
+}

@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <vector>
 
 #include "resources/ResourceManager.hpp"
+#include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
 
 class SceneManager {
@@ -30,9 +32,17 @@ private:
 
 		std::size_t occupiedStagingOffset;
 	};
+	struct LoadingData {
+		SceneLoader sceneLoader;
+		BufferHandle stagingBuffer;
+		ResourceManager::AllocationIndex newAllocation;
+		std::size_t resourceLoadedCount = 0;
+	};
+	std::optional<LoadingData> m_loadingData;
 
+	std::array<MemorySpan, 6> m_buffersLayout;
+	std::vector<Scene> m_scenes;
 	std::vector<SceneLoader::SceneResources> m_sceneData;
-	std::vector<SceneLoader> m_loaders;
 	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
 
 	// TODO: dispose safely of previous allocation
@@ -41,7 +51,10 @@ private:
 public:
 	SceneManager(ResourceManager& resourceManager) : m_resourceManager(resourceManager) {}
 
-	std::optional<SceneIndex> loadAsync(const std::filesystem::path& scene);
-	void uploadResourceBatch(SceneIndex index);
-	void getLoadedPercentage(SceneIndex index);
+	void loadAsync(const std::filesystem::path& scene);
+
+	using LoadedPercentage = float;
+	LoadedPercentage sync();
+
+	Scene getScene();
 };
