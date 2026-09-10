@@ -15,19 +15,21 @@ struct ProceduralSkyRequiredPasses {
 };
 
 using namespace rendergraph::passes;
-std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
+Renderer::Passes Renderer::createRenderGraph() {
 	std::vector<TaskIndex> optionalPasses;
-	auto sceneBuffers = m_resourceManager.getBuffers(scene.allocation);
+	auto sceneBuffers = m_resourceManager.getBuffers(m_scene.allocation);
 
-	m_graph.registerBuffer("vertex_positions_buffer", sceneBuffers[Scene::BufferIndex::Vertices]);
+	m_graph.registerBuffer("vertex_positions_buffer", sceneBuffers[SceneManager::GeometryBufferType::Vertex]);
 
-	m_graph.registerBuffer("vertex_attributes_buffer", sceneBuffers[Scene::BufferIndex::VertexAttributes]);
-	m_graph.registerBuffer("index_buffer", sceneBuffers[Scene::BufferIndex::Indices]);
-	m_graph.registerBuffer("instance_buffer", sceneBuffers[Scene::BufferIndex::Transforms]);
+	m_graph.registerBuffer("vertex_attributes_buffer", sceneBuffers[SceneManager::GeometryBufferType::VertexAttribute]);
+	m_graph.registerBuffer("index_buffer", sceneBuffers[SceneManager::GeometryBufferType::Index]);
+	m_graph.registerBuffer("instance_buffer", sceneBuffers[SceneManager::GeometryBufferType::Transforms]);
 
-	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", sceneBuffers[Scene::BufferIndex::Materials]);
-	auto pbrMaterialInstances =
-		m_graph.registerBuffer("pbr_instances_buffer", sceneBuffers[Scene::BufferIndex::MaterialInstances]);
+	auto pbrMaterialData =
+		m_graph.registerBuffer("pbr_data_buffer", sceneBuffers[SceneManager::GeometryBufferType::Materials]);
+	auto pbrMaterialInstances = m_graph.registerBuffer(
+		"pbr_instances_buffer", sceneBuffers[SceneManager::GeometryBufferType::MaterialInstances]
+	);
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -49,7 +51,7 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
 	optionalPasses.push_back(lighting);
 
-	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, fhdrOutput, gbuffer);
+	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
 	optionalPasses.push_back(skybox);
 
 	auto hdrCopyTask = core::hdrOutput(context);
@@ -69,8 +71,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 
 	auto ui = core::ui(context, sdrOutput);
 	optionalPasses.push_back(ui);
-	m_optionalPasses = optionalPasses;
-	m_graph.update(ui, m_optionalPasses, scene);
 
-	return optionalPasses;
+	return { .ui = ui, .optionalPasses = optionalPasses };
 }

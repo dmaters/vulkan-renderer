@@ -2,6 +2,6 @@
 #include <cstddef>
 
 struct MemorySpan {
-	std::size_t size;
-	std::size_t offset;
+	std::size_t size = 0;
+	std::size_t offset = 0;
 };

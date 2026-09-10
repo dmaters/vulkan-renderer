@@ -51,7 +51,7 @@ static void build(Task::BuildContext& context) {
 	context.commandBuffer.updateBuffer(cameraBuffer.buffer, 0, sizeof(Camera::ShaderObject), &cameraObject);
 
 	Light::ShaderObject light =
-		context.scene.lights[0].getShaderObject(context.scene.camera, cameraObject, context.scene.size);
+		context.scene.light.getShaderObject(context.scene.camera, cameraObject, context.scene.size);
 	Buffer& lightBuffer = context.getOutput<Buffer&>(rendergraph::passes::core::SceneDataSlots::Lights);
 
 	context.commandBuffer.updateBuffer(lightBuffer.buffer, 0, sizeof(Light::ShaderObject), &light);

@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "Camera.hpp"
+#include "Light.hpp"
 #include "Primitive.hpp"
 #include "resources/ResourceManager.hpp"
 
@@ -13,15 +15,18 @@ struct Scene {
 		ShadowCasting = 1 << 2,
 	};
 	using MaterialHint = uint8_t;
+	struct PrimitiveBound {
+		glm::vec3 position;
+		float size = 0.0;
+	};
 
 	std::vector<Primitive> primitives;
 	std::vector<MaterialHint> materialHint;
-
-	struct PrimitiveBound {
-		glm::vec3 position;
-		float size;
-	};
-
 	std::vector<PrimitiveBound> primitiveBounds;
-	float size;
+	float size = 0.0f;
+
+	Camera camera;
+	Light light;
+
+	ResourceManager::AllocationIndex allocation;
 };

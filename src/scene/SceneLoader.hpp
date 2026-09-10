@@ -3,6 +3,7 @@
 #include <fastgltf/core.hpp>
 #include <filesystem>
 #include <texture_compressor/compression.hpp>
+#include <vulkan/vulkan.hpp>
 
 #include "Common.hpp"
 #include "Scene.hpp"
@@ -20,11 +21,17 @@ public:
 		std::size_t buffersStagingSize;
 		std::size_t imageStagingSize;
 	};
+	struct SceneInstance {
+		std::vector<Primitive> primitives;
+		std::vector<Scene::MaterialHint> materialHint;
+		std::vector<Scene::PrimitiveBound> primitiveBounds;
+		float size = 0.0;
+	};
 
 private:
-	const std::filesystem::path& m_path;
+	std::filesystem::path m_path;
 	fastgltf::Asset m_asset;
-	Scene m_scene;
+	SceneInstance m_scene;
 
 	std::array<MemorySpan, 6> m_bufferDataLocations;
 
@@ -39,7 +46,7 @@ private:
 	std::vector<TextureUsage> m_textureUsages;
 
 public:
-	SceneLoader(const std::filesystem::path& path) : m_path(path) {}
+	SceneLoader(std::filesystem::path path) : m_path(path) {}
 	SceneResources querySceneResources();
 
 	void beginBufferLoad(void* stagingAddress);
@@ -52,5 +59,5 @@ public:
 	};
 	LoadStatus queryLoadStatus();
 
-	Scene getScene() &&;
+	SceneInstance getScene() &&;
 };

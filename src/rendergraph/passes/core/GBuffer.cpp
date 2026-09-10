@@ -35,6 +35,9 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 
 	uint32_t primitiveMapSize = static_cast<uint32_t>(context.scene.primitives.size() * sizeof(uint32_t));
 
+	if (indirectBufferSize == 0) indirectBufferSize = 1;
+	if (primitiveMapSize == 0) primitiveMapSize = 1;
+
 	for (int i = 0; i < 3; i++) {
 		auto indirectBuffer = context.createBuffer(
 			"indirect_gpass_buffer_local_" + std::to_string(i),
@@ -163,9 +166,14 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 static void build(Task::BuildContext& context) {
 	auto& data = context.getData<GBufferPass>();
 
+	std::vector<PrimitiveIndex> primitives;
+	for (int i = 0; i < context.scene.primitives.size(); i++) {
+		if (context.scene.materialHint[i] & Scene::MaterialHintBits::Opaque) primitives.push_back(i);
+	}
+
 	auto visiblePrimitives = FrustumCulling(
 		context.scene,
-		context.scene.buckets.at(data.material),
+		primitives,
 		context.scene.camera.position,
 		context.scene.camera.getFrustumPlanes(context.scene.size)
 	);

@@ -11,7 +11,6 @@
 
 class SceneManager {
 public:
-	using SceneIndex = uint32_t;
 	ResourceManager& m_resourceManager;
 
 	enum GeometryBufferType {
@@ -41,20 +40,24 @@ private:
 	std::optional<LoadingData> m_loadingData;
 
 	std::array<MemorySpan, 6> m_buffersLayout;
-	std::vector<Scene> m_scenes;
+	std::vector<SceneLoader::SceneInstance> m_scenes;
 	std::vector<SceneLoader::SceneResources> m_sceneData;
 	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
 
 	// TODO: dispose safely of previous allocation
 	ResourceManager::AllocationIndex m_geometryAllocation;
+	ResourceManager::AllocationIndex m_dummyAllocation;
 
 public:
-	SceneManager(ResourceManager& resourceManager) : m_resourceManager(resourceManager) {}
+	SceneManager(ResourceManager&);
 
-	void loadAsync(const std::filesystem::path& scene);
+	using ResourceCount = std::size_t;
+	ResourceCount loadAsync(const std::filesystem::path&);
 
-	using LoadedPercentage = float;
-	LoadedPercentage sync();
+	using LoadedResourceCount = std::size_t;
+	LoadedResourceCount sync();
 
 	Scene getScene();
+
+	ResourceManager::AllocationIndex getBuffersAllocation() { return m_geometryAllocation; }
 };
