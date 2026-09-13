@@ -141,9 +141,12 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 			);
 
 			if (asset.materials[primitive.materialIndex.value()].alphaMode == fastgltf::AlphaMode::Mask)
-				materialHints.push_back(Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::AlphaMask);
+				materialHints.push_back(
+					Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::ShadowCasting |
+					Scene::MaterialHintBits::AlphaMask
+				);
 			else
-				materialHints.push_back(Scene::MaterialHintBits::Opaque);
+				materialHints.push_back(Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::ShadowCasting);
 
 			vertexOffset += vertexCount;
 			indexOffset += indexCount;
@@ -531,13 +534,15 @@ ProcessedImageData processImage(const std::vector<std::byte>& imageData, Texture
 	int expectedChannels = 0;
 	switch (textureUsage) {
 		case TextureUsage::Albedo:
+			expectedChannels = 3;
+			break;
+		case TextureUsage::AlbedoWithAlpha:
 			expectedChannels = 4;
 			break;
 		case TextureUsage::RoughnessMetallic:
 		case TextureUsage::Normal:
 			expectedChannels = 3;
 			break;
-
 		default:
 			expectedChannels = 0;
 	}
