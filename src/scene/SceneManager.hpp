@@ -24,6 +24,7 @@ public:
 private:
 	struct LoadingData {
 		SceneLoader sceneLoader;
+		Scene scene;
 		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex newAllocation;
 		std::size_t resourceLoadedCount = 0;
@@ -40,8 +41,8 @@ private:
 	std::vector<SceneLoader::SceneGeometry> m_scenesGeometry;
 	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
 
-	std::optional<ResourceManager::AllocationIndex> m_geometryAllocation;
 	ResourceManager::AllocationIndex m_dummyAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_sceneAllocation;
 
 	Scene m_scene;
 

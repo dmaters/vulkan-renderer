@@ -15,7 +15,76 @@
 #include "scene/SceneLoader.hpp" #include "scene/SceneManager.hpp"
 #include "scene/SceneLoader.hpp"
 
-using SceneDataLocations = std::array<std::size_t, SceneLoader::SceneBuffersCount + 1>;
+void createPlaceholderTextures(ResourceManager& resourceManager, MaterialManager& materialManager) {
+	std::vector<ResourceManager::ImageDescription> descriptions(3);
+	descriptions[0] = {
+		.width = 1,
+		.height = 1,
+		.depth = 1,
+		.miplevels = 1,
+		.format = vk::Format::eR8G8B8A8Unorm,
+		.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+	};
+	descriptions[1] = {
+		.width = 1,
+		.height = 1,
+		.depth = 1,
+		.miplevels = 1,
+		.format = vk::Format::eR8G8B8A8Unorm,
+		.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+
+	};
+	descriptions[2] = {
+		.width = 1,
+		.height = 1,
+		.depth = 1,
+		.miplevels = 1,
+		.format = vk::Format::eR8G8B8A8Unorm,
+		.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+	};
+
+	auto allocationIndex =
+		resourceManager.createResources({ descriptions }, {}, ResourceManager::MemoryLocation::Device);
+	auto images = resourceManager.getImages(allocationIndex);
+	materialManager.registerTextureGroup(std::vector<ImageHandle>(images.begin(), images.end()));
+
+	auto stagingAllocation = resourceManager.createResources(
+		{
+	},
+		{ ResourceManager::BufferDescription { .size = 12, .usage = vk::BufferUsageFlagBits::eTransferSrc } },
+		ResourceManager::MemoryLocation::Host
+	);
+
+	auto stagingBufferHandle = resourceManager.getBuffers(stagingAllocation)[0];
+	auto& stagingBuffer = resourceManager.getBuffer(stagingBufferHandle);
+
+	auto* data = (std::array<uint8_t, 4>*)stagingBuffer.data;
+	data[0] = { 255, 255, 255, 255 };
+	data[1] = { 128, 128, 255, 255 };
+	data[2] = { 255, 0, 0, 255 };
+
+	std::vector<ResourceManager::ResourceCopyInfo> copyInfo;
+	for (int i = 0; i < 3; i++) {
+		copyInfo.push_back(
+			{
+				.source =
+					ResourceManager::ResourceCopyInfo::BufferReference {
+																		.handle = stagingBufferHandle,
+																		.size = 4,
+																		.offset = (uint32_t)4 * i,
+																		},
+				.destination = ResourceManager::ResourceCopyInfo::ImageReference {
+																		.handle = images[i],
+																		.mipLevel = 0,
+																		.initialLayout = vk::ImageLayout::eUndefined,
+																		.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+																		}
+		  }
+		);
+	}
+
+	resourceManager.copyResources(copyInfo);
+}
 
 SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& materialManager) :
 	m_resourceManager(resourceManager), m_materialManager(materialManager) {
@@ -56,22 +125,25 @@ SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& ma
 		std::vector<ResourceManager::BufferDescription>(dummyBuffers.begin(), dummyBuffers.end()),
 		ResourceManager::MemoryLocation::Device
 	);
+
 	m_scene.allocation = m_dummyAllocation;
+	createPlaceholderTextures(resourceManager, materialManager);
 }
 
 struct GeometryAllocationData {
 	std::vector<ResourceManager::BufferDescription> buffers;
-	std::array<MemorySpan, SceneLoader::SceneBuffersCount + 1> dataLocations;
+	std::array<MemorySpan, SceneLoader::SceneBuffersCount> dataLocations;
+	std::size_t primitiveDataSize;
 };
 
 GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstance>& scenes) {
-	std::array<MemorySpan, SceneLoader::SceneBuffersCount + 1> dataLocations;
+	std::array<MemorySpan, SceneLoader::SceneBuffersCount> dataLocations;
+	std::size_t primitiveDataSize = 0;
 	for (const auto& scene : scenes) {
 		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) {
 			dataLocations[i].size = scene.bufferDataLocations[i].size;
 		}
-		dataLocations[(int)SceneManager::SceneBufferType::PrimitiveData].size +=
-			scene.primitives.size() * sizeof(Primitive::ShaderObject);
+		primitiveDataSize += scene.primitives.size() * sizeof(Primitive::ShaderObject);
 	}
 
 	std::vector<ResourceManager::BufferDescription> buffers {
@@ -101,7 +173,7 @@ GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstan
 					 vk::BufferUsageFlagBits::eStorageBuffer,
 		 },
 		{
-			.size = (uint32_t)dataLocations[(int)SceneManager::SceneBufferType::PrimitiveData].size,
+			.size = (uint32_t)primitiveDataSize,
 			.usage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
 		 }
 	};
@@ -109,10 +181,10 @@ GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstan
 	for (int i = 1; i < dataLocations.size(); i++) {
 		dataLocations[i].offset = dataLocations[i - 1].offset + dataLocations[i - 1].size;
 	}
-
 	return {
 		.buffers = buffers,
 		.dataLocations = dataLocations,
+		.primitiveDataSize = primitiveDataSize,
 	};
 }
 
@@ -310,6 +382,7 @@ void composePrimitives(
 				.baseVertex = primitive.baseVertex + baseOffsets.vertexOffset,
 				.baseIndex = primitive.baseIndex + baseOffsets.indexOffset,
 				.indexCount = primitive.indexCount,
+				.materialIndex = primitive.materialIndex + baseOffsets.materialOffset,
 			}
 		);
 	}
@@ -360,7 +433,7 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	},
 		{ {
 			.size = static_cast<uint32_t>(
-				scene.buffersStagingSize + scene.imageStagingSize + gpuBuffersInfo.dataLocations.back().size
+				scene.buffersStagingSize + scene.imageStagingSize + gpuBuffersInfo.primitiveDataSize
 			),
 			.usage = vk::BufferUsageFlagBits::eTransferSrc,
 		} },
@@ -370,9 +443,9 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	m_loadingData->newAllocation =
 		m_resourceManager.createResources({}, gpuBuffersInfo.buffers, ResourceManager::MemoryLocation::Device);
 
-	if (m_geometryAllocation) {
+	if (m_sceneAllocation) {
 		auto mergeInfo = getMergeInfo(
-			m_resourceManager.getBuffers(*m_geometryAllocation),
+			m_resourceManager.getBuffers(*m_sceneAllocation),
 			m_resourceManager.getBuffers(m_loadingData->newAllocation),
 			m_scenes,
 			m_scenes.size() - 1
@@ -392,28 +465,28 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	std::vector<ImageHandle> sceneImages(allocationImages.begin(), allocationImages.end());
 	auto registeredImages = m_materialManager.registerTextureGroup(sceneImages);
 
-	m_scene = mergeScenes(m_scenes);
+	m_loadingData->scene = mergeScenes(m_scenes);
 
 	m_loadingData->sceneLoader.beginBufferLoad(
 		(std::byte*)stagingBuffer.data + scene.imageStagingSize, registeredImages
 	);
 	loadPrimitiveData(
 		(Primitive::ShaderObject*)((std::byte*)stagingBuffer.data + scene.buffersStagingSize + scene.imageStagingSize),
-		m_scene
+		m_loadingData->scene
 	);
 
 	ResourceManager::ResourceCopyInfo primitiveDataCopy = {
 		.source =
 			ResourceManager::ResourceCopyInfo::BufferReference {
 																.handle = stagingBufferHandle,
-																.size = (uint32_t)gpuBuffersInfo.dataLocations[(int)SceneBufferType::PrimitiveData].size,
-																.offset = (uint32_t)gpuBuffersInfo.dataLocations[(int)SceneBufferType::PrimitiveData].offset,
+																.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
+																.offset = (uint32_t)(scene.buffersStagingSize + scene.imageStagingSize),
 																},
 		.destination =
 			ResourceManager::ResourceCopyInfo::BufferReference {
 																.handle =
 					m_resourceManager.getBuffers(m_loadingData->newAllocation)[(int)SceneBufferType::PrimitiveData],
-																.size = (uint32_t)gpuBuffersInfo.dataLocations[(int)SceneBufferType::PrimitiveData].size,
+																.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
 																.offset = 0,
 																},
 	};
@@ -459,7 +532,7 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 
 Scene SceneManager::getScene() {
 	if (!m_loadingData) return m_scene;
-
+	m_scene = std::move(m_loadingData->scene);
 	m_scenesGeometry.push_back(std::move(m_loadingData->sceneLoader).getSceneGeometry());
 
 	for (auto& sceneGeometry : m_scenesGeometry) {
@@ -470,9 +543,10 @@ Scene SceneManager::getScene() {
 		m_scene.size = std::max(m_scene.size, sceneGeometry.size);
 	}
 
-	if (m_geometryAllocation) m_resourceManager.freeAllocation(*m_geometryAllocation);
+	if (m_sceneAllocation) m_resourceManager.freeAllocation(*m_sceneAllocation);
 	m_resourceManager.freeAllocation(m_loadingData->stagingAllocation);
-	m_geometryAllocation = m_loadingData->newAllocation;
+	m_sceneAllocation = m_loadingData->newAllocation;
+	m_scene.allocation = *m_sceneAllocation;
 	m_loadingData = std::nullopt;
 
 	return m_scene;
