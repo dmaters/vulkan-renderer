@@ -393,9 +393,6 @@ SceneGeometry loadGeometryBuffers(
 	std::vector<Scene::PrimitiveBound> primitiveBounds;
 	primitiveBounds.reserve(asset.meshes.size());
 
-	std::size_t vertexOffset = 0;
-	std::size_t indexOffset = 0;
-
 	float sceneSize = 0;
 	fastgltf::iterateSceneNodes(
 		asset, 0, fastgltf::math::fmat4x4(), [&](const fastgltf::Node& node, const fastgltf::math::fmat4x4& matrix) {
@@ -405,6 +402,7 @@ SceneGeometry loadGeometryBuffers(
 			for (auto& primitive : mesh.primitives) {
 				auto primitiveData = loadPrimitiveGeometry(asset, primitive, vertices, vertexAttributes, indices);
 				vertices += primitiveData.vertexCount;
+				vertexAttributes += primitiveData.vertexCount;
 				indices += primitiveData.indexCount;
 
 				*transforms = (glm::mat4&)matrix;
@@ -412,9 +410,6 @@ SceneGeometry loadGeometryBuffers(
 
 				primitiveBounds.push_back(primitiveData.primitiveBounds);
 				sceneSize = std::max(primitiveData.primitiveBounds.size, sceneSize);
-
-				vertexOffset += primitiveData.vertexCount;
-				indexOffset += primitiveData.indexCount;
 			}
 		}
 	);
@@ -453,6 +448,33 @@ void loadMaterials(
 		materials[i].roughnessValue = material.pbrData.roughnessFactor;
 		materials[i].metallicValue = material.pbrData.metallicFactor;
 	}
+}
+
+void SceneLoader::beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices) {
+	std::jthread([&bufferData = m_bufferDataLocations,
+				  &asset = m_asset,
+				  stagingAddress,
+				  &loadedBuffers = m_readyBuffers,
+				  &sceneGeometry = m_sceneGeometry,
+				  imageIndices = std::move(registeredImageIndices)] {
+		auto* vertexAddress = (glm::vec3*)stagingAddress;
+		auto* vertexAttributes =
+			(VertexAttributes*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::VertexAttribute].offset);
+		auto* indices = (uint32_t*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Indices].offset);
+		auto* transforms = (glm::mat4*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Transforms].offset);
+
+		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices, transforms);
+
+		sceneGeometry.primitiveBounds = std::move(sceneData.primitivesBounds);
+		sceneGeometry.size = sceneData.sceneSize;
+
+		auto* materialsAddress = (MaterialDefinitions::PBRInstance*)((std::byte*)stagingAddress +
+																	 bufferData[(int)SceneBuffers::Materials].offset);
+		loadMaterials(asset, materialsAddress, imageIndices);
+
+		auto inserter = loadedBuffers.getInserter();
+		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) inserter.push(i);
+	}).detach();
 }
 
 std::vector<std::byte> getRawImageData(
@@ -545,33 +567,6 @@ ProcessedImageData processImage(const std::vector<std::byte>& imageData, Texture
 	};
 }
 
-void SceneLoader::beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices) {
-	std::jthread([&bufferData = m_bufferDataLocations,
-				  &asset = m_asset,
-				  stagingAddress,
-				  &loadedBuffers = m_readyBuffers,
-				  &sceneGeometry = m_sceneGeometry,
-				  imageIndices = std::move(registeredImageIndices)] {
-		auto* vertexAddress = (glm::vec3*)stagingAddress;
-		auto* vertexAttributes =
-			(VertexAttributes*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::VertexAttribute].offset);
-		auto* indices = (uint32_t*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Indices].offset);
-		auto* transforms = (glm::mat4*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Transforms].offset);
-
-		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices, transforms);
-
-		sceneGeometry.primitiveBounds = std::move(sceneData.primitivesBounds);
-		sceneGeometry.size = sceneData.sceneSize;
-
-		auto* materialsAddress = (MaterialDefinitions::PBRInstance*)((std::byte*)stagingAddress +
-																	 bufferData[(int)SceneBuffers::Materials].offset);
-		loadMaterials(asset, materialsAddress, imageIndices);
-
-		auto inserter = loadedBuffers.getInserter();
-		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) inserter.push(i);
-	}).detach();
-}
-
 void SceneLoader::beginImageLoad(void* address) {
 	using ImageIndex = std::size_t;
 
@@ -582,8 +577,6 @@ void SceneLoader::beginImageLoad(void* address) {
 	auto rawImageData = std::make_shared<std::vector<std::vector<std::byte>>>(m_asset.images.size());
 	auto processedImageData = std::make_shared<std::vector<ProcessedImageData>>(m_asset.images.size());
 	auto compressedImagesOffsets = std::make_shared<std::vector<std::size_t>>(m_asset.images.size());
-
-	auto& textureUsages = reinterpret_cast<std::vector<TextureUsage>&>(m_textureUsages);
 
 	for (int i = 0; i < m_asset.images.size(); i++) rawDataStack->container().push_back(i);
 
@@ -598,7 +591,11 @@ void SceneLoader::beginImageLoad(void* address) {
 		}).detach();
 	}
 	for (int i = 0; i < 2; i++) {
-		std::jthread([compressImageStack, processImageStack, rawImageData, processedImageData, &textureUsages] {
+		std::jthread([compressImageStack,
+					  processImageStack,
+					  rawImageData,
+					  processedImageData,
+					  &textureUsages = m_textureUsages] {
 			auto stackInserter = compressImageStack->getInserter();
 
 			while (auto popValue = processImageStack->pop_wait()) {
@@ -617,7 +614,7 @@ void SceneLoader::beginImageLoad(void* address) {
 		std::jthread([compressImageStack,
 					  &readyImages = m_readyImages,
 					  processedImageData,
-					  &textureUsages,
+					  &textureUsages = m_textureUsages,
 					  &imageDataLocations = m_imageDataLocations,
 					  address] {
 			auto stackInserter = readyImages.getInserter();

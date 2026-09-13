@@ -237,18 +237,18 @@ std::vector<std::size_t> MaterialManager::registerTextureGroup(const std::vector
 	std::vector<std::size_t> usedSlots;
 	usedSlots.reserve(images.size());
 
-	std::size_t assignedIndex = 0;
 	std::vector<vk::DescriptorImageInfo> descriptorInfo;
 	descriptorInfo.reserve(images.size());
 	std::vector<vk::WriteDescriptorSet> writeInfo;
 	writeInfo.reserve(images.size());
-
-	for (auto& slot : m_registeredImages) {
+	std::size_t assignedIndex = 0;
+	for (int i = 0; i < m_registeredImages.size(); i++) {
+		auto& slot = m_registeredImages[i];
 		if (assignedIndex == images.size()) break;
 		if (slot.has_value()) continue;
 
 		slot = images[assignedIndex];
-		usedSlots.push_back(assignedIndex);
+		usedSlots.push_back(i);
 
 		auto& image = m_resourceManager.getImage(*slot);
 
@@ -263,13 +263,12 @@ std::vector<std::size_t> MaterialManager::registerTextureGroup(const std::vector
 			vk::WriteDescriptorSet {
 				.dstSet = m_textureSet,
 				.dstBinding = 0,
-				.dstArrayElement = (uint32_t)assignedIndex,
+				.dstArrayElement = (uint32_t)i,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eSampledImage,
 				.pImageInfo = &descriptorInfo.back(),
 			}
 		);
-
 		assignedIndex++;
 	}
 

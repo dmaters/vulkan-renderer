@@ -118,6 +118,8 @@ void Renderer::render() {
 			m_scene.materialHints = scene.materialHints;
 			m_scene.primitiveBounds = scene.primitiveBounds;
 			m_scene.allocation = scene.allocation;
+			m_scene.size = scene.size;
+
 			reloadGraphBuffers(m_scene.allocation, m_staticResources, m_resourceManager, m_graph);
 
 			m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
