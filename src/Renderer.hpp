@@ -19,8 +19,9 @@ private:
 		rendergraph::ResourceIndex vertexBuffer;
 		rendergraph::ResourceIndex vertexAttributeBuffer;
 		rendergraph::ResourceIndex indexBuffer;
+		rendergraph::ResourceIndex transforms;
 		rendergraph::ResourceIndex pbrMaterialData;
-		rendergraph::ResourceIndex pbrMaterialInstances;
+		rendergraph::ResourceIndex primitiveData;
 	};
 
 	vk::Queue m_graphicsQueue;
@@ -47,6 +48,13 @@ private:
 	Scene m_scene;
 
 	Renderer::Passes createRenderGraph();
+
+	static void reloadGraphBuffers(
+		ResourceManager::AllocationIndex allocation,
+		StaticResources staticResources,
+		ResourceManager& resourceManager,
+		RenderGraph& rendergraph
+	);
 
 public:
 	Renderer(SDL_Window* window);

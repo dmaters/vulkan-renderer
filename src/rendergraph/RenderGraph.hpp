@@ -34,8 +34,10 @@ public:
 		MaterialManager& materialManager
 	);
 
-	rendergraph::ResourceIndex registerImage(std::string name, ImageHandle handle);
-	rendergraph::ResourceIndex registerBuffer(std::string name, BufferHandle handle);
+	rendergraph::ResourceIndex registerImage(std::string name);
+	rendergraph::ResourceIndex registerBuffer(std::string name);
+	void setImage(rendergraph::ResourceIndex, ImageHandle);
+	void setBuffer(rendergraph::ResourceIndex, BufferHandle);
 
 	TaskIndex addTask(std::string name, Task task, auto taskData);
 

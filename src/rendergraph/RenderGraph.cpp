@@ -29,28 +29,27 @@ RenderGraph::RenderGraph(
 	m_materialManager(materialManager),
 	m_renderingConfiguration(renderingConfiguration) {}
 
-rendergraph::ResourceIndex RenderGraph::registerImage(std::string name, ImageHandle image) {
+rendergraph::ResourceIndex RenderGraph::registerImage(std::string name) {
 	rendergraph::ResourceIndex index =
 		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Image);
-
 	m_data.resourceNames[index] = name;
-	m_data.externalImages.push_back({ index, image });
-
-	m_resourceManager.setName(m_data.resourceNames[index], image);
-
 	return index;
 }
 
-rendergraph::ResourceIndex RenderGraph::registerBuffer(std::string name, BufferHandle buffer) {
+rendergraph::ResourceIndex RenderGraph::registerBuffer(std::string name) {
 	rendergraph::ResourceIndex index =
 		m_data.indexer.registerResource(rendergraph::internal::ResourceIndexer::ResourceType::Buffer);
-
 	m_data.resourceNames[index] = name;
-	m_data.externalBuffers.push_back({ index, buffer });
-
-	m_resourceManager.setName(m_data.resourceNames[index], buffer);
-
 	return index;
+}
+
+void RenderGraph::setImage(rendergraph::ResourceIndex index, ImageHandle handle) {
+	m_data.externalImages[index] = handle;
+	m_resourceManager.setName(m_data.resourceNames[index], handle);
+}
+void RenderGraph::setBuffer(rendergraph::ResourceIndex index, BufferHandle handle) {
+	m_data.externalBuffers[index] = handle;
+	m_resourceManager.setName(m_data.resourceNames[index], handle);
 }
 
 TaskIndex RenderGraph::addTask(std::string name, Task task) {

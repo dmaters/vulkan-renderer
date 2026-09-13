@@ -100,7 +100,7 @@ static void build(Task::BuildContext& context) {
 	std::vector<PrimitiveIndex> primitives;
 	primitives.reserve(context.scene.primitives.size());
 	for (int i = 0; i < context.scene.primitives.size(); i++) {
-		if (context.scene.materialHint[i] & Scene::MaterialHintBits::ShadowCasting) primitives.push_back(i);
+		if (context.scene.materialHints[i] & Scene::MaterialHintBits::ShadowCasting) primitives.push_back(i);
 	}
 
 	RenderPass::LoadIndirect(

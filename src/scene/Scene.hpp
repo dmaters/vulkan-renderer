@@ -21,7 +21,7 @@ struct Scene {
 	};
 
 	std::vector<Primitive> primitives;
-	std::vector<MaterialHint> materialHint;
+	std::vector<MaterialHint> materialHints;
 	std::vector<PrimitiveBound> primitiveBounds;
 	float size = 0.0f;
 

@@ -5,51 +5,48 @@
 #include <optional>
 #include <vector>
 
+#include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
 
 class SceneManager {
 public:
-	ResourceManager& m_resourceManager;
-
-	enum GeometryBufferType {
+	enum class SceneBufferType {
 		Vertex,
 		VertexAttribute,
 		Index,
 		Transforms,
-		MaterialInstances,
-		Materials,
+		MaterialData,
+		PrimitiveData,
 	};
 
 private:
-	struct SceneResources {
-		std::array<std::size_t, 6> bufferSizes;
-
-		std::vector<uint8_t> imageMipCount;
-		std::vector<std::size_t> imageBaseSize;
-
-		std::size_t occupiedStagingOffset;
-	};
 	struct LoadingData {
 		SceneLoader sceneLoader;
-		BufferHandle stagingBuffer;
+		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex newAllocation;
 		std::size_t resourceLoadedCount = 0;
 	};
+	ResourceManager& m_resourceManager;
+	MaterialManager& m_materialManager;
+
 	std::optional<LoadingData> m_loadingData;
 
-	std::array<MemorySpan, 6> m_buffersLayout;
+	std::size_t m_primitiveCount;
+
+	std::array<MemorySpan, SceneLoader::SceneBuffersCount> m_buffersLayout;
 	std::vector<SceneLoader::SceneInstance> m_scenes;
-	std::vector<SceneLoader::SceneResources> m_sceneData;
+	std::vector<SceneLoader::SceneGeometry> m_scenesGeometry;
 	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
 
-	// TODO: dispose safely of previous allocation
-	ResourceManager::AllocationIndex m_geometryAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_geometryAllocation;
 	ResourceManager::AllocationIndex m_dummyAllocation;
 
+	Scene m_scene;
+
 public:
-	SceneManager(ResourceManager&);
+	SceneManager(ResourceManager&, MaterialManager&);
 
 	using ResourceCount = std::size_t;
 	ResourceCount loadAsync(const std::filesystem::path&);
@@ -58,6 +55,4 @@ public:
 	LoadedResourceCount sync();
 
 	Scene getScene();
-
-	ResourceManager::AllocationIndex getBuffersAllocation() { return m_geometryAllocation; }
 };

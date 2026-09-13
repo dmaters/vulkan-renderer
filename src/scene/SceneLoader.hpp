@@ -7,12 +7,18 @@
 
 #include "Common.hpp"
 #include "Scene.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "utils/ConcurrentStack.hpp"
 
 class SceneLoader {
 public:
-	struct SceneResources {
-		std::array<MemorySpan, 6> bufferDataLocations;
+	static const uint SceneBuffersCount = 5;
+
+	struct SceneInstance {
+		std::vector<Primitive> primitives;
+		std::vector<Scene::MaterialHint> materialHints;
+
+		std::array<MemorySpan, SceneBuffersCount> bufferDataLocations;
 
 		std::vector<MemorySpan> imageDataLocations;
 		std::vector<vk::Format> imageFormats;
@@ -21,9 +27,7 @@ public:
 		std::size_t buffersStagingSize;
 		std::size_t imageStagingSize;
 	};
-	struct SceneInstance {
-		std::vector<Primitive> primitives;
-		std::vector<Scene::MaterialHint> materialHint;
+	struct SceneGeometry {
 		std::vector<Scene::PrimitiveBound> primitiveBounds;
 		float size = 0.0;
 	};
@@ -32,9 +36,9 @@ private:
 	std::filesystem::path m_path;
 	fastgltf::Asset m_asset;
 	SceneInstance m_scene;
+	SceneGeometry m_sceneGeometry;
 
-	std::array<MemorySpan, 6> m_bufferDataLocations;
-
+	std::array<MemorySpan, SceneBuffersCount> m_bufferDataLocations;
 	std::vector<MemorySpan> m_imageDataLocations;
 	ConcurrentStack<std::size_t> m_readyImages;
 
@@ -47,9 +51,9 @@ private:
 
 public:
 	SceneLoader(std::filesystem::path path) : m_path(path) {}
-	SceneResources querySceneResources();
+	SceneInstance getInstance();
 
-	void beginBufferLoad(void* stagingAddress);
+	void beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices);
 
 	void beginImageLoad(void* stagingAddress);
 
@@ -59,5 +63,5 @@ public:
 	};
 	LoadStatus queryLoadStatus();
 
-	SceneInstance getScene() &&;
+	SceneGeometry getSceneGeometry();
 };

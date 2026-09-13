@@ -26,6 +26,8 @@ private:
 	std::vector<PipelineIndex> m_pipelines;
 	std::unordered_map<std::string_view, MaterialIndex> m_names;
 
+	std::vector<std::optional<ImageHandle>> m_registeredImages;
+
 	ResourceManager& m_resourceManager;
 
 	vk::DescriptorSetLayout m_textureSetLayout;
@@ -62,7 +64,7 @@ public:
 
 	MaterialIndex getMaterialIndex(std::string_view name) const { return m_names.at(name); }
 
-	uint32_t registerTextureGroup(ResourceManager::AllocationIndex allocation);
+	std::vector<std::size_t> registerTextureGroup(const std::vector<ImageHandle>&);
 	vk::DescriptorSet getTextureSet() const { return m_textureSet; }
 	vk::DescriptorSet getEmptySet() const { return m_emptySet; }
 

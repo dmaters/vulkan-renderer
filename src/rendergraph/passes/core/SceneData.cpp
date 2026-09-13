@@ -41,7 +41,7 @@ static void build(Task::BuildContext& context) {
 		.invView = glm::inverse(view),
 		.invProj = glm::inverse(proj),
 		.position = glm::vec4(context.scene.camera.position, 1),
-		.direction = glm::vec4(context.scene.camera.getOrientation()[2], 0),
+		.direction = -glm::vec4(context.scene.camera.getOrientation()[2], 0),
 		.nearPlane = 0.1f,
 		.farPlane = context.scene.camera.getFrustumSize(context.scene.size),
 	};

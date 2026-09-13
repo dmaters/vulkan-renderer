@@ -17,19 +17,12 @@ struct ProceduralSkyRequiredPasses {
 using namespace rendergraph::passes;
 Renderer::Passes Renderer::createRenderGraph() {
 	std::vector<TaskIndex> optionalPasses;
-	auto sceneBuffers = m_resourceManager.getBuffers(m_scene.allocation);
-
-	m_graph.registerBuffer("vertex_positions_buffer", sceneBuffers[SceneManager::GeometryBufferType::Vertex]);
-
-	m_graph.registerBuffer("vertex_attributes_buffer", sceneBuffers[SceneManager::GeometryBufferType::VertexAttribute]);
-	m_graph.registerBuffer("index_buffer", sceneBuffers[SceneManager::GeometryBufferType::Index]);
-	m_graph.registerBuffer("instance_buffer", sceneBuffers[SceneManager::GeometryBufferType::Transforms]);
-
-	auto pbrMaterialData =
-		m_graph.registerBuffer("pbr_data_buffer", sceneBuffers[SceneManager::GeometryBufferType::Materials]);
-	auto pbrMaterialInstances = m_graph.registerBuffer(
-		"pbr_instances_buffer", sceneBuffers[SceneManager::GeometryBufferType::MaterialInstances]
-	);
+	m_staticResources.vertexBuffer = m_graph.registerBuffer("vertex_positions_buffer");
+	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("vertex_attributes_buffer");
+	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("index_buffer");
+	m_staticResources.transforms = m_graph.registerBuffer("transforms_buffer");
+	m_staticResources.pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer");
+	m_staticResources.primitiveData = m_graph.registerBuffer("primitive_data");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -44,7 +37,8 @@ Renderer::Passes Renderer::createRenderGraph() {
 	auto skylighting = procedural_sky::skyLighting(context, skyviewLUT);
 
 	auto shadowBuffer = core::shadows(context, sceneData);
-	auto gbuffer = core::gbuffer(context, { pbrMaterialData, pbrMaterialInstances }, sceneData);
+	auto gbuffer =
+		core::gbuffer(context, { m_staticResources.pbrMaterialData, m_staticResources.primitiveData }, sceneData);
 
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
