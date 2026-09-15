@@ -20,8 +20,9 @@ Allocation::Allocation(vk::MemoryPropertyFlags requiredType, uint32_t requiredSi
 	auto properties = physicalDevice.getMemoryProperties();
 
 	for (int i = 0; i < properties.memoryTypeCount; i++) {
-		if ((properties.memoryTypes[i].propertyFlags & requiredType) != requiredType ||
-			(properties.memoryHeaps[i].size < requiredSize))
+		auto& memoryType = properties.memoryTypes[i];
+		if ((memoryType.propertyFlags & requiredType) != requiredType ||
+			(properties.memoryHeaps[memoryType.heapIndex].size < requiredSize))
 			continue;
 
 		memory = device.allocateMemory(
