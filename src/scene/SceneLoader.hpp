@@ -12,7 +12,7 @@
 
 class SceneLoader {
 public:
-	static const uint SceneBuffersCount = 5;
+	static const uint32_t SceneBuffersCount = 5;
 
 	struct SceneInstance {
 		std::vector<Primitive> primitives;

@@ -26,13 +26,6 @@ enum TextureUsage : uint8_t {
 
 using TextureUsageType = uint8_t;
 
-struct VertexAttributes {
-	glm::vec3 normal;
-	glm::vec3 tangent;
-	glm::vec3 bitangent;
-	glm::vec2 texcoord;
-};
-
 enum class SceneBuffers {
 	Vertex,
 	VertexAttribute,
@@ -120,7 +113,7 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 			std::size_t vertexCount = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex].count;
 
 			bufferDataLocations[(int)SceneBuffers::Vertex].size += vertexCount * sizeof(glm::vec3);
-			bufferDataLocations[(int)SceneBuffers::VertexAttribute].size += vertexCount * sizeof(VertexAttributes);
+			bufferDataLocations[(int)SceneBuffers::VertexAttribute].size += vertexCount * sizeof(Vertex::Attributes);
 			std::size_t indexCount = 0;
 			if (primitive.indicesAccessor.has_value()) {
 				indexCount = asset.accessors[primitive.indicesAccessor.value()].count;
@@ -302,7 +295,7 @@ PrimitiveGeometryData loadPrimitiveGeometry(
 	const fastgltf::Asset& asset,
 	const fastgltf::Primitive& primitive,
 	glm::vec3* vertices,
-	VertexAttributes* vertexAttributes,
+	Vertex::Attributes* vertexAttributes,
 	uint32_t* indices
 ) {
 	auto& vertexAccessor = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex];
@@ -389,7 +382,7 @@ struct SceneGeometry {
 SceneGeometry loadGeometryBuffers(
 	const fastgltf::Asset& asset,
 	glm::vec3* vertices,
-	VertexAttributes* vertexAttributes,
+	Vertex::Attributes* vertexAttributes,
 	uint32_t* indices,
 	glm::mat4* transforms
 ) {
@@ -462,7 +455,7 @@ void SceneLoader::beginBufferLoad(void* stagingAddress, std::vector<std::size_t>
 				  imageIndices = std::move(registeredImageIndices)] {
 		auto* vertexAddress = (glm::vec3*)stagingAddress;
 		auto* vertexAttributes =
-			(VertexAttributes*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::VertexAttribute].offset);
+			(Vertex::Attributes*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::VertexAttribute].offset);
 		auto* indices = (uint32_t*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Indices].offset);
 		auto* transforms = (glm::mat4*)((std::byte*)stagingAddress + bufferData[(int)SceneBuffers::Transforms].offset);
 

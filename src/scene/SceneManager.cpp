@@ -86,8 +86,7 @@ void createPlaceholderTextures(ResourceManager& resourceManager, MaterialManager
 	resourceManager.copyResources(copyInfo);
 }
 
-SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& materialManager) :
-	m_resourceManager(resourceManager), m_materialManager(materialManager) {
+ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resourceManager) {
 	std::array<MemorySpan, SceneLoader::SceneBuffersCount> dummyLocations;
 
 	for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) {
@@ -120,12 +119,16 @@ SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& ma
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
 	};
 
-	m_dummyAllocation = m_resourceManager.createResources(
+	return resourceManager.createResources(
 		{},
 		std::vector<ResourceManager::BufferDescription>(dummyBuffers.begin(), dummyBuffers.end()),
 		ResourceManager::MemoryLocation::Device
 	);
+}
 
+SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& materialManager) :
+	m_resourceManager(resourceManager), m_materialManager(materialManager) {
+	m_dummyAllocation = createDummyAllocation(resourceManager);
 	m_scene.allocation = m_dummyAllocation;
 	createPlaceholderTextures(resourceManager, materialManager);
 }
@@ -215,10 +218,12 @@ std::vector<ResourceManager::ImageDescription> getImageDescriptions(
 
 	return descriptions;
 }
+
 struct MergeInfo {
 	std::array<MemorySpan, SceneLoader::SceneBuffersCount> buffersLayout;
 	std::vector<ResourceManager::ResourceCopyInfo> copyInfo;
 };
+
 MergeInfo getMergeInfo(
 	std::span<const BufferHandle> previousBuffers,
 	std::span<const BufferHandle> newBuffers,
