@@ -23,6 +23,9 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 
 	uint32_t primitiveMapSize = static_cast<uint32_t>(context.scene.primitives.size() * sizeof(uint32_t) * 3);
 
+	if (indirectBufferSize == 0) indirectBufferSize = 1;
+	if (primitiveMapSize == 0) primitiveMapSize = 1;
+
 	for (int i = 0; i < 3; i++) {
 		auto indirectBuffer = context.createBuffer(
 			"indirect_shadowpass_buffer_local_" + std::to_string(i),
@@ -94,9 +97,15 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 static void build(Task::BuildContext& context) {
 	auto data = context.getData<ShadowPass>();
 
+	std::vector<PrimitiveIndex> primitives;
+	primitives.reserve(context.scene.primitives.size());
+	for (int i = 0; i < context.scene.primitives.size(); i++) {
+		if (context.scene.materialHints[i] & Scene::MaterialHintBits::ShadowCasting) primitives.push_back(i);
+	}
+
 	RenderPass::LoadIndirect(
 		context.commandBuffer,
-		context.scene.buckets.at(data.material),
+		primitives,
 		context.scene.primitives,
 		context.getBuffer(data._indirectBuffer[context.currentFrame % 3]),
 		context.getInput<Buffer&>(2),
@@ -115,7 +124,7 @@ static void build(Task::BuildContext& context) {
 		}
 		);
 
-		RenderPass::IndirectDraw(context, data.material, context.scene.buckets.at(data.material), i, 2);
+		RenderPass::IndirectDraw(context, data.material, primitives, i, 2);
 
 		RenderPass::End(context.commandBuffer);
 	}

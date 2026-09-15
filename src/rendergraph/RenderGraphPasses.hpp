@@ -5,7 +5,7 @@
 namespace rendergraph::passes {
 struct ExternalResources {
 	ResourceIndex pbrMaterialData;
-	ResourceIndex pbrMaterialInstances;
+	ResourceIndex primitiveData;
 };
 struct PassBuildContext {
 	RenderGraph& renderGraph;

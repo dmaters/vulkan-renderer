@@ -11,7 +11,7 @@ struct GBufferPass {
 	TaskIndex sceneData;
 	MaterialIndex material;
 	rendergraph::ResourceIndex pbrMaterialData;
-	rendergraph::ResourceIndex pbrMaterialInstances;
+	rendergraph::ResourceIndex primitiveData;
 
 	std::array<rendergraph::ResourceIndex, 3> _indirectBuffer;
 	std::array<rendergraph::ResourceIndex, 3> _primitiveMap;
@@ -34,6 +34,9 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 		static_cast<uint32_t>(context.scene.primitives.size() * sizeof(vk::DrawIndexedIndirectCommand));
 
 	uint32_t primitiveMapSize = static_cast<uint32_t>(context.scene.primitives.size() * sizeof(uint32_t));
+
+	if (indirectBufferSize == 0) indirectBufferSize = 1;
+	if (primitiveMapSize == 0) primitiveMapSize = 1;
 
 	for (int i = 0; i < 3; i++) {
 		auto indirectBuffer = context.createBuffer(
@@ -147,7 +150,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 		.inputs = {
 			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
 			{ data.pbrMaterialData, ResourceUsage::Type::StorageBufferRead },
-			{ data.pbrMaterialInstances, ResourceUsage::Type::StorageBufferRead },
+			{ data.primitiveData, ResourceUsage::Type::StorageBufferRead },
 			{ indirectBuffer, ResourceUsage::Type::IndirectBufferRead },
 			{ primitiveMap, ResourceUsage::Type::StorageBufferRead },
 		 },
@@ -163,9 +166,14 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 static void build(Task::BuildContext& context) {
 	auto& data = context.getData<GBufferPass>();
 
+	std::vector<PrimitiveIndex> primitives;
+	for (int i = 0; i < context.scene.primitives.size(); i++) {
+		if (context.scene.materialHints[i] & Scene::MaterialHintBits::Opaque) primitives.push_back(i);
+	}
+
 	auto visiblePrimitives = FrustumCulling(
 		context.scene,
-		context.scene.buckets.at(data.material),
+		primitives,
 		context.scene.camera.position,
 		context.scene.camera.getFrustumPlanes(context.scene.size)
 	);
@@ -202,7 +210,7 @@ TaskIndex rendergraph::passes::core::gbuffer(
 			.sceneData = sceneData,
 			.material = context.materialManager.getMaterialIndex("gbuffer"),
 			.pbrMaterialData = resources.pbrMaterialData,
-			.pbrMaterialInstances = resources.pbrMaterialInstances,
+			.primitiveData = resources.primitiveData,
 		}
 	);
 }

@@ -15,18 +15,14 @@ struct ProceduralSkyRequiredPasses {
 };
 
 using namespace rendergraph::passes;
-std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
+Renderer::Passes Renderer::createRenderGraph() {
 	std::vector<TaskIndex> optionalPasses;
-	auto buffers = m_resourceManager.getBuffers(scene.allocation);
-
-	m_graph.registerBuffer("vertex_positions_buffer", buffers[0]);
-
-	m_graph.registerBuffer("vertex_attributes_buffer", buffers[1]);
-	m_graph.registerBuffer("index_buffer", buffers[2]);
-	m_graph.registerBuffer("instance_buffer", buffers[3]);
-
-	auto pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer", buffers[5]);
-	auto pbrMaterialInstances = m_graph.registerBuffer("pbr_instances_buffer", buffers[4]);
+	m_staticResources.vertexBuffer = m_graph.registerBuffer("vertex_positions_buffer");
+	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("vertex_attributes_buffer");
+	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("index_buffer");
+	m_staticResources.transforms = m_graph.registerBuffer("transforms_buffer");
+	m_staticResources.pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer");
+	m_staticResources.primitiveData = m_graph.registerBuffer("primitive_data");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -41,7 +37,8 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 	auto skylighting = procedural_sky::skyLighting(context, skyviewLUT);
 
 	auto shadowBuffer = core::shadows(context, sceneData);
-	auto gbuffer = core::gbuffer(context, { pbrMaterialData, pbrMaterialInstances }, sceneData);
+	auto gbuffer =
+		core::gbuffer(context, { m_staticResources.pbrMaterialData, m_staticResources.primitiveData }, sceneData);
 
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
@@ -68,8 +65,6 @@ std::vector<TaskIndex> Renderer::createRenderGraph(Scene& scene) {
 
 	auto ui = core::ui(context, sdrOutput);
 	optionalPasses.push_back(ui);
-	m_optionalPasses = optionalPasses;
-	m_graph.update(ui, m_optionalPasses, scene);
 
-	return optionalPasses;
+	return { .ui = ui, .optionalPasses = optionalPasses };
 }

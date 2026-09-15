@@ -37,6 +37,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) : m_resourceM
 										.pPoolSizes = sizes.data() };
 
 	m_pool = device.createDescriptorPool(info);
+	m_registeredImages = std::vector<std::optional<ImageHandle>>(512, std::nullopt);
 
 	createTextureDescriptorSet();
 
@@ -232,32 +233,49 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 
 void MaterialManager::update() { m_shaderEngine->flushRetiredPipelines(); }
 
-uint32_t MaterialManager::registerTextureGroup(ResourceManager::AllocationIndex index) {
-	auto& textures = m_resourceManager.getImages(index);
+std::vector<std::size_t> MaterialManager::registerTextureGroup(const std::vector<ImageHandle>& images) {
+	std::vector<std::size_t> usedSlots;
+	usedSlots.reserve(images.size());
 
-	std::vector<vk::DescriptorImageInfo> info;
-	for (auto& handle : textures) {
-		Image& image = m_resourceManager.getImage(handle);
+	std::vector<vk::DescriptorImageInfo> descriptorInfo;
+	descriptorInfo.reserve(images.size());
+	std::vector<vk::WriteDescriptorSet> writeInfo;
+	writeInfo.reserve(images.size());
+	std::size_t assignedIndex = 0;
+	for (int i = 0; i < m_registeredImages.size(); i++) {
+		auto& slot = m_registeredImages[i];
+		if (assignedIndex == images.size()) break;
+		if (slot.has_value()) continue;
 
-		info.push_back(
+		slot = images[assignedIndex];
+		usedSlots.push_back(i);
+
+		auto& image = m_resourceManager.getImage(*slot);
+
+		descriptorInfo.push_back(
 			{
 				.imageView = image.views[0],
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			}
 		);
+
+		writeInfo.push_back(
+			vk::WriteDescriptorSet {
+				.dstSet = m_textureSet,
+				.dstBinding = 0,
+				.dstArrayElement = (uint32_t)i,
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eSampledImage,
+				.pImageInfo = &descriptorInfo.back(),
+			}
+		);
+		assignedIndex++;
 	}
 
-	vk::WriteDescriptorSet writeInfo = {
-		.dstSet = m_textureSet,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = (uint32_t)textures.size(),
-		.descriptorType = vk::DescriptorType::eSampledImage,
-		.pImageInfo = info.data(),
-	};
+	assert(assignedIndex == images.size() && "Couldn't register all images, descriptor set is too small.");
 
 	Instance::Get().device.updateDescriptorSets({ writeInfo }, {});
-	return 0;
+	return usedSlots;
 }
 
 void MaterialManager::registerMaterials() {

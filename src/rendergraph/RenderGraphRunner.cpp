@@ -170,7 +170,7 @@ RenderGraphRunner::RenderGraphRunner(
 
 	m_deviceAllocation = data.deviceAllocation;
 	m_sharedAllocation = data.sharedAllocation;
-	m_deviceAllocation = data.deviceAllocation;
+	m_hostAllocation = data.hostAllocation;
 
 	m_images = data.imageMap;
 	m_buffers = data.bufferMap;

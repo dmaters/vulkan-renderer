@@ -11,9 +11,19 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
+#include "scene/SceneManager.hpp"
 
 class Renderer {
 private:
+	struct StaticResources {
+		rendergraph::ResourceIndex vertexBuffer;
+		rendergraph::ResourceIndex vertexAttributeBuffer;
+		rendergraph::ResourceIndex indexBuffer;
+		rendergraph::ResourceIndex transforms;
+		rendergraph::ResourceIndex pbrMaterialData;
+		rendergraph::ResourceIndex primitiveData;
+	};
+
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
 	vk::CommandPool m_commandPool;
@@ -24,13 +34,27 @@ private:
 	Instance& m_instance;
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
+
 	RenderGraph m_graph;
+	StaticResources m_staticResources;
+	struct Passes {
+		TaskIndex ui;
+		std::vector<TaskIndex> optionalPasses;
+	};
+	Passes m_passes;
+	SceneManager m_sceneManager;
+	bool m_loadingScene = false;
+	std::size_t m_resourceCount;
+	Scene m_scene;
 
-	std::vector<TaskIndex> m_optionalPasses;
+	Renderer::Passes createRenderGraph();
 
-	Scene m_currentScene;
-
-	std::vector<TaskIndex> createRenderGraph(Scene& scene);
+	static void reloadGraphBuffers(
+		ResourceManager::AllocationIndex allocation,
+		StaticResources staticResources,
+		ResourceManager& resourceManager,
+		RenderGraph& rendergraph
+	);
 
 public:
 	Renderer(SDL_Window* window);
@@ -39,5 +63,5 @@ public:
 	void setResolution(int width, int height);
 	glm::ivec2 getResolution() const { return m_configuration.resolution; }
 
-	Scene& getScene() { return m_currentScene; }
+	Scene& getScene() { return m_scene; }
 };

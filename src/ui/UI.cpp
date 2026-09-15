@@ -4,6 +4,7 @@
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
 
+#include <format>
 #include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
@@ -32,10 +33,18 @@ void UI::Render(vk::CommandBuffer commandBuffer) {
 	ImGui::LabelText("Current GPU", Data.systemData.currentGpu.c_str());
 
 	ImGui::SeparatorText("Scene Data");
-	ImGui::LabelText("Current scene", Data.sceneData.scenePath.c_str());
-	ImGui::LabelText(
-		"Primitives (visible/total)", "%i / %i", Data.sceneData.gbufferCount, Data.sceneData.primitiveCount
-	);
+	if (Data.sceneData.resourceLoadedCount == Data.sceneData.resourceCount) {
+		ImGui::LabelText("Current scene", Data.sceneData.scenePath.c_str());
+		ImGui::LabelText(
+			"Primitives (visible/total)", "%i / %i", Data.sceneData.gbufferCount, Data.sceneData.primitiveCount
+		);
+	} else {
+		ImGui::ProgressBar(
+			(float)(Data.sceneData.resourceLoadedCount / Data.sceneData.resourceCount),
+			ImVec2(-FLT_MIN, 0.0f),
+			std::format("Loading... {}/{}", Data.sceneData.resourceLoadedCount, Data.sceneData.resourceCount).c_str()
+		);
+	}
 
 	ImGui::SeparatorText("Lighting Data");
 	ImGui::SliderAngle("Sun Angle", &Data.lightingData.sunAngleRad, -8, 188);

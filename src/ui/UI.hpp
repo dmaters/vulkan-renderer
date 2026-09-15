@@ -9,6 +9,9 @@ namespace UI {
 struct UIData {
 	struct Scene {
 		std::string scenePath;
+		uint16_t resourceCount = 0;
+		uint16_t resourceLoadedCount = 0;
+
 		uint16_t primitiveCount;
 		uint16_t gbufferCount;
 	};

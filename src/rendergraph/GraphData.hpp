@@ -9,8 +9,8 @@
 namespace rendergraph::internal {
 
 struct GraphData {
-	std::vector<std::pair<ResourceIndex, ImageHandle>> externalImages;
-	std::vector<std::pair<ResourceIndex, BufferHandle>> externalBuffers;
+	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
+	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
 
 	std::unordered_map<ResourceIndex, std::string> resourceNames;
 
