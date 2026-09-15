@@ -109,6 +109,8 @@ void Renderer::render() {
 
 	if (m_loadingScene) {
 		std::size_t loadedCount = m_sceneManager.sync();
+		UI::Data.sceneData.resourceLoadedCount = loadedCount;
+
 		if (loadedCount == m_resourceCount) {
 			Instance::Get().device.waitIdle();
 			m_loadingScene = false;
@@ -123,6 +125,7 @@ void Renderer::render() {
 			reloadGraphBuffers(m_scene.allocation, m_staticResources, m_resourceManager, m_graph);
 
 			m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
+			UI::Data.sceneData.primitiveCount = m_scene.primitives.size();
 		}
 	}
 
@@ -157,4 +160,7 @@ void Renderer::load(const std::filesystem::path& path) {
 	Instance::Get().device.waitIdle();
 	m_loadingScene = true;
 	m_resourceCount = m_sceneManager.loadAsync(path);
+
+	UI::Data.sceneData.scenePath = path.string();
+	UI::Data.sceneData.resourceCount = m_resourceCount;
 }
