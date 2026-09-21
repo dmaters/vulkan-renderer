@@ -28,7 +28,13 @@ private:
 		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex newAllocation;
 		std::size_t resourceLoadedCount = 0;
+
+		vk::CommandPool commandPool;
 	};
+
+	vk::Semaphore m_semaphore;
+	uint64_t m_transferCount = 0;
+
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 
@@ -54,6 +60,11 @@ public:
 
 	using LoadedResourceCount = std::size_t;
 	LoadedResourceCount sync();
+
+	struct SyncronizationData {
+		vk::Semaphore semaphore;
+		uint64_t value;
+	};
 
 	Scene getScene();
 };

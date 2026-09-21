@@ -37,10 +37,6 @@ private:
 	std::unordered_map<AllocationIndex, std::vector<ImageHandle>> m_allocationImages;
 	std::unordered_map<AllocationIndex, std::vector<BufferHandle>> m_allocationBuffers;
 
-	vk::CommandPool m_commandPool;
-	vk::Semaphore m_semaphore;
-	std::size_t m_transferCount = 0;
-
 	ImageHandle registerImage(Image image, ImageHandle handle = { 0 });
 
 public:
@@ -77,20 +73,6 @@ public:
 		MemoryLocation location
 	);
 	void freeAllocation(AllocationIndex index);
-
-	struct ResourceCopyInfo;
-	void copyResources(const std::vector<ResourceCopyInfo>& info);
-
-	struct SemaphoreInfo {
-		vk::Semaphore semaphore;
-		std::size_t expectedValue;
-	};
-	SemaphoreInfo getSemaphoreInfo() const {
-		return {
-			.semaphore = m_semaphore,
-			.expectedValue = m_transferCount,
-		};
-	}
 };
 
 struct ResourceManager::ImageDescription {
@@ -104,23 +86,4 @@ struct ResourceManager::ImageDescription {
 struct ResourceManager::BufferDescription {
 	uint32_t size;
 	vk::BufferUsageFlags usage;
-};
-
-struct ResourceManager::ResourceCopyInfo {
-	struct BufferReference {
-		BufferHandle handle;
-		uint32_t size;
-		uint32_t offset;
-	};
-	struct ImageReference {
-		ImageHandle handle;
-		uint32_t mipLevel = 0;
-		vk::ImageLayout initialLayout;
-		vk::ImageLayout finalLayout;
-	};
-
-	using ResourceReference = std::variant<ImageReference, BufferReference>;
-
-	ResourceReference source;
-	ResourceReference destination;
 };

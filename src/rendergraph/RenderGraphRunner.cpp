@@ -551,21 +551,10 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 
 	commandBuffer.end();
 	// End Frame
-	auto [resourceSemaphore, expectedValue] = m_resourceManager.getSemaphoreInfo();
-	uint64_t semaphoreWaitValues[2] = { expectedValue, 0 };
 
-	vk::Semaphore semaphores[2] = {
-		resourceSemaphore,
-		frame.imageAvailable,
-	};
-	vk::TimelineSemaphoreSubmitInfo waitInfo {
-		.waitSemaphoreValueCount = 2,
-		.pWaitSemaphoreValues = semaphoreWaitValues,
-	};
 	vk::SubmitInfo submitInfo;
-	submitInfo.pNext = &waitInfo;
-	submitInfo.waitSemaphoreCount = 2;
-	submitInfo.pWaitSemaphores = semaphores;
+	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.pWaitSemaphores = &frame.imageAvailable;
 	vk::PipelineStageFlags stages[2] = { vk::PipelineStageFlagBits::eVertexInput,
 										 vk::PipelineStageFlagBits::eColorAttachmentOutput };
 	submitInfo.pWaitDstStageMask = stages;
