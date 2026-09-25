@@ -7,7 +7,6 @@
 
 #include "Common.hpp"
 #include "Scene.hpp"
-#include "material/MaterialDefinitions.hpp"
 #include "utils/ConcurrentStack.hpp"
 
 class SceneLoader {
@@ -40,17 +39,18 @@ private:
 
 	std::array<MemorySpan, SceneBuffersCount> m_bufferDataLocations;
 	std::vector<MemorySpan> m_imageDataLocations;
-	ConcurrentStack<std::size_t> m_readyImages;
+	std::unique_ptr<ConcurrentStack<std::size_t>> m_readyImages;
 
 	// Readybuffers is a faux stack that uses the same logic path of images, but we have for now only one thread
 	// handling buffer loading, so the buffer will always be loaded/signaled in bulk
-	ConcurrentStack<std::size_t> m_readyBuffers;
+	std::unique_ptr<ConcurrentStack<std::size_t>> m_readyBuffers;
 
 	using TextureUsage = uint8_t;
 	std::vector<TextureUsage> m_textureUsages;
 
 public:
 	SceneLoader(std::filesystem::path path) : m_path(path) {}
+
 	SceneInstance getInstance();
 
 	void beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices);

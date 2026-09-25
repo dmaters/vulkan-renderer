@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "AccelerationStructureBuilder.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"

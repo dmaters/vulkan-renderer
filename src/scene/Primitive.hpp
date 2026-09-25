@@ -19,7 +19,10 @@ using PrimitiveIndex = std::uint32_t;
 struct Primitive {
 	uint32_t baseVertex;
 	uint32_t baseIndex;
+
+	uint32_t vertexCount;
 	uint32_t indexCount;
+
 	uint32_t materialIndex;
 
 	struct ShaderObject {

@@ -128,6 +128,7 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 				{
 					.baseVertex = (uint32_t)vertexOffset,
 					.baseIndex = (uint32_t)indexOffset,
+					.vertexCount = (uint32_t)vertexCount,
 					.indexCount = (uint32_t)indexCount,
 					.materialIndex = (uint32_t)primitive.materialIndex.value_or(0),
 				}
@@ -468,7 +469,7 @@ void SceneLoader::beginBufferLoad(void* stagingAddress, std::vector<std::size_t>
 																	 bufferData[(int)SceneBuffers::Materials].offset);
 		loadMaterials(asset, materialsAddress, imageIndices);
 
-		auto inserter = loadedBuffers.getInserter();
+		auto inserter = loadedBuffers->getInserter();
 		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) inserter.push(i);
 	}).detach();
 }
@@ -615,7 +616,7 @@ void SceneLoader::beginImageLoad(void* address) {
 					  &textureUsages = m_textureUsages,
 					  &imageDataLocations = m_imageDataLocations,
 					  address] {
-			auto stackInserter = readyImages.getInserter();
+			auto stackInserter = readyImages->getInserter();
 			while (auto workElement = compressImageStack->pop_wait()) {
 				auto image = workElement.value();
 				auto format = getFormatFromUsage(textureUsages[image]);
@@ -643,8 +644,8 @@ void SceneLoader::beginImageLoad(void* address) {
 SceneLoader::LoadStatus SceneLoader::queryLoadStatus() {
 	SceneLoader::LoadStatus status;
 
-	while (auto processedImage = m_readyImages.pop()) status.loadedImages.push_back(*processedImage);
-	while (auto processedBuffer = m_readyBuffers.pop()) status.loadedBuffers.push_back(*processedBuffer);
+	while (auto processedImage = m_readyImages->pop()) status.loadedImages.push_back(*processedImage);
+	while (auto processedBuffer = m_readyBuffers->pop()) status.loadedBuffers.push_back(*processedBuffer);
 
 	return status;
 }

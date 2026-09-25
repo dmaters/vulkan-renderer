@@ -10,6 +10,7 @@
 
 #include "Common.hpp"
 #include "Instance.hpp"
+#include "material/MaterialDefinitions.hpp"
 #include "resources/ResourceManager.hpp"
 #include "resources/ResourceWriteTransaction.hpp"
 #include "scene/Primitive.hpp"
@@ -403,6 +404,7 @@ void composePrimitives(
 			{
 				.baseVertex = primitive.baseVertex + baseOffsets.vertexOffset,
 				.baseIndex = primitive.baseIndex + baseOffsets.indexOffset,
+				.vertexCount = primitive.vertexCount,
 				.indexCount = primitive.indexCount,
 				.materialIndex = primitive.materialIndex + baseOffsets.materialOffset,
 			}
@@ -443,7 +445,8 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 		std::cout << "Scene not found : " + path.relative_path().string() << std::endl;
 		abort();
 	}
-	m_loadingData.emplace(path);
+
+	m_loadingData = { .sceneLoader = SceneLoader(path) };
 
 	m_scenes.push_back(m_loadingData->sceneLoader.getInstance());
 	auto& sceneInstance = m_scenes.back();
