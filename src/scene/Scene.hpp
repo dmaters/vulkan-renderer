@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <vulkan/vulkan.hpp>
 
 #include "Camera.hpp"
 #include "Light.hpp"
@@ -21,12 +22,18 @@ struct Scene {
 	};
 
 	std::vector<Primitive> primitives;
+	std::vector<glm::mat4> transforms;
+
 	std::vector<MaterialHint> materialHints;
 	std::vector<PrimitiveBound> primitiveBounds;
+
 	float size = 0.0f;
 
 	Camera camera;
 	Light light;
 
 	ResourceManager::AllocationIndex allocation;
+	ResourceManager::AllocationIndex asAllocation;
+
+	vk::AccelerationStructureKHR tlas;
 };

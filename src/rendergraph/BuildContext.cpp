@@ -18,6 +18,7 @@ bool isValidBufferDescriptor(ResourceUsage::Type usage) {
 	switch (usage) {
 		case ResourceUsage::Type::StorageBufferRead:
 		case ResourceUsage::Type::StorageBufferWrite:
+		case ResourceUsage::Type::AccellerationStructureRead:
 		case ResourceUsage::Type::UniformBuffer:
 			return true;
 		default:
@@ -76,6 +77,18 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 					.pBufferInfo = &resources._bufferInfo.back(),
 				}
 			);
+
+			if (usage == ResourceUsage::Type::AccellerationStructureRead) {
+				resources._accelerationStructure = std::make_unique<Descriptors::AccelerationStructureData>();
+
+				resources._accelerationStructure->tlas = scene.tlas;
+				resources._accelerationStructure->accelerationStructureInfo = {
+					.accelerationStructureCount = 1,
+					.pAccelerationStructures = &resources._accelerationStructure->tlas,
+				};
+
+				resources.descriptors.back().pNext = &resources._accelerationStructure->accelerationStructureInfo;
+			}
 		}
 		bindingCount++;
 	}

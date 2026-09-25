@@ -211,9 +211,18 @@ Instance::QueueFamilies getQueueFamilies(vk::PhysicalDevice device) {
 //// Device
 const std::vector<const char*> deviceLayers {};
 const std::vector<const char*> deviceExtensions {
-	"VK_KHR_swapchain",			 "VK_KHR_dynamic_rendering",   "VK_KHR_depth_stencil_resolve",
-	"VK_KHR_create_renderpass2", "VK_KHR_multiview",		   "VK_KHR_maintenance2",
-	"VK_KHR_synchronization2",	 "VK_EXT_descriptor_indexing", "VK_KHR_push_descriptor",
+	"VK_KHR_swapchain",
+	"VK_KHR_dynamic_rendering",
+	"VK_KHR_depth_stencil_resolve",
+	"VK_KHR_create_renderpass2",
+	"VK_KHR_multiview",
+	"VK_KHR_maintenance2",
+	"VK_KHR_synchronization2",
+	"VK_EXT_descriptor_indexing",
+	"VK_KHR_push_descriptor",
+	"VK_KHR_acceleration_structure",
+	"VK_KHR_ray_query",
+	"VK_KHR_deferred_host_operations",
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
@@ -237,6 +246,7 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 
 	vk::PhysicalDeviceVulkan11Features vulkan11Features {
 		.shaderDrawParameters = true,
+
 	};
 
 	vk::PhysicalDeviceVulkan12Features vulkan12Features {
@@ -249,14 +259,27 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.runtimeDescriptorArray = true,
 		.hostQueryReset = true,
 		.timelineSemaphore = true,
+		.bufferDeviceAddress = true,
 
 	};
-	vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature {
+
+	vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures {
 		.pNext = &vulkan12Features,
+		.rayQuery = true,
+	};
+	vk::PhysicalDeviceAccelerationStructureFeaturesKHR accellerationStructureFeature {
+		.pNext = &rayQueryFeatures,
+		.accelerationStructure = true,
+	};
+
+	vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeature {
+		.pNext = &accellerationStructureFeature,
 		.dynamicRendering = true,
 	};
-	vk::PhysicalDeviceSynchronization2FeaturesKHR syncronizationFeature { .pNext = &dynamicRenderingFeature,
-																		  .synchronization2 = true };
+	vk::PhysicalDeviceSynchronization2FeaturesKHR syncronizationFeature {
+		.pNext = &dynamicRenderingFeature,
+		.synchronization2 = true,
+	};
 
 	vk::PhysicalDeviceFeatures features {
 		.multiDrawIndirect = true,

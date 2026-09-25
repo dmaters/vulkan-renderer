@@ -7,15 +7,15 @@
 
 #include "Common.hpp"
 #include "Scene.hpp"
-#include "material/MaterialDefinitions.hpp"
 #include "utils/ConcurrentStack.hpp"
 
 class SceneLoader {
 public:
-	static const uint32_t SceneBuffersCount = 5;
+	static const uint32_t SceneBuffersCount = 4;
 
 	struct SceneInstance {
 		std::vector<Primitive> primitives;
+		std::vector<glm::mat4> transforms;
 		std::vector<Scene::MaterialHint> materialHints;
 
 		std::array<MemorySpan, SceneBuffersCount> bufferDataLocations;
@@ -51,6 +51,7 @@ private:
 
 public:
 	SceneLoader(std::filesystem::path path) : m_path(path) {}
+
 	SceneInstance getInstance();
 
 	void beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices);

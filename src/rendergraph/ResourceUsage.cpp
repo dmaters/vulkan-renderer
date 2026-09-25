@@ -15,6 +15,8 @@ std::optional<vk::DescriptorType> ResourceUsage::GetDescriptorType(ResourceUsage
 			return vk::DescriptorType::eStorageBuffer;
 		case ResourceUsage::Type::UniformBuffer:
 			return vk::DescriptorType::eUniformBuffer;
+		case ResourceUsage::Type::AccellerationStructureRead:
+			return vk::DescriptorType::eAccelerationStructureKHR;
 		default:
 			return std::nullopt;
 	}
