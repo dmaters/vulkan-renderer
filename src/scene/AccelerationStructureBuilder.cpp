@@ -51,11 +51,11 @@ BLASInfo buildBLASInfos(const std::vector<Primitive>& primitives, vk::Buffer ver
 }
 
 struct Allocations {
-	ResourceManager::AllocationIndex BLAS;
+	ResourceManager::AllocationIndex AS;
 	ResourceManager::AllocationIndex scratch;
 };
 
-Allocations allocateBLASMemory(
+Allocations allocateASMemory(
 	const vk::AccelerationStructureBuildSizesInfoKHR& sizes, ResourceManager& resourceManager
 ) {
 	ResourceManager::BufferDescription BLASBuffer {
@@ -77,7 +77,7 @@ Allocations allocateBLASMemory(
 }
 
 AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
-	vk::CommandBuffer& commandBuffer, AccelerationStructureBuilder::BuildBLASInfo& info
+	vk::CommandBuffer& commandBuffer, const AccelerationStructureBuilder::BuildBLASInfo& info
 ) {
 	auto& device = Instance::Get().device;
 	auto BLASInfos = buildBLASInfos(info.primitives, info.vertexBuffer, info.indexBuffer);
@@ -149,5 +149,101 @@ AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
 	return {
 		.allocation = sceneBLASAllocation,
 		.blas = blas,
+	};
+}
+
+vk::TransformMatrixKHR getTransform(const glm::mat4& transform) {
+	vk::TransformMatrixKHR res;
+	res.matrix[0][0] = transform[0][0];
+	res.matrix[0][1] = transform[1][0];
+	res.matrix[0][2] = transform[2][0];
+	res.matrix[0][3] = transform[3][0];
+
+	res.matrix[1][0] = transform[0][1];
+	res.matrix[1][1] = transform[1][1];
+	res.matrix[1][2] = transform[2][1];
+	res.matrix[1][3] = transform[3][1];
+
+	res.matrix[2][0] = transform[0][2];
+	res.matrix[2][1] = transform[1][2];
+	res.matrix[2][2] = transform[2][2];
+	res.matrix[2][3] = transform[3][2];
+
+	return res;
+}
+
+AccelerationStructureBuilder::TLASData AccelerationStructureBuilder::buildTLAS(
+	vk::CommandBuffer& commandBuffer, const AccelerationStructureBuilder::BuildTLASInfo& info
+) {
+	auto& device = Instance::Get().device;
+
+	ResourceManager::BufferDescription instanceBufferInfo = {
+		.size = static_cast<uint32_t>(info.primitives.size() * sizeof(vk::AccelerationStructureInstanceKHR)),
+		.usage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR
+	};
+	auto instanceAllocation =
+		m_resourceManager.createResources({}, { instanceBufferInfo }, ResourceManager::MemoryLocation::HostVisible);
+	auto instances = (vk::AccelerationStructureInstanceKHR*)m_resourceManager
+						 .getBuffer(m_resourceManager.getBuffers(instanceAllocation)[0])
+						 .data;
+
+	for (int i = 0; i < info.primitives.size(); i++) {
+		vk::AccelerationStructureDeviceAddressInfoKHR addrInfo { .accelerationStructure = info.blas[i] };
+		vk::DeviceAddress blasDeviceAddr = device.getAccelerationStructureAddressKHR(addrInfo);
+
+		instances[i] = {
+			.transform = getTransform(info.transforms[i]),
+			.mask = 0xFF,
+			.accelerationStructureReference = blasDeviceAddr,
+		};
+	}
+	vk::AccelerationStructureGeometryInstancesDataKHR instanceData {
+		.arrayOfPointers = vk::False,
+		.data = { .hostAddress = &instances },
+	};
+	vk::AccelerationStructureGeometryDataKHR geometryData { .instances = instanceData };
+
+	vk::AccelerationStructureGeometryKHR tlasGeometry {
+		.geometryType = vk::GeometryTypeKHR::eInstances,
+		.geometry = geometryData,
+
+	};
+
+	vk::AccelerationStructureBuildGeometryInfoKHR geometryInfo {
+		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
+		.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+		.geometryCount = 1,
+		.pGeometries = &tlasGeometry,
+	};
+
+	auto sizes = device.getAccelerationStructureBuildSizesKHR(
+		vk::AccelerationStructureBuildTypeKHR::eHost, geometryInfo, info.primitives.size()
+	);
+
+	auto allocations = allocateASMemory(sizes, m_resourceManager);
+
+	vk::AccelerationStructureCreateInfoKHR createInfo {
+		.buffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(allocations.AS)[0]).buffer,
+		.offset = 0,
+		.size = sizes.accelerationStructureSize,
+		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
+	};
+
+	auto tlas = device.createAccelerationStructureKHR(createInfo);
+
+	geometryInfo.dstAccelerationStructure = tlas;
+
+	vk::AccelerationStructureBuildRangeInfoKHR rangeInfo {
+		.primitiveCount = (uint32_t)info.primitives.size(),
+		.primitiveOffset = 0,
+		.firstVertex = 0,
+		.transformOffset = 0,
+	};
+
+	commandBuffer.buildAccelerationStructuresKHR({ geometryInfo }, { &rangeInfo });
+
+	return {
+		.allocation = allocations.AS,
+		.tlas = tlas,
 	};
 }

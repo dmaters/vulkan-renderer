@@ -12,18 +12,30 @@ public:
 
 	struct BuildBLASInfo;
 	struct BLASData;
-	BLASData buildBLAS(vk::CommandBuffer& commandBuffer, BuildBLASInfo& info);
+	BLASData buildBLAS(vk::CommandBuffer& commandBuffer, const BuildBLASInfo& info);
 
-	struct UpdateTLASInfo;
-	ResourceManager::AllocationIndex updateTLAS(UpdateTLASInfo& info);
+	struct BuildTLASInfo;
+	struct TLASData;
+	TLASData buildTLAS(vk::CommandBuffer& commandBuffer, const BuildTLASInfo& info);
 };
 
 struct AccelerationStructureBuilder::BuildBLASInfo {
-	std::vector<Primitive> primitives;
+	std::vector<Primitive>& primitives;
 	vk::Buffer& vertexBuffer;
 	vk::Buffer& indexBuffer;
 };
 struct AccelerationStructureBuilder::BLASData {
 	ResourceManager::AllocationIndex allocation;
 	std::vector<vk::AccelerationStructureKHR> blas;
+};
+
+struct AccelerationStructureBuilder::BuildTLASInfo {
+	std::vector<Primitive>& primitives;
+	std::vector<vk::AccelerationStructureKHR>& blas;
+	std::vector<glm::mat4>& transforms;
+};
+
+struct AccelerationStructureBuilder::TLASData {
+	ResourceManager::AllocationIndex allocation;
+	vk::AccelerationStructureKHR tlas;
 };
