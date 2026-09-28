@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "resources/ResourceManager.hpp"
 
 class ResourceWriteTransaction {
@@ -26,6 +28,8 @@ public:
 	void copy(const BufferReference& source, const ImageReference& destination);
 	void copy(const BufferReference& source, const BufferReference& destination);
 	void imageClear(const ImageReference& image, const vk::ClearColorValue& clearValue);
+
+	void customOperation(const std::function<void(vk::CommandBuffer&)> operation);
 
 	void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore, uint64_t signalValue);
 };

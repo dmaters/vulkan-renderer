@@ -25,6 +25,8 @@ struct Primitive {
 
 	uint32_t materialIndex;
 
+	uint32_t baseTransform;
+
 	struct ShaderObject {
 		uint32_t baseVertex;
 		uint32_t baseIndex;

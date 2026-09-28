@@ -13,6 +13,7 @@
 #include "material/MaterialDefinitions.hpp"
 #include "resources/ResourceManager.hpp"
 #include "resources/ResourceWriteTransaction.hpp"
+#include "scene/AccelerationStructureBuilder.hpp"
 #include "scene/Primitive.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
@@ -136,13 +137,13 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 		.size = 1,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer,
 	};
-	dummyBuffers[(int)SceneManager::SceneBufferType::Transforms] = {
-		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
-	};
 	dummyBuffers[(int)SceneManager::SceneBufferType::MaterialData] = {
 		.size = 1,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
+	};
+	dummyBuffers[(int)SceneManager::SceneBufferType::Transforms] = {
+		.size = 1,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
 	};
 	dummyBuffers[(int)SceneManager::SceneBufferType::PrimitiveData] = {
 		.size = 1,
@@ -178,15 +179,19 @@ struct GeometryAllocationData {
 	std::vector<ResourceManager::BufferDescription> buffers;
 	std::array<MemorySpan, SceneLoader::SceneBuffersCount> dataLocations;
 	std::size_t primitiveDataSize;
+	std::size_t transformDataSize;
 };
 
 GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstance>& scenes) {
 	std::array<MemorySpan, SceneLoader::SceneBuffersCount> dataLocations;
 	std::size_t primitiveDataSize = 0;
+	std::size_t transformsDataSize = 0;
+
 	for (const auto& scene : scenes) {
 		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) {
 			dataLocations[i].size = scene.bufferDataLocations[i].size;
 		}
+		transformsDataSize += scene.transforms.size() * sizeof(glm::mat4);
 		primitiveDataSize += scene.primitives.size() * sizeof(Primitive::ShaderObject);
 	}
 
@@ -207,14 +212,14 @@ GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstan
 					 vk::BufferUsageFlagBits::eIndexBuffer,
 		 },
 		{
-			.size = (uint32_t)dataLocations[(int)SceneManager::SceneBufferType::Transforms].size,
-			.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer,
-		 },
-		{
 			.size = (uint32_t)dataLocations[(int)SceneManager::SceneBufferType::MaterialData].size,
 			.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
 					 vk::BufferUsageFlagBits::eStorageBuffer,
+		 },
+		{
+			.size = (uint32_t)transformsDataSize,
+			.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
+					 vk::BufferUsageFlagBits::eVertexBuffer,
 		 },
 		{
 			.size = (uint32_t)primitiveDataSize,
@@ -229,6 +234,7 @@ GeometryAllocationData getBuffersInfo(const std::vector<SceneLoader::SceneInstan
 		.buffers = buffers,
 		.dataLocations = dataLocations,
 		.primitiveDataSize = primitiveDataSize,
+		.transformDataSize = transformsDataSize,
 	};
 }
 
@@ -394,6 +400,7 @@ struct Offsets {
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 	uint32_t materialOffset = 0;
+	uint32_t tranformOffset = 0;
 };
 void composePrimitives(
 	const std::vector<Primitive>& scenePrimitives, std::vector<Primitive>& outputPrimitives, Offsets baseOffsets
@@ -407,6 +414,7 @@ void composePrimitives(
 				.vertexCount = primitive.vertexCount,
 				.indexCount = primitive.indexCount,
 				.materialIndex = primitive.materialIndex + baseOffsets.materialOffset,
+				.baseTransform = baseOffsets.tranformOffset,
 			}
 		);
 	}
@@ -418,6 +426,10 @@ Scene mergeScenes(const std::vector<SceneLoader::SceneInstance>& scenes) {
 	Offsets offsets;
 	for (int i = 0; i < scenes.size(); i++) {
 		auto& sceneInstance = scenes[i];
+
+		scene.transforms.insert(
+			scene.transforms.end(), sceneInstance.transforms.begin(), sceneInstance.transforms.end()
+		);
 
 		scene.materialHints.insert(
 			scene.materialHints.end(), sceneInstance.materialHints.begin(), sceneInstance.materialHints.end()
@@ -436,8 +448,44 @@ Scene mergeScenes(const std::vector<SceneLoader::SceneInstance>& scenes) {
 		offsets.vertexOffset += vertexCount;
 		offsets.indexOffset += indexCount;
 		offsets.materialOffset += materialCount;
+		offsets.tranformOffset += sceneInstance.transforms.size();
 	}
 	return scene;
+}
+
+AccelerationStructureBuilder::TLASData buildAS(
+	ResourceWriteTransaction& transaction,
+	AccelerationStructureBuilder& builder,
+	ResourceManager& resourceManager,
+	Scene& mergedScene
+) {
+	auto bufferHandles = resourceManager.getBuffers(mergedScene.allocation);
+
+	AccelerationStructureBuilder::BLASData blasData;
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		blasData = builder.buildBLAS(
+			commandBuffer,
+			{
+				.primitives = mergedScene.primitives,
+				.vertexBuffer =
+					resourceManager.getBuffer(bufferHandles[(int)SceneManager::SceneBufferType::Vertex]).buffer,
+				.indexBuffer =
+					resourceManager.getBuffer(bufferHandles[(int)SceneManager::SceneBufferType::Index]).buffer,
+			}
+		);
+	});
+	AccelerationStructureBuilder::TLASData tlasData;
+
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		tlasData = builder.buildTLAS(
+			commandBuffer,
+			{
+				.primitives = mergedScene.primitives,
+				.blas = blasData.blas,
+				.transforms = mergedScene.transforms,
+			}
+		);
+	});
 }
 
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
@@ -494,24 +542,43 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	auto mergedScene = mergeScenes(m_scenes);
 
+	std::size_t sceneLoaderImageOffset = 0;
+	std::size_t sceneLoaderBufferOffset = sceneLoaderImageOffset + sceneInstance.imageStagingSize;
+	std::size_t primitiveDataOffset = sceneLoaderBufferOffset + sceneInstance.buffersStagingSize;
+	std::size_t transformsDataOffset = primitiveDataOffset + gpuBuffersInfo.primitiveDataSize;
+
 	m_loadingData->sceneLoader.beginBufferLoad(
-		(std::byte*)stagingBuffer.data + sceneInstance.imageStagingSize, registeredImages
+		(std::byte*)stagingBuffer.data + sceneLoaderBufferOffset, registeredImages
 	);
-	loadPrimitiveData(
-		(Primitive::ShaderObject*)((std::byte*)stagingBuffer.data + sceneInstance.buffersStagingSize +
-								   sceneInstance.imageStagingSize),
-		mergedScene
+	loadPrimitiveData((Primitive::ShaderObject*)((std::byte*)stagingBuffer.data + primitiveDataOffset), mergedScene);
+	transaction.copy(
+		ResourceWriteTransaction::BufferReference {
+			.handle = stagingBufferHandle,
+			.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
+			.offset = (uint32_t)(primitiveDataOffset),
+		},
+		ResourceWriteTransaction::BufferReference {
+			.handle = m_resourceManager.getBuffers(deviceAllocation)[(int)SceneBufferType::PrimitiveData],
+			.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
+			.offset = 0,
+		}
+	);
+
+	memcpy(
+		(std::byte*)stagingBuffer.data + transformsDataOffset,
+		mergedScene.transforms.data(),
+		gpuBuffersInfo.primitiveDataSize
 	);
 
 	transaction.copy(
 		ResourceWriteTransaction::BufferReference {
 			.handle = stagingBufferHandle,
 			.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
-			.offset = (uint32_t)(sceneInstance.buffersStagingSize + sceneInstance.imageStagingSize),
+			.offset = (uint32_t)(transformsDataOffset),
 		},
 		ResourceWriteTransaction::BufferReference {
-			.handle = m_resourceManager.getBuffers(deviceAllocation)[(int)SceneBufferType::PrimitiveData],
-			.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
+			.handle = m_resourceManager.getBuffers(deviceAllocation)[(int)SceneBufferType::Transforms],
+			.size = (uint32_t)gpuBuffersInfo.transformDataSize,
 			.offset = 0,
 		}
 	);

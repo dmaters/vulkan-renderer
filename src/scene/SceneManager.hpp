@@ -17,8 +17,8 @@ public:
 		Vertex,
 		VertexAttribute,
 		Index,
-		Transforms,
 		MaterialData,
+		Transforms,
 		PrimitiveData,
 	};
 

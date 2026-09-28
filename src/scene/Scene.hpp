@@ -21,7 +21,7 @@ struct Scene {
 	};
 
 	std::vector<Primitive> primitives;
-	std::vector<glm::vec4> primitivePositions;
+	std::vector<glm::mat4> transforms;
 
 	std::vector<MaterialHint> materialHints;
 	std::vector<PrimitiveBound> primitiveBounds;
