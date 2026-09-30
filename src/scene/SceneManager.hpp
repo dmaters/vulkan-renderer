@@ -5,7 +5,6 @@
 #include <optional>
 #include <vector>
 
-#include "AccelerationStructureBuilder.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
@@ -24,7 +23,7 @@ public:
 
 private:
 	struct LoadingData {
-		SceneLoader sceneLoader;
+		std::unique_ptr<SceneLoader> sceneLoader;
 		Scene scene;
 		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex newAllocation;

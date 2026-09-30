@@ -13,7 +13,6 @@
 #include "material/MaterialDefinitions.hpp"
 #include "resources/ResourceManager.hpp"
 #include "resources/ResourceWriteTransaction.hpp"
-#include "scene/AccelerationStructureBuilder.hpp"
 #include "scene/Primitive.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
@@ -124,7 +123,7 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 		dummyLocations[i] = { .size = 1, .offset = (std::size_t)i };
 	}
 
-	std::array<ResourceManager::BufferDescription, SceneLoader::SceneBuffersCount + 1> dummyBuffers;
+	std::array<ResourceManager::BufferDescription, SceneLoader::SceneBuffersCount + 2> dummyBuffers;
 	dummyBuffers[(int)SceneManager::SceneBufferType::Vertex] = {
 		.size = 1,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
@@ -453,6 +452,7 @@ Scene mergeScenes(const std::vector<SceneLoader::SceneInstance>& scenes) {
 	return scene;
 }
 
+/*
 AccelerationStructureBuilder::TLASData buildAS(
 	ResourceWriteTransaction& transaction,
 	AccelerationStructureBuilder& builder,
@@ -487,6 +487,7 @@ AccelerationStructureBuilder::TLASData buildAS(
 		);
 	});
 }
+ */
 
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
 	if (!std::filesystem::exists(path)) {
@@ -494,9 +495,9 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 		abort();
 	}
 
-	m_loadingData = { .sceneLoader = SceneLoader(path) };
+	auto sceneLoader = std::make_unique<SceneLoader>(path);
 
-	m_scenes.push_back(m_loadingData->sceneLoader.getInstance());
+	m_scenes.push_back(sceneLoader->getInstance());
 	auto& sceneInstance = m_scenes.back();
 	m_primitiveCount += sceneInstance.primitives.size();
 	auto gpuBuffersInfo = getBuffersInfo(m_scenes);
@@ -506,7 +507,8 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	},
 		{ {
 			.size = static_cast<uint32_t>(
-				sceneInstance.buffersStagingSize + sceneInstance.imageStagingSize + gpuBuffersInfo.primitiveDataSize
+				sceneInstance.buffersStagingSize + sceneInstance.imageStagingSize + gpuBuffersInfo.primitiveDataSize +
+				gpuBuffersInfo.transformDataSize
 			),
 			.usage = vk::BufferUsageFlagBits::eTransferSrc,
 		} },
@@ -531,10 +533,15 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	auto stagingBufferHandle = m_resourceManager.getBuffers(stagingAllocation)[0];
 	Buffer& stagingBuffer = m_resourceManager.getBuffer(stagingBufferHandle);
 
+	std::size_t sceneLoaderImageOffset = 0;
+	std::size_t sceneLoaderBufferOffset = sceneLoaderImageOffset + sceneInstance.imageStagingSize;
+	std::size_t primitiveDataOffset = sceneLoaderBufferOffset + sceneInstance.buffersStagingSize;
+	std::size_t transformsDataOffset = primitiveDataOffset + gpuBuffersInfo.primitiveDataSize;
+
 	auto imageDescriptions = getImageDescriptions(sceneInstance.imageResolution, sceneInstance.imageFormats);
 	auto textureAllocation =
 		m_resourceManager.createResources(imageDescriptions, {}, ResourceManager::MemoryLocation::Device);
-	m_loadingData->sceneLoader.beginImageLoad(stagingBuffer.data);
+	sceneLoader->beginImageLoad((std::byte*)stagingBuffer.data + sceneLoaderImageOffset);
 	m_sceneTextureAllocations.push_back(textureAllocation);
 	auto& allocationImages = m_resourceManager.getImages(textureAllocation);
 	std::vector<ImageHandle> sceneImages(allocationImages.begin(), allocationImages.end());
@@ -542,15 +549,10 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	auto mergedScene = mergeScenes(m_scenes);
 
-	std::size_t sceneLoaderImageOffset = 0;
-	std::size_t sceneLoaderBufferOffset = sceneLoaderImageOffset + sceneInstance.imageStagingSize;
-	std::size_t primitiveDataOffset = sceneLoaderBufferOffset + sceneInstance.buffersStagingSize;
-	std::size_t transformsDataOffset = primitiveDataOffset + gpuBuffersInfo.primitiveDataSize;
+	sceneLoader->beginBufferLoad((std::byte*)stagingBuffer.data + sceneLoaderBufferOffset, registeredImages);
 
-	m_loadingData->sceneLoader.beginBufferLoad(
-		(std::byte*)stagingBuffer.data + sceneLoaderBufferOffset, registeredImages
-	);
 	loadPrimitiveData((Primitive::ShaderObject*)((std::byte*)stagingBuffer.data + primitiveDataOffset), mergedScene);
+
 	transaction.copy(
 		ResourceWriteTransaction::BufferReference {
 			.handle = stagingBufferHandle,
@@ -585,16 +587,19 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	transaction.submit(Instance::Get().transferQueue, m_semaphore, ++m_transferCount);
 
-	m_loadingData->commandPool = commandPool;
-	m_loadingData->stagingAllocation = stagingAllocation;
-	m_loadingData->newAllocation = deviceAllocation;
-	m_loadingData->scene = mergedScene;
+	m_loadingData = {
+		.sceneLoader = std::move(sceneLoader),
+		.scene = std::move(mergedScene),
+		.stagingAllocation = stagingAllocation,
+		.newAllocation = deviceAllocation,
+		.commandPool = commandPool,
+	};
 
 	return sceneInstance.bufferDataLocations.size() + sceneInstance.imageDataLocations.size();
 }
 
 SceneManager::LoadedResourceCount SceneManager::sync() {
-	auto delta = m_loadingData->sceneLoader.queryLoadStatus();
+	auto delta = m_loadingData->sceneLoader->queryLoadStatus();
 	std::size_t sceneIndex = m_scenes.size() - 1;
 	auto& scene = m_scenes[sceneIndex];
 
@@ -638,7 +643,7 @@ Scene SceneManager::getScene() {
 	waitSemaphore(m_semaphore, m_transferCount);
 
 	m_scene = std::move(m_loadingData->scene);
-	m_scenesGeometry.push_back(std::move(m_loadingData->sceneLoader).getSceneGeometry());
+	m_scenesGeometry.push_back(m_loadingData->sceneLoader->getSceneGeometry());
 
 	for (auto& sceneGeometry : m_scenesGeometry) {
 		m_scene.primitiveBounds.insert(

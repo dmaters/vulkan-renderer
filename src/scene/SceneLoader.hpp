@@ -15,8 +15,8 @@ public:
 
 	struct SceneInstance {
 		std::vector<Primitive> primitives;
-		std::vector<Scene::MaterialHint> materialHints;
 		std::vector<glm::mat4> transforms;
+		std::vector<Scene::MaterialHint> materialHints;
 
 		std::array<MemorySpan, SceneBuffersCount> bufferDataLocations;
 
@@ -40,11 +40,11 @@ private:
 
 	std::array<MemorySpan, SceneBuffersCount> m_bufferDataLocations;
 	std::vector<MemorySpan> m_imageDataLocations;
-	std::unique_ptr<ConcurrentStack<std::size_t>> m_readyImages;
+	ConcurrentStack<std::size_t> m_readyImages;
 
 	// Readybuffers is a faux stack that uses the same logic path of images, but we have for now only one thread
 	// handling buffer loading, so the buffer will always be loaded/signaled in bulk
-	std::unique_ptr<ConcurrentStack<std::size_t>> m_readyBuffers;
+	ConcurrentStack<std::size_t> m_readyBuffers;
 
 	using TextureUsage = uint8_t;
 	std::vector<TextureUsage> m_textureUsages;

@@ -30,8 +30,8 @@ enum class SceneBuffers {
 	Vertex,
 	VertexAttribute,
 	Indices,
-	Transforms,
 	Materials,
+	Transforms,
 	PrimitiveData,
 };
 
@@ -271,6 +271,7 @@ SceneLoader::SceneInstance loadSceneInstance(
 
 	return {
 		.primitives = primitiveData.primitives,
+		.transforms = primitiveData.transforms,
 		.materialHints = primitiveData.materialHints,
 		.bufferDataLocations = primitiveData.bufferDataLocations,
 		.imageDataLocations = imageData.imageDataLocations,
@@ -401,7 +402,6 @@ SceneGeometry loadGeometryBuffers(
 
 			const fastgltf::Mesh& mesh = asset.meshes[node.meshIndex.value()];
 			for (auto& primitive : mesh.primitives) {
-
 				auto primitiveData = loadPrimitiveGeometry(asset, primitive, vertices, vertexAttributes, indices);
 				vertices += primitiveData.vertexCount;
 				vertexAttributes += primitiveData.vertexCount;
@@ -471,7 +471,7 @@ void SceneLoader::beginBufferLoad(void* stagingAddress, std::vector<std::size_t>
 																	 bufferData[(int)SceneBuffers::Materials].offset);
 		loadMaterials(asset, materialsAddress, imageIndices);
 
-		auto inserter = loadedBuffers->getInserter();
+		auto inserter = loadedBuffers.getInserter();
 		for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) inserter.push(i);
 	}).detach();
 }
@@ -618,7 +618,7 @@ void SceneLoader::beginImageLoad(void* address) {
 					  &textureUsages = m_textureUsages,
 					  &imageDataLocations = m_imageDataLocations,
 					  address] {
-			auto stackInserter = readyImages->getInserter();
+			auto stackInserter = readyImages.getInserter();
 			while (auto workElement = compressImageStack->pop_wait()) {
 				auto image = workElement.value();
 				auto format = getFormatFromUsage(textureUsages[image]);
@@ -646,8 +646,8 @@ void SceneLoader::beginImageLoad(void* address) {
 SceneLoader::LoadStatus SceneLoader::queryLoadStatus() {
 	SceneLoader::LoadStatus status;
 
-	while (auto processedImage = m_readyImages->pop()) status.loadedImages.push_back(*processedImage);
-	while (auto processedBuffer = m_readyBuffers->pop()) status.loadedBuffers.push_back(*processedBuffer);
+	while (auto processedImage = m_readyImages.pop()) status.loadedImages.push_back(*processedImage);
+	while (auto processedBuffer = m_readyBuffers.pop()) status.loadedBuffers.push_back(*processedBuffer);
 
 	return status;
 }

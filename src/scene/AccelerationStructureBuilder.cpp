@@ -133,13 +133,13 @@ AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
 		BLASInfos.geometryInfo[i].dstAccelerationStructure = blas[i];
 		BLASInfos.geometryInfo[i].scratchData = vk::DeviceOrHostAddressKHR(scratchBufferAddress + scratchBufferOffset);
 
-		buildRangesData[i] = {
+		buildRangesData[i] = vk::AccelerationStructureBuildRangeInfoKHR {
 			.primitiveCount = 1,
 			.primitiveOffset = 0,
 			.firstVertex = 0,
 			.transformOffset = 0,
 		};
-		buildRanges[i] = &buildRangesData[i];
+		buildRanges[i] = &(buildRangesData[i]);
 	}
 
 	commandBuffer.buildAccelerationStructuresKHR(
@@ -191,7 +191,7 @@ AccelerationStructureBuilder::TLASData AccelerationStructureBuilder::buildTLAS(
 		vk::AccelerationStructureDeviceAddressInfoKHR addrInfo { .accelerationStructure = info.blas[i] };
 		vk::DeviceAddress blasDeviceAddr = device.getAccelerationStructureAddressKHR(addrInfo);
 
-		instances[i] = {
+		instances[i] = vk::AccelerationStructureInstanceKHR {
 			.transform = getTransform(info.transforms[i]),
 			.mask = 0xFF,
 			.accelerationStructureReference = blasDeviceAddr,
