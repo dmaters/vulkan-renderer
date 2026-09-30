@@ -569,13 +569,13 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	memcpy(
 		(std::byte*)stagingBuffer.data + transformsDataOffset,
 		mergedScene.transforms.data(),
-		gpuBuffersInfo.primitiveDataSize
+		gpuBuffersInfo.transformDataSize
 	);
 
 	transaction.copy(
 		ResourceWriteTransaction::BufferReference {
 			.handle = stagingBufferHandle,
-			.size = (uint32_t)gpuBuffersInfo.primitiveDataSize,
+			.size = (uint32_t)gpuBuffersInfo.transformDataSize,
 			.offset = (uint32_t)(transformsDataOffset),
 		},
 		ResourceWriteTransaction::BufferReference {
