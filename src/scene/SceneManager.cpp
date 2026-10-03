@@ -8,6 +8,7 @@
 #include <optional>
 #include <vector>
 
+#include "AccelerationStructureBuilder.hpp"
 #include "Common.hpp"
 #include "Instance.hpp"
 #include "material/MaterialDefinitions.hpp"
@@ -17,6 +18,7 @@
 #include "scene/Scene.hpp"
 #include "scene/SceneLoader.hpp"
 #include "scene/SceneManager.hpp"
+#include "vulkan/vulkan.hpp"
 
 vk::CommandPool createCommandPool(bool graphicQueue = false) {
 	auto& instance = Instance::Get();
@@ -126,7 +128,8 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	std::array<ResourceManager::BufferDescription, SceneLoader::SceneBuffersCount + 2> dummyBuffers;
 	dummyBuffers[(int)SceneManager::SceneBufferType::Vertex] = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers[(int)SceneManager::SceneBufferType::VertexAttribute] = {
 		.size = 1,
@@ -134,7 +137,8 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	};
 	dummyBuffers[(int)SceneManager::SceneBufferType::Index] = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers[(int)SceneManager::SceneBufferType::MaterialData] = {
 		.size = 1,
@@ -170,6 +174,7 @@ SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& ma
 	m_semaphore = createSemaphore();
 	m_dummyAllocation = createDummyAllocation(resourceManager);
 	m_scene.allocation = m_dummyAllocation;
+	m_scene.asAllocation = m_dummyAllocation;
 
 	createPlaceholderTextures(resourceManager, materialManager, m_semaphore, ++m_transferCount);
 }
@@ -452,7 +457,6 @@ Scene mergeScenes(const std::vector<SceneLoader::SceneInstance>& scenes) {
 	return scene;
 }
 
-/*
 AccelerationStructureBuilder::TLASData buildAS(
 	ResourceWriteTransaction& transaction,
 	AccelerationStructureBuilder& builder,
@@ -486,8 +490,8 @@ AccelerationStructureBuilder::TLASData buildAS(
 			}
 		);
 	});
+	return tlasData;
 }
- */
 
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
 	if (!std::filesystem::exists(path)) {
@@ -584,16 +588,23 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 			.offset = 0,
 		}
 	);
+	AccelerationStructureBuilder asBuider(m_resourceManager);
+	mergedScene.allocation = deviceAllocation;
+	auto asData = buildAS(transaction, asBuider, m_resourceManager, mergedScene);
+	mergedScene.asAllocation = asData.allocation;
 
 	transaction.submit(Instance::Get().transferQueue, m_semaphore, ++m_transferCount);
 
-	m_loadingData = {
-		.sceneLoader = std::move(sceneLoader),
-		.scene = std::move(mergedScene),
-		.stagingAllocation = stagingAllocation,
-		.newAllocation = deviceAllocation,
-		.commandPool = commandPool,
-	};
+	m_loadingData.emplace(
+		LoadingData {
+			.sceneLoader = std::move(sceneLoader),
+			.asBuilder = std::move(asBuider),
+			.scene = std::move(mergedScene),
+			.stagingAllocation = stagingAllocation,
+			.newAllocation = deviceAllocation,
+			.commandPool = commandPool,
+		}
+	);
 
 	return sceneInstance.bufferDataLocations.size() + sceneInstance.imageDataLocations.size();
 }

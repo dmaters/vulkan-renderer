@@ -32,4 +32,5 @@ struct Scene {
 	Light light;
 
 	ResourceManager::AllocationIndex allocation;
+	ResourceManager::AllocationIndex asAllocation;
 };

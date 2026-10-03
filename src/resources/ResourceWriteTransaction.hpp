@@ -29,7 +29,7 @@ public:
 	void copy(const BufferReference& source, const BufferReference& destination);
 	void imageClear(const ImageReference& image, const vk::ClearColorValue& clearValue);
 
-	void customOperation(const std::function<void(vk::CommandBuffer&)> operation);
+	void customOperation(const std::function<void(vk::CommandBuffer&)> operation) { operation(m_commandBuffer); }
 
 	void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore, uint64_t signalValue);
 };

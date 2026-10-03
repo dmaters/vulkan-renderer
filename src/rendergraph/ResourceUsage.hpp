@@ -21,6 +21,7 @@ enum class Type {
 	IndirectBufferRead,
 	TransferSrc,
 	TransferDst,
+	AccellerationStructureRead,
 };
 
 std::optional<vk::DescriptorType> GetDescriptorType(ResourceUsage::Type usage, bool isBuffer);

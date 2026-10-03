@@ -22,12 +22,9 @@
 #include "ui/UI.hpp"
 
 void Renderer::reloadGraphBuffers(
-	ResourceManager::AllocationIndex allocation,
-	StaticResources staticResources,
-	ResourceManager& resourceManager,
-	RenderGraph& rendergraph
+	Scene& scene, StaticResources staticResources, ResourceManager& resourceManager, RenderGraph& rendergraph
 ) {
-	auto sceneBuffers = resourceManager.getBuffers(allocation);
+	auto sceneBuffers = resourceManager.getBuffers(scene.allocation);
 
 	rendergraph.setBuffer(staticResources.vertexBuffer, sceneBuffers[(int)SceneManager::SceneBufferType::Vertex]);
 	rendergraph.setBuffer(
@@ -41,6 +38,7 @@ void Renderer::reloadGraphBuffers(
 	rendergraph.setBuffer(
 		staticResources.primitiveData, sceneBuffers[(int)SceneManager::SceneBufferType::PrimitiveData]
 	);
+	rendergraph.setBuffer(staticResources.accellerationStructure, resourceManager.getBuffers(scene.asAllocation)[0]);
 }
 
 Renderer::Renderer(SDL_Window* window) :
@@ -81,7 +79,7 @@ Renderer::Renderer(SDL_Window* window) :
 	};
 
 	m_passes = createRenderGraph();
-	reloadGraphBuffers(m_scene.allocation, m_staticResources, m_resourceManager, m_graph);
+	reloadGraphBuffers(m_scene, m_staticResources, m_resourceManager, m_graph);
 
 	m_graph.update(m_passes.ui, m_passes.optionalPasses, m_scene);
 }
@@ -122,7 +120,7 @@ void Renderer::render() {
 			m_scene.allocation = scene.allocation;
 			m_scene.size = scene.size;
 
-			reloadGraphBuffers(m_scene.allocation, m_staticResources, m_resourceManager, m_graph);
+			reloadGraphBuffers(m_scene, m_staticResources, m_resourceManager, m_graph);
 
 			m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
 			UI::Data.sceneData.primitiveCount = m_scene.primitives.size();

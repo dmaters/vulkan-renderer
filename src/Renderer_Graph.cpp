@@ -23,6 +23,7 @@ Renderer::Passes Renderer::createRenderGraph() {
 	m_staticResources.transforms = m_graph.registerBuffer("transforms_buffer");
 	m_staticResources.pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer");
 	m_staticResources.primitiveData = m_graph.registerBuffer("primitive_data");
+	m_staticResources.accellerationStructure = m_graph.registerBuffer("accelleration_structure");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -31,6 +32,16 @@ Renderer::Passes Renderer::createRenderGraph() {
 	};
 	auto sceneData = core::sceneData(context);
 
+	auto sdrOutput = core::sdrOutput(context);
+	auto raytracingDebug = raytracing_debug(context, m_staticResources.accellerationStructure, sceneData, sdrOutput);
+	optionalPasses.push_back(raytracingDebug);
+
+	auto ui = core::ui(context, sdrOutput);
+	optionalPasses.push_back(ui);
+
+	return { .ui = ui, .optionalPasses = optionalPasses };
+
+	/*
 	auto transmittanceLUT = procedural_sky::transmittanceLUT(context);
 	auto multiscatteringLUT = procedural_sky::multiscatteringLUT(context, transmittanceLUT);
 	auto skyviewLUT = procedural_sky::skyviewLUT(context, sceneData, transmittanceLUT, multiscatteringLUT);
@@ -67,4 +78,5 @@ Renderer::Passes Renderer::createRenderGraph() {
 	optionalPasses.push_back(ui);
 
 	return { .ui = ui, .optionalPasses = optionalPasses };
+ */
 }

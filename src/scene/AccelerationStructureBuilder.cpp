@@ -3,7 +3,6 @@
 #include "Instance.hpp"
 
 struct BLASInfo {
-	std::vector<vk::AccelerationStructureGeometryTrianglesDataKHR> geometryData;
 	std::vector<vk::AccelerationStructureGeometryKHR> geometries;
 	std::vector<vk::AccelerationStructureBuildGeometryInfoKHR> geometryInfo;
 };
@@ -13,14 +12,13 @@ BLASInfo buildBLASInfos(const std::vector<Primitive>& primitives, vk::Buffer ver
 	vk::DeviceAddress indexAddress =
 		Instance::Get().device.getBufferAddress(vk::BufferDeviceAddressInfo { .buffer = indexBuffer });
 
-	std::vector<vk::AccelerationStructureGeometryTrianglesDataKHR> geometryData(primitives.size());
 	std::vector<vk::AccelerationStructureGeometryKHR> geometries(primitives.size());
 	std::vector<vk::AccelerationStructureBuildGeometryInfoKHR> geometryInfo(primitives.size());
 
 	for (int i = 0; i < primitives.size(); i++) {
 		auto& primitive = primitives[i];
 
-		geometryData[i] = vk::AccelerationStructureGeometryTrianglesDataKHR {
+		vk::AccelerationStructureGeometryTrianglesDataKHR triangleData {
 			.vertexFormat = vk::Format::eR32G32B32Sfloat,
 			.vertexData = { vertexAddress + primitive.baseVertex * sizeof(uint32_t) },
 			.vertexStride = sizeof(glm::vec3),
@@ -31,7 +29,7 @@ BLASInfo buildBLASInfos(const std::vector<Primitive>& primitives, vk::Buffer ver
 
 		geometries[i] = vk::AccelerationStructureGeometryKHR {
 			.geometryType = vk::GeometryTypeKHR::eTriangles,
-			.geometry = { geometryData[i] },
+			.geometry = { .triangles = triangleData },
 			.flags = vk::GeometryFlagBitsKHR::eOpaque,
 		};
 
@@ -39,14 +37,13 @@ BLASInfo buildBLASInfos(const std::vector<Primitive>& primitives, vk::Buffer ver
 			.type = vk::AccelerationStructureTypeKHR::eBottomLevel,
 			.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
 			.geometryCount = 1,
-			.pGeometries = &geometries[i],
+			.pGeometries = &(geometries[i]),
 		};
 	}
 
 	return {
-		.geometryData = geometryData,
-		.geometries = geometries,
-		.geometryInfo = geometryInfo,
+		.geometries = std::move(geometries),
+		.geometryInfo = std::move(geometryInfo),
 	};
 }
 
@@ -148,7 +145,7 @@ AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
 
 	return {
 		.allocation = sceneBLASAllocation,
-		.blas = blas,
+		.blas = std::move(blas),
 	};
 }
 

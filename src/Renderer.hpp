@@ -22,6 +22,7 @@ private:
 		rendergraph::ResourceIndex transforms;
 		rendergraph::ResourceIndex pbrMaterialData;
 		rendergraph::ResourceIndex primitiveData;
+		rendergraph::ResourceIndex accellerationStructure;
 	};
 
 	vk::Queue m_graphicsQueue;
@@ -50,10 +51,7 @@ private:
 	Renderer::Passes createRenderGraph();
 
 	static void reloadGraphBuffers(
-		ResourceManager::AllocationIndex allocation,
-		StaticResources staticResources,
-		ResourceManager& resourceManager,
-		RenderGraph& rendergraph
+		Scene& scene, StaticResources staticResources, ResourceManager& resourceManager, RenderGraph& rendergraph
 	);
 
 public:
