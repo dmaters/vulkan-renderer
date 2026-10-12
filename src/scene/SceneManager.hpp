@@ -12,21 +12,15 @@
 
 class SceneManager {
 public:
-	enum class SceneBufferType {
-		Vertex,
-		VertexAttribute,
-		Index,
-		Transforms,
-		MaterialData,
-		PrimitiveData,
-	};
+	template <typename T>
+	union SharedBufferContainer;
 
 private:
 	struct LoadingData {
-		SceneLoader sceneLoader;
-		Scene scene;
+		std::unique_ptr<SceneLoader> sceneLoader;
+		Scene mergedScene;
 		ResourceManager::AllocationIndex stagingAllocation;
-		ResourceManager::AllocationIndex newAllocation;
+		ResourceManager::AllocationIndex sharedAllocation;
 		std::size_t resourceLoadedCount = 0;
 
 		vk::CommandPool commandPool;
@@ -40,15 +34,16 @@ private:
 
 	std::optional<LoadingData> m_loadingData;
 
-	std::size_t m_primitiveCount;
 
-	std::array<MemorySpan, SceneLoader::SceneBuffersCount> m_buffersLayout;
 	std::vector<SceneLoader::SceneInstance> m_scenes;
 	std::vector<SceneLoader::SceneGeometry> m_scenesGeometry;
 	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
+	using SceneGeometryBufferDescriptions =
+		std::array<ResourceManager::BufferDescription, SceneLoader::SceneBuffersCount>;
+	std::vector<SceneGeometryBufferDescriptions> m_sharedBuffersDescriptions;
 
 	ResourceManager::AllocationIndex m_dummyAllocation;
-	std::optional<ResourceManager::AllocationIndex> m_sceneAllocation;
+	std::optional<ResourceManager::AllocationIndex> m_sharedAllocation;
 
 	Scene m_scene;
 
@@ -67,4 +62,27 @@ public:
 	};
 
 	Scene getScene();
+};
+
+template <typename T>
+union SceneManager::SharedBufferContainer {
+	static const std::size_t Count = SceneLoader::SceneBuffersCount + 1;
+	std::array<T, SceneLoader::SceneBuffersCount + 1> values;
+
+	struct {
+		T vertices;
+		T vertexAttributes;
+		T indices;
+		T transforms;
+		T materialData;
+		T primitiveData;
+	};
+
+	constexpr std::span<const T, SceneLoader::SceneBuffersCount> sceneLoaderBuffers() const {
+		return std::span<const T, SceneLoader::SceneBuffersCount>(values.data(), SceneLoader::SceneBuffersCount);
+	}
+	SharedBufferContainer(const std::span<const T> pValues) {
+		std::copy(pValues.begin(), pValues.begin() + Count, values.begin());
+	}
+	SharedBufferContainer() : values {} {}
 };

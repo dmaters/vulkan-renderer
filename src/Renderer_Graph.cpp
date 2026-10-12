@@ -17,12 +17,12 @@ struct ProceduralSkyRequiredPasses {
 using namespace rendergraph::passes;
 Renderer::Passes Renderer::createRenderGraph() {
 	std::vector<TaskIndex> optionalPasses;
-	m_staticResources.vertexBuffer = m_graph.registerBuffer("vertex_positions_buffer");
-	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("vertex_attributes_buffer");
-	m_staticResources.vertexAttributeBuffer = m_graph.registerBuffer("index_buffer");
-	m_staticResources.transforms = m_graph.registerBuffer("transforms_buffer");
-	m_staticResources.pbrMaterialData = m_graph.registerBuffer("pbr_data_buffer");
-	m_staticResources.primitiveData = m_graph.registerBuffer("primitive_data");
+	m_sharedSceneBuffers.vertices = m_graph.registerBuffer("vertex_positions_buffer");
+	m_sharedSceneBuffers.vertexAttributes = m_graph.registerBuffer("vertex_attributes_buffer");
+	m_sharedSceneBuffers.indices = m_graph.registerBuffer("index_buffer");
+	m_sharedSceneBuffers.transforms = m_graph.registerBuffer("transforms_buffer");
+	m_sharedSceneBuffers.materialData = m_graph.registerBuffer("pbr_data_buffer");
+	m_sharedSceneBuffers.primitiveData = m_graph.registerBuffer("primitive_data");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -38,7 +38,7 @@ Renderer::Passes Renderer::createRenderGraph() {
 
 	auto shadowBuffer = core::shadows(context, sceneData);
 	auto gbuffer =
-		core::gbuffer(context, { m_staticResources.pbrMaterialData, m_staticResources.primitiveData }, sceneData);
+		core::gbuffer(context, { m_sharedSceneBuffers.materialData, m_sharedSceneBuffers.primitiveData }, sceneData);
 
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);

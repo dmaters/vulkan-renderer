@@ -3,11 +3,13 @@
 #include <fastgltf/core.hpp>
 #include <filesystem>
 #include <texture_compressor/compression.hpp>
+#include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "Common.hpp"
 #include "Scene.hpp"
 #include "material/MaterialDefinitions.hpp"
+#include "resources/ResourceManager.hpp"
 #include "utils/ConcurrentStack.hpp"
 
 class SceneLoader {
@@ -17,16 +19,21 @@ public:
 	struct SceneInstance {
 		std::vector<Primitive> primitives;
 		std::vector<Scene::MaterialHint> materialHints;
+		std::vector<glm::mat4> transforms;
 
-		std::array<MemorySpan, SceneBuffersCount> bufferDataLocations;
-
-		std::vector<MemorySpan> imageDataLocations;
-		std::vector<vk::Format> imageFormats;
-		std::vector<glm::ivec2> imageResolution;
-
-		std::size_t buffersStagingSize;
-		std::size_t imageStagingSize;
+		std::size_t vertexCount;
+		std::size_t indexCount;
+		std::size_t materialCount;
 	};
+
+	struct SceneAllocationInfo {
+		std::array<ResourceManager::BufferDescription, SceneBuffersCount> geometryBuffers;
+		std::vector<ResourceManager::BufferDescription> stagingSharedBuffers;
+
+		std::vector<ResourceManager::ImageDescription> images;
+		std::vector<ResourceManager::BufferDescription> stagingImageBuffers;
+	};
+
 	struct SceneGeometry {
 		std::vector<Scene::PrimitiveBound> primitiveBounds;
 		float size = 0.0;
@@ -37,9 +44,8 @@ private:
 	fastgltf::Asset m_asset;
 	SceneInstance m_scene;
 	SceneGeometry m_sceneGeometry;
+	std::array<std::size_t, SceneLoader::SceneBuffersCount> m_bufferSizes;
 
-	std::array<MemorySpan, SceneBuffersCount> m_bufferDataLocations;
-	std::vector<MemorySpan> m_imageDataLocations;
 	ConcurrentStack<std::size_t> m_readyImages;
 
 	// Readybuffers is a faux stack that uses the same logic path of images, but we have for now only one thread
@@ -50,12 +56,13 @@ private:
 	std::vector<TextureUsage> m_textureUsages;
 
 public:
-	SceneLoader(std::filesystem::path path) : m_path(path) {}
-	SceneInstance getInstance();
+	SceneLoader(std::filesystem::path path);
 
-	void beginBufferLoad(void* stagingAddress, std::vector<std::size_t> registeredImageIndices);
+	SceneInstance getSceneInstance() { return m_scene; }
+	SceneAllocationInfo getAllocationInfo();
 
-	void beginImageLoad(void* stagingAddress);
+	void beginBufferLoad(std::span<void*> addresses, std::vector<std::size_t> registeredImageIndices);
+	void beginImageLoad(std::span<void*> stagingAddress);
 
 	struct LoadStatus {
 		std::vector<std::size_t> loadedImages;

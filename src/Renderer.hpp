@@ -15,15 +15,6 @@
 
 class Renderer {
 private:
-	struct StaticResources {
-		rendergraph::ResourceIndex vertexBuffer;
-		rendergraph::ResourceIndex vertexAttributeBuffer;
-		rendergraph::ResourceIndex indexBuffer;
-		rendergraph::ResourceIndex transforms;
-		rendergraph::ResourceIndex pbrMaterialData;
-		rendergraph::ResourceIndex primitiveData;
-	};
-
 	vk::Queue m_graphicsQueue;
 	vk::Queue m_presentQueue;
 	vk::CommandPool m_commandPool;
@@ -36,7 +27,7 @@ private:
 	MaterialManager m_materialManager;
 
 	RenderGraph m_graph;
-	StaticResources m_staticResources;
+	SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> m_sharedSceneBuffers;
 	struct Passes {
 		TaskIndex ui;
 		std::vector<TaskIndex> optionalPasses;
@@ -51,7 +42,7 @@ private:
 
 	static void reloadGraphBuffers(
 		ResourceManager::AllocationIndex allocation,
-		StaticResources staticResources,
+		SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> staticResources,
 		ResourceManager& resourceManager,
 		RenderGraph& rendergraph
 	);
