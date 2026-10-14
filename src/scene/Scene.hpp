@@ -33,7 +33,7 @@ struct Scene {
 	Light light;
 
 	ResourceManager::AllocationIndex allocation;
-	ResourceManager::AllocationIndex asAllocation;
 
+	BufferHandle tlasBuffer;
 	vk::AccelerationStructureKHR tlas;
 };

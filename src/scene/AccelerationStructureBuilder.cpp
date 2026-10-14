@@ -2,77 +2,98 @@
 
 #include "Instance.hpp"
 
-struct BLASInfo {
-	std::vector<vk::AccelerationStructureGeometryKHR> geometries;
-	std::vector<vk::AccelerationStructureBuildGeometryInfoKHR> geometryInfo;
-};
-BLASInfo buildBLASInfos(const std::vector<Primitive>& primitives, Buffer& vertexBuffer, Buffer& indexBuffer) {
-	vk::DeviceAddress vertexAddress =
-		Instance::Get().device.getBufferAddress(vk::BufferDeviceAddressInfo { .buffer = vertexBuffer.buffer });
-	vk::DeviceAddress indexAddress =
-		Instance::Get().device.getBufferAddress(vk::BufferDeviceAddressInfo { .buffer = indexBuffer.buffer });
+AccelerationStructureBuilder::BLASAllocationInfo AccelerationStructureBuilder::queryBLASAllocationInfo(
+	std::span<Primitive> primitives
+) {
+	auto& device = Instance::Get().device;
 
-	std::vector<vk::AccelerationStructureGeometryKHR> geometries(primitives.size());
-	std::vector<vk::AccelerationStructureBuildGeometryInfoKHR> geometryInfo(primitives.size());
+	std::vector<ResourceManager::BufferDescription> asBuffers;
+	asBuffers.reserve(primitives.size());
+	std::vector<ResourceManager::BufferDescription> scratchBuffers;
+	scratchBuffers.reserve(primitives.size());
 
-	for (int i = 0; i < primitives.size(); i++) {
-		auto& primitive = primitives[i];
-
-		vk::AccelerationStructureGeometryTrianglesDataKHR triangleData {
+	for (auto& primitive : primitives) {
+		vk::AccelerationStructureGeometryTrianglesDataKHR triangleLayout {
 			.vertexFormat = vk::Format::eR32G32B32Sfloat,
-			.vertexData = { vertexAddress + primitive.baseVertex * sizeof(glm::vec3) },
-			.vertexStride = sizeof(glm::vec3),
-			.maxVertex = primitive.vertexCount - 1,
 			.indexType = vk::IndexType::eUint32,
-			.indexData = { indexAddress + primitive.baseIndex * sizeof(uint32_t) },
 		};
 
-		geometries[i] = vk::AccelerationStructureGeometryKHR {
+		vk::AccelerationStructureGeometryKHR geometry {
 			.geometryType = vk::GeometryTypeKHR::eTriangles,
-			.geometry = { .triangles = triangleData },
+			.geometry = { .triangles = triangleLayout },
 			.flags = vk::GeometryFlagBitsKHR::eOpaque,
 		};
-
-		geometryInfo[i] = vk::AccelerationStructureBuildGeometryInfoKHR {
+		vk::AccelerationStructureBuildGeometryInfoKHR geometryInfo {
 			.type = vk::AccelerationStructureTypeKHR::eBottomLevel,
 			.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
 			.geometryCount = 1,
-			.pGeometries = &(geometries[i]),
+			.pGeometries = &geometry,
 		};
+
+		auto sizes = device.getAccelerationStructureBuildSizesKHR(
+			vk::AccelerationStructureBuildTypeKHR::eDevice, geometryInfo, primitive.indexCount / 3
+		);
+
+		asBuffers.push_back(
+			{
+				.size = (uint32_t)sizes.accelerationStructureSize,
+				.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
+			}
+		);
+
+		scratchBuffers.push_back(
+			{
+				.size = (uint32_t)sizes.buildScratchSize,
+				.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddressEXT,
+			}
+		);
 	}
 
-	return {
-		.geometries = std::move(geometries),
-		.geometryInfo = std::move(geometryInfo),
+	return BLASAllocationInfo {
+		.asBuffers = std::move(asBuffers),
+		.scratchBuffers = std::move(scratchBuffers),
 	};
 }
 
-struct Allocations {
-	ResourceManager::AllocationIndex AS;
-	ResourceManager::AllocationIndex scratch;
-};
-
-Allocations allocateASMemory(
-	const vk::AccelerationStructureBuildSizesInfoKHR& sizes, ResourceManager& resourceManager
+AccelerationStructureBuilder::TLASAllocationInfo AccelerationStructureBuilder::queryTLASAllocationInfo(
+	std::size_t primitiveInstancesCount
 ) {
-	ResourceManager::BufferDescription BLASBuffer {
-		.size = (uint32_t)sizes.accelerationStructureSize,
-		.usage =
-			vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress,
+	auto& device = Instance::Get().device;
+	vk::AccelerationStructureGeometryKHR geometry {
+		.geometryType = vk::GeometryTypeKHR::eInstances,
+	};
+	vk::AccelerationStructureBuildGeometryInfoKHR tlasGeometryInfo {
+		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
+		.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+		.geometryCount = 1,
+		.pGeometries = &geometry,
 	};
 
-	auto blasAllocation = resourceManager.createResources({}, { BLASBuffer }, ResourceManager::MemoryLocation::Device);
+	auto tlasSizes = device.getAccelerationStructureBuildSizesKHR(
+		vk::AccelerationStructureBuildTypeKHR::eDevice, tlasGeometryInfo, primitiveInstancesCount
+	);
 
-	ResourceManager::BufferDescription scratchBuffer {
-		.size = (uint32_t)sizes.buildScratchSize,
-		.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-				 vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eStorageBuffer,
+	ResourceManager::BufferDescription instanceBufferInfo = {
+		.size = static_cast<uint32_t>(primitiveInstancesCount * sizeof(vk::AccelerationStructureInstanceKHR)),
+		.usage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress
 	};
 
-	auto scratchAllocation =
-		resourceManager.createResources({}, { scratchBuffer }, ResourceManager::MemoryLocation::Device);
+	ResourceManager::BufferDescription asDescripton {
+		.size = (uint32_t)tlasSizes.accelerationStructureSize,
+		.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
+	};
 
-	return { blasAllocation, scratchAllocation };
+	ResourceManager::BufferDescription scratchDescription {
+		.size = (uint32_t)tlasSizes.buildScratchSize,
+		.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+	};
+
+	return {
+		.instanceData = instanceBufferInfo,
+		.asBuffer = asDescripton,
+		.scratchBuffer = scratchDescription,
+	};
 }
 
 void preLoadBarrier(vk::CommandBuffer& commandBuffer, Buffer& vertexBuffer, Buffer& indexBuffer) {
@@ -103,13 +124,11 @@ void preLoadBarrier(vk::CommandBuffer& commandBuffer, Buffer& vertexBuffer, Buff
 	);
 }
 void preLoadBarrier(
-	vk::CommandBuffer& commandBuffer, ResourceManager::AllocationIndex blasAllocation, ResourceManager& resourceManager
+	vk::CommandBuffer& commandBuffer, std::span<const BufferHandle> blasHandles, ResourceManager& resourceManager
 ) {
 	std::vector<vk::BufferMemoryBarrier2> barriers;
-	auto& handles = resourceManager.getBuffers(blasAllocation);
-	barriers.reserve(handles.size());
 
-	for (auto& handle : handles) {
+	for (auto& handle : blasHandles) {
 		auto& buffer = resourceManager.getBuffer(handle);
 
 		barriers.push_back(
@@ -133,47 +152,51 @@ void preLoadBarrier(
 	);
 }
 
-AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
+std::vector<vk::AccelerationStructureKHR> AccelerationStructureBuilder::buildBLAS(
 	vk::CommandBuffer& commandBuffer, const AccelerationStructureBuilder::BuildBLASInfo& info
 ) {
 	auto& device = Instance::Get().device;
+	auto& vertexBuffer = info.resourceManager.getBuffer(info.vertexBuffer);
+	auto& indexBuffer = info.resourceManager.getBuffer(info.indexBuffer);
+	preLoadBarrier(commandBuffer, vertexBuffer, indexBuffer);
 
-	preLoadBarrier(commandBuffer, info.vertexBuffer, info.indexBuffer);
-	auto BLASInfos = buildBLASInfos(info.primitives, info.vertexBuffer, info.indexBuffer);
-
-	std::vector<vk::AccelerationStructureBuildSizesInfoKHR> sizes(info.primitives.size());
-	std::vector<ResourceManager::BufferDescription> blasDescriptions(info.primitives.size());
-	std::vector<ResourceManager::BufferDescription> scratchBuffersDescriptions(info.primitives.size());
-
-	for (int i = 0; i < info.primitives.size(); i++) {
-		sizes[i] = device.getAccelerationStructureBuildSizesKHR(
-			vk::AccelerationStructureBuildTypeKHR::eDevice, BLASInfos.geometryInfo[i], info.primitives[i].indexCount / 3
-		);
-
-		blasDescriptions[i] = {
-			.size = (uint32_t)sizes[i].accelerationStructureSize,
-			.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-					 vk::BufferUsageFlagBits::eShaderDeviceAddress,
-		};
-		scratchBuffersDescriptions[i] = {
-			.size = (uint32_t)sizes[i].buildScratchSize,
-			.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress,
-		};
-	}
-	auto sceneBLASAllocation =
-		m_resourceManager.createResources({}, blasDescriptions, ResourceManager::MemoryLocation::Device);
-	auto sceneScratchAllocation =
-		m_resourceManager.createResources({}, scratchBuffersDescriptions, ResourceManager::MemoryLocation::Device);
-
-	auto blasBuffersHandles = m_resourceManager.getBuffers(sceneBLASAllocation);
+	vk::DeviceAddress vertexAddress =
+		Instance::Get().device.getBufferAddress(vk::BufferDeviceAddressInfo { .buffer = vertexBuffer.buffer });
+	vk::DeviceAddress indexAddress =
+		Instance::Get().device.getBufferAddress(vk::BufferDeviceAddressInfo { .buffer = indexBuffer.buffer });
 
 	std::vector<vk::AccelerationStructureKHR> blas(info.primitives.size());
 
+	std::vector<vk::AccelerationStructureGeometryKHR> geometries(info.primitives.size());
+	std::vector<vk::AccelerationStructureBuildGeometryInfoKHR> geometryInfos(info.primitives.size());
 	std::vector<vk::AccelerationStructureBuildRangeInfoKHR> buildRangesData(info.primitives.size());
 	std::vector<vk::AccelerationStructureBuildRangeInfoKHR*> buildRanges(info.primitives.size());
 
 	for (int i = 0; i < info.primitives.size(); i++) {
-		auto& buffer = m_resourceManager.getBuffer(blasBuffersHandles[i]);
+		auto& primitive = info.primitives[i];
+		auto& buffer = info.resourceManager.getBuffer(info.blasBuffers[i]);
+
+		vk::AccelerationStructureGeometryTrianglesDataKHR triangleData {
+			.vertexFormat = vk::Format::eR32G32B32Sfloat,
+			.vertexData = { vertexAddress + primitive.baseVertex * sizeof(glm::vec3) },
+			.vertexStride = sizeof(glm::vec3),
+			.maxVertex = primitive.vertexCount - 1,
+			.indexType = vk::IndexType::eUint32,
+			.indexData = { indexAddress + primitive.baseIndex * sizeof(uint32_t) },
+		};
+
+		geometries[i] = vk::AccelerationStructureGeometryKHR {
+			.geometryType = vk::GeometryTypeKHR::eTriangles,
+			.geometry = { .triangles = triangleData },
+			.flags = vk::GeometryFlagBitsKHR::eOpaque,
+		};
+
+		geometryInfos[i] = vk::AccelerationStructureBuildGeometryInfoKHR {
+			.type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+			.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+			.geometryCount = 1,
+			.pGeometries = &(geometries[i]),
+		};
 
 		vk::AccelerationStructureCreateInfoKHR createInfo = {
 			.buffer = buffer.buffer,
@@ -184,13 +207,12 @@ AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
 
 		blas[i] = device.createAccelerationStructureKHR(createInfo);
 
-		BLASInfos.geometryInfo[i].dstAccelerationStructure = blas[i];
+		geometryInfos[i].dstAccelerationStructure = blas[i];
 
-		auto scratchBufferAddress = device.getBufferAddress(
-			{ .buffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(sceneScratchAllocation)[i]).buffer }
-		);
+		auto scratchBufferAddress =
+			device.getBufferAddress({ .buffer = info.resourceManager.getBuffer(info.scratchBuffers[i]).buffer });
 
-		BLASInfos.geometryInfo[i].scratchData = vk::DeviceOrHostAddressKHR(scratchBufferAddress);
+		geometryInfos[i].scratchData = vk::DeviceOrHostAddressKHR(scratchBufferAddress);
 
 		buildRangesData[i] = vk::AccelerationStructureBuildRangeInfoKHR {
 			.primitiveCount = info.primitives[i].indexCount / 3,
@@ -198,17 +220,14 @@ AccelerationStructureBuilder::BLASData AccelerationStructureBuilder::buildBLAS(
 			.firstVertex = 0,
 			.transformOffset = 0,
 		};
+
 		buildRanges[i] = &(buildRangesData[i]);
 	}
 
-	commandBuffer.buildAccelerationStructuresKHR(
-		BLASInfos.geometryInfo.size(), BLASInfos.geometryInfo.data(), buildRanges.data()
-	);
-	preLoadBarrier(commandBuffer, sceneBLASAllocation, m_resourceManager);
-	return {
-		.allocation = sceneBLASAllocation,
-		.blas = std::move(blas),
-	};
+	commandBuffer.buildAccelerationStructuresKHR(geometryInfos.size(), geometryInfos.data(), buildRanges.data());
+
+	preLoadBarrier(commandBuffer, info.blasBuffers, info.resourceManager);
+	return blas;
 }
 
 vk::TransformMatrixKHR getTransform(const glm::mat4& transform) {
@@ -231,20 +250,12 @@ vk::TransformMatrixKHR getTransform(const glm::mat4& transform) {
 	return res;
 }
 
-AccelerationStructureBuilder::TLASData AccelerationStructureBuilder::buildTLAS(
+vk::AccelerationStructureKHR AccelerationStructureBuilder::buildTLAS(
 	vk::CommandBuffer& commandBuffer, const AccelerationStructureBuilder::BuildTLASInfo& info
 ) {
 	auto& device = Instance::Get().device;
 
-	ResourceManager::BufferDescription instanceBufferInfo = {
-		.size = static_cast<uint32_t>(info.primitives.size() * sizeof(vk::AccelerationStructureInstanceKHR)),
-		.usage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR |
-				 vk::BufferUsageFlagBits::eShaderDeviceAddress
-	};
-	auto instanceAllocation =
-		m_resourceManager.createResources({}, { instanceBufferInfo }, ResourceManager::MemoryLocation::HostVisible);
-
-	auto instanceBuffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(instanceAllocation)[0]);
+	auto instanceBuffer = info.resourceManager.getBuffer(info.instancesBuffer);
 	auto instances = (vk::AccelerationStructureInstanceKHR*)instanceBuffer.data;
 
 	for (int i = 0; i < info.primitives.size(); i++) {
@@ -274,25 +285,26 @@ AccelerationStructureBuilder::TLASData AccelerationStructureBuilder::buildTLAS(
 		.geometry = geometryData,
 
 	};
+	auto scratchBufferAddress = device.getBufferAddress(
+		vk::BufferDeviceAddressInfo {
+			.buffer = info.resourceManager.getBuffer(info.scratchBuffer).buffer,
 
+		}
+	);
 	vk::AccelerationStructureBuildGeometryInfoKHR geometryInfo {
 		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
 		.mode = vk::BuildAccelerationStructureModeKHR::eBuild,
 		.geometryCount = 1,
 		.pGeometries = &tlasGeometry,
-
+		.scratchData = { .deviceAddress = scratchBufferAddress },
 	};
 
-	auto sizes = device.getAccelerationStructureBuildSizesKHR(
-		vk::AccelerationStructureBuildTypeKHR::eDevice, geometryInfo, info.primitives.size()
-	);
-
-	auto allocations = allocateASMemory(sizes, m_resourceManager);
+	auto& asBuffer = info.resourceManager.getBuffer(info.asBuffer);
 
 	vk::AccelerationStructureCreateInfoKHR createInfo {
-		.buffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(allocations.AS)[0]).buffer,
+		.buffer = asBuffer.buffer,
 		.offset = 0,
-		.size = sizes.accelerationStructureSize,
+		.size = asBuffer.size,
 		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
 	};
 
@@ -307,17 +319,7 @@ AccelerationStructureBuilder::TLASData AccelerationStructureBuilder::buildTLAS(
 		.transformOffset = 0,
 	};
 
-	geometryInfo.scratchData.deviceAddress = device.getBufferAddress(
-		vk::BufferDeviceAddressInfo {
-			.buffer = m_resourceManager.getBuffer(m_resourceManager.getBuffers(allocations.scratch)[0]).buffer,
-
-		}
-	);
-
 	commandBuffer.buildAccelerationStructuresKHR({ geometryInfo }, { &rangeInfo });
 
-	return {
-		.allocation = allocations.AS,
-		.tlas = tlas,
-	};
+	return tlas;
 }

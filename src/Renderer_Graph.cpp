@@ -23,6 +23,7 @@ Renderer::Passes Renderer::createRenderGraph() {
 	m_sharedSceneBuffers.transforms = m_graph.registerBuffer("transforms_buffer");
 	m_sharedSceneBuffers.materialData = m_graph.registerBuffer("pbr_data_buffer");
 	m_sharedSceneBuffers.primitiveData = m_graph.registerBuffer("primitive_data");
+	m_sharedSceneBuffers.tlas = m_graph.registerBuffer("tlas");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,
@@ -32,7 +33,7 @@ Renderer::Passes Renderer::createRenderGraph() {
 	auto sceneData = core::sceneData(context);
 
 	auto sdrOutput = core::sdrOutput(context);
-	auto raytracingDebug = raytracing_debug(context, m_staticResources.accellerationStructure, sceneData, sdrOutput);
+	auto raytracingDebug = raytracing_debug(context, m_sharedSceneBuffers.tlas, sceneData, sdrOutput);
 	optionalPasses.push_back(raytracingDebug);
 
 	auto ui = core::ui(context, sdrOutput);

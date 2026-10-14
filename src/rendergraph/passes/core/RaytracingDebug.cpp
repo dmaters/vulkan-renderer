@@ -26,7 +26,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	};
 }
 static void build(Task::BuildContext& context) {
-	if (context.scene.allocation == context.scene.asAllocation) return;
+	if (context.scene.tlas == nullptr) return;
 
 	RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::Read);
 	RenderPass::QuadDraw(context, context.getData<RayTracingData>().material);

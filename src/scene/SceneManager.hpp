@@ -20,8 +20,11 @@ private:
 	struct LoadingData {
 		std::unique_ptr<SceneLoader> sceneLoader;
 		Scene mergedScene;
+		std::vector<vk::AccelerationStructureKHR> BLAS;
 		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex sharedAllocation;
+		ResourceManager::AllocationIndex scratchAllocation;
+
 		std::size_t resourceLoadedCount = 0;
 
 		vk::CommandPool commandPool;
@@ -35,10 +38,10 @@ private:
 
 	std::optional<LoadingData> m_loadingData;
 
-
 	std::vector<SceneLoader::SceneInstance> m_scenes;
 	std::vector<SceneLoader::SceneGeometry> m_scenesGeometry;
-	std::vector<ResourceManager::AllocationIndex> m_sceneTextureAllocations;
+	std::vector<ResourceManager::AllocationIndex> m_scenesAllocations;
+	std::vector<std::vector<vk::AccelerationStructureKHR>> m_scenesBLAS;
 	using SceneGeometryBufferDescriptions =
 		std::array<ResourceManager::BufferDescription, SceneLoader::SceneBuffersCount>;
 	std::vector<SceneGeometryBufferDescriptions> m_sharedBuffersDescriptions;
@@ -67,8 +70,8 @@ public:
 
 template <typename T>
 union SceneManager::SharedBufferContainer {
-	static const std::size_t Count = SceneLoader::SceneBuffersCount + 1;
-	std::array<T, SceneLoader::SceneBuffersCount + 1> values;
+	static const std::size_t Count = SceneLoader::SceneBuffersCount + 2;
+	std::array<T, Count> values;
 
 	struct {
 		T vertices;
@@ -77,6 +80,7 @@ union SceneManager::SharedBufferContainer {
 		T transforms;
 		T materialData;
 		T primitiveData;
+		T tlas;
 	};
 
 	constexpr std::span<const T, SceneLoader::SceneBuffersCount> sceneLoaderBuffers() const {
