@@ -109,12 +109,12 @@ void Renderer::render() {
 			Instance::Get().device.waitIdle();
 			m_loadingScene = false;
 			auto scene = m_sceneManager.getScene();
+			auto camera = m_scene.camera;
+			auto light = m_scene.light;
+			m_scene = scene;
+			m_scene.camera = camera;
+			m_scene.light = light;
 
-			m_scene.primitives = scene.primitives;
-			m_scene.materialHints = scene.materialHints;
-			m_scene.primitiveBounds = scene.primitiveBounds;
-			m_scene.allocation = scene.allocation;
-			m_scene.size = scene.size;
 
 			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, m_graph);
 

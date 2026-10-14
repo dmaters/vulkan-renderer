@@ -96,8 +96,8 @@ std::vector<TextureUsageType> getTextureUsages(const fastgltf::Asset& asset) {
 
 struct PrimitiveData {
 	std::vector<Primitive> primitives;
-	std::vector<Scene::MaterialHint> materialHints;
 	std::vector<glm::mat4> transforms;
+	std::vector<Scene::MaterialHint> materialHints;
 
 	std::array<std::size_t, SceneLoader::SceneBuffersCount> bufferSizes;
 };
@@ -133,11 +133,13 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 					{
 						.baseVertex = (uint32_t)vertexOffset,
 						.baseIndex = (uint32_t)indexOffset,
+						.vertexCount = (uint32_t)vertexCount,
 						.indexCount = (uint32_t)indexCount,
 						.materialIndex = (uint32_t)primitive.materialIndex.value_or(0),
 					}
 				);
 
+				transforms.push_back((glm::mat4&)matrix);
 				if (asset.materials[primitive.materialIndex.value()].alphaMode == fastgltf::AlphaMode::Mask)
 					materialHints.push_back(
 						Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::ShadowCasting |
@@ -148,8 +150,6 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 
 				vertexOffset += vertexCount;
 				indexOffset += indexCount;
-
-				transforms.push_back((glm::mat4&)matrix);
 			}
 		}
 	);
@@ -158,6 +158,7 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 
 	return {
 		.primitives = primitives,
+		.transforms = transforms,
 		.materialHints = materialHints,
 		.transforms = transforms,
 		.bufferSizes = bufferSizes,
@@ -424,11 +425,7 @@ struct SceneGeometry {
 };
 
 SceneGeometry loadGeometryBuffers(
-	const fastgltf::Asset& asset,
-	glm::vec3* vertices,
-	Vertex::Attributes* vertexAttributes,
-	uint32_t* indices,
-	glm::mat4* transforms
+	const fastgltf::Asset& asset, glm::vec3* vertices, Vertex::Attributes* vertexAttributes, uint32_t* indices
 ) {
 	std::vector<Scene::PrimitiveBound> primitiveBounds;
 	primitiveBounds.reserve(asset.meshes.size());
@@ -445,14 +442,12 @@ SceneGeometry loadGeometryBuffers(
 				vertexAttributes += primitiveData.vertexCount;
 				indices += primitiveData.indexCount;
 
-				*transforms = (glm::mat4&)matrix;
-				transforms += 1;
-
 				primitiveBounds.push_back(primitiveData.primitiveBounds);
 				sceneSize = std::max(primitiveData.primitiveBounds.size, sceneSize);
 			}
 		}
 	);
+
 	return {
 		.primitivesBounds = primitiveBounds,
 		.sceneSize = sceneSize,
@@ -501,7 +496,7 @@ void SceneLoader::beginBufferLoad(std::span<void*> addresses, std::vector<std::s
 		auto* indices = (uint32_t*)addresses[(int)SceneBuffers::Indices];
 		auto* transforms = (glm::mat4*)addresses[(int)SceneBuffers::Transforms];
 
-		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices, transforms);
+		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices);
 
 		sceneGeometry.primitiveBounds = std::move(sceneData.primitivesBounds);
 		sceneGeometry.size = sceneData.sceneSize;

@@ -10,6 +10,7 @@
 #include <span>
 #include <vector>
 
+#include "AccelerationStructureBuilder.hpp"
 #include "Common.hpp"
 #include "Instance.hpp"
 #include "material/MaterialDefinitions.hpp"
@@ -56,8 +57,7 @@ vk::CommandPool createCommandPool(bool graphicQueue = false) {
 	return instance.device.createCommandPool(
 		vk::CommandPoolCreateInfo {
 			.flags = vk::CommandPoolCreateFlagBits::eTransient,
-			.queueFamilyIndex = graphicQueue ? instance.queueFamiliesIndices.graphicsIndex
-											 : instance.queueFamiliesIndices.transferIndex,
+			.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
 		}
 	);
 }
@@ -110,7 +110,7 @@ void createPlaceholderTextures(
 	auto images = resourceManager.getImages(allocationIndex);
 	materialManager.registerTextureGroup(std::vector<ImageHandle>(images.begin(), images.end()));
 
-	auto tempPool = createCommandPool(true);
+	auto tempPool = createCommandPool();
 	ResourceWriteTransaction transaction(tempPool, resourceManager);
 	transaction.imageClear(
 		{
@@ -152,7 +152,8 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	SharedBufferContainer<ResourceManager::BufferDescription> dummyBuffers;
 	dummyBuffers.vertices = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.vertexAttributes = {
 		.size = 1,
@@ -164,7 +165,8 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	};
 	dummyBuffers.transforms = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.materialData = {
 		.size = 1,
@@ -196,6 +198,7 @@ SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& ma
 	m_semaphore = createSemaphore();
 	m_dummyAllocation = createDummyAllocation(resourceManager);
 	m_scene.allocation = m_dummyAllocation;
+	m_scene.asAllocation = m_dummyAllocation;
 
 	createPlaceholderTextures(resourceManager, materialManager, m_semaphore, ++m_transferCount);
 }
@@ -354,6 +357,7 @@ struct Offsets {
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 	uint32_t materialOffset = 0;
+	uint32_t tranformOffset = 0;
 };
 void composePrimitives(
 	const std::vector<Primitive>& scenePrimitives, std::vector<Primitive>& outputPrimitives, Offsets baseOffsets
@@ -364,8 +368,10 @@ void composePrimitives(
 			{
 				.baseVertex = primitive.baseVertex + baseOffsets.vertexOffset,
 				.baseIndex = primitive.baseIndex + baseOffsets.indexOffset,
+				.vertexCount = primitive.vertexCount,
 				.indexCount = primitive.indexCount,
 				.materialIndex = primitive.materialIndex + baseOffsets.materialOffset,
+				.baseTransform = baseOffsets.tranformOffset,
 			}
 		);
 	}
@@ -377,6 +383,10 @@ Scene mergeSceneInstances(const std::vector<SceneLoader::SceneInstance>& scenes)
 	Offsets offsets;
 	for (int i = 0; i < scenes.size(); i++) {
 		auto& sceneInstance = scenes[i];
+
+		scene.transforms.insert(
+			scene.transforms.end(), sceneInstance.transforms.begin(), sceneInstance.transforms.end()
+		);
 
 		scene.materialHints.insert(
 			scene.materialHints.end(), sceneInstance.materialHints.begin(), sceneInstance.materialHints.end()
@@ -496,6 +506,40 @@ void loadData(
 	}
 }
 
+AccelerationStructureBuilder::TLASData buildAS(
+	ResourceWriteTransaction& transaction,
+	AccelerationStructureBuilder& builder,
+	ResourceManager& resourceManager,
+	Scene& mergedScene
+) {
+	auto bufferHandles = resourceManager.getBuffers(mergedScene.allocation);
+
+	AccelerationStructureBuilder::BLASData blasData;
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		blasData = builder.buildBLAS(
+			commandBuffer,
+			{
+				.primitives = mergedScene.primitives,
+				.vertexBuffer = resourceManager.getBuffer(bufferHandles[(int)SceneManager::SceneBufferType::Vertex]),
+				.indexBuffer = resourceManager.getBuffer(bufferHandles[(int)SceneManager::SceneBufferType::Index]),
+			}
+		);
+	});
+	AccelerationStructureBuilder::TLASData tlasData;
+
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		tlasData = builder.buildTLAS(
+			commandBuffer,
+			{
+				.primitives = mergedScene.primitives,
+				.blas = blasData.blas,
+				.transforms = mergedScene.transforms,
+			}
+		);
+	});
+	return tlasData;
+}
+
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
 	if (!std::filesystem::exists(path)) {
 		std::cout << "Scene not found : " + path.relative_path().string() << std::endl;
@@ -600,9 +644,14 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 			offsets.values,
 			m_resourceManager
 		);
+		AccelerationStructureBuilder asBuider(m_resourceManager);
+
+		auto asData = buildAS(transaction, asBuider, m_resourceManager, m_loadingData->scene);
+		m_loadingData->scene.asAllocation = asData.allocation;
+		m_loadingData->scene.tlas = asData.tlas;
 	}
 
-	transaction.submit(Instance::Get().transferQueue, m_semaphore, ++m_transferCount);
+	transaction.submit(Instance::Get().graphicQueue, m_semaphore, ++m_transferCount);
 
 	return count;
 }

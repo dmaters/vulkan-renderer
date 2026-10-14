@@ -35,6 +35,12 @@ struct Task::BuildContext {
 	Buffer& getBuffer(rendergraph::ResourceIndex index) { return resourceManager.getBuffer(buffers[index]); }
 
 	struct Descriptors {
+		struct AccelerationStructureData {
+			vk::AccelerationStructureKHR tlas;
+			vk::WriteDescriptorSetAccelerationStructureKHR accelerationStructureInfo;
+		};
+		std::unique_ptr<AccelerationStructureData> _accelerationStructure;
+
 		std::vector<vk::DescriptorImageInfo> _imageInfo = {};
 		std::vector<vk::DescriptorBufferInfo> _bufferInfo = {};
 		std::vector<vk::WriteDescriptorSet> descriptors = {};

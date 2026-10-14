@@ -14,10 +14,11 @@
 
 class SceneLoader {
 public:
-	static const uint32_t SceneBuffersCount = 5;
+	static const uint32_t SceneBuffersCount = 4;
 
 	struct SceneInstance {
 		std::vector<Primitive> primitives;
+		std::vector<glm::mat4> transforms;
 		std::vector<Scene::MaterialHint> materialHints;
 		std::vector<glm::mat4> transforms;
 

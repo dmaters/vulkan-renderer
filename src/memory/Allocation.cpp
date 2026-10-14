@@ -24,9 +24,12 @@ Allocation::Allocation(vk::MemoryPropertyFlags requiredType, uint32_t requiredSi
 		if ((memoryType.propertyFlags & requiredType) != requiredType ||
 			(properties.memoryHeaps[memoryType.heapIndex].size < requiredSize))
 			continue;
+		vk::MemoryAllocateFlagsInfo flagsInfo { .flags = vk::MemoryAllocateFlagBits::eDeviceAddress };
 
 		memory = device.allocateMemory(
+
 			vk::MemoryAllocateInfo {
+				.pNext = &flagsInfo,
 				.allocationSize = requiredSize,
 				.memoryTypeIndex = (uint32_t)i,
 			}
