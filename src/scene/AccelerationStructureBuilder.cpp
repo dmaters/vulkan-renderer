@@ -264,6 +264,7 @@ vk::AccelerationStructureKHR AccelerationStructureBuilder::buildTLAS(
 
 		instances[i] = vk::AccelerationStructureInstanceKHR {
 			.transform = getTransform(info.transforms[i]),
+			.instanceCustomIndex = (uint32_t)i,
 			.mask = 0xFF,
 			.accelerationStructureReference = blasDeviceAddr,
 		};

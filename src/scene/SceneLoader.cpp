@@ -274,7 +274,7 @@ SceneLoader::SceneAllocationInfo SceneLoader::getAllocationInfo() {
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::VertexAttribute],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer,
+					 vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eStorageBuffer,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Indices],

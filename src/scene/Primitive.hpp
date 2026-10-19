@@ -9,9 +9,13 @@ struct Vertex {
 
 	struct Attributes {
 		glm::vec3 normal;
+		uint32_t _padding0;
 		glm::vec3 tangent;
+		uint32_t _padding1;
 		glm::vec3 bitangent;
+		uint32_t _padding2;
 		glm::vec2 texcoord;
+		uint32_t _padding3[2];
 	};
 };
 

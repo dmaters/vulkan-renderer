@@ -733,6 +733,8 @@ Scene SceneManager::getScene() {
 
 	if (m_sharedAllocation) m_resourceManager.freeAllocation(*m_sharedAllocation);
 	m_resourceManager.freeAllocation(m_loadingData->stagingAllocation);
+	m_resourceManager.freeAllocation(m_loadingData->scratchAllocation);
+
 	m_sharedAllocation = m_loadingData->sharedAllocation;
 	m_scene.allocation = m_loadingData->sharedAllocation;
 	Instance::Get().device.destroyCommandPool(m_loadingData->commandPool);

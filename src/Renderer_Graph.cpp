@@ -33,7 +33,16 @@ Renderer::Passes Renderer::createRenderGraph() {
 	auto sceneData = core::sceneData(context);
 
 	auto sdrOutput = core::sdrOutput(context);
-	auto raytracingDebug = raytracing_debug(context, m_sharedSceneBuffers.tlas, sceneData, sdrOutput);
+	auto raytracingDebug = raytracing_debug(
+		context,
+		m_sharedSceneBuffers.tlas,
+		m_sharedSceneBuffers.indices,
+		m_sharedSceneBuffers.primitiveData,
+		m_sharedSceneBuffers.vertexAttributes,
+		m_sharedSceneBuffers.materialData,
+		sceneData,
+		sdrOutput
+	);
 	optionalPasses.push_back(raytracingDebug);
 
 	auto ui = core::ui(context, sdrOutput);

@@ -7,6 +7,11 @@
 
 struct RayTracingData {
 	rendergraph::ResourceIndex accelerationStructure;
+	rendergraph::ResourceIndex indexBuffer;
+	rendergraph::ResourceIndex primitiveData;
+	rendergraph::ResourceIndex vertexAttributes;
+	rendergraph::ResourceIndex materialData;
+
 	TaskIndex sceneData;
 	TaskIndex outputTask;
 
@@ -21,6 +26,10 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 		.inputs = {
                 { cameraBuffer, ResourceUsage::Type::UniformBuffer },
     			{ data.accelerationStructure, ResourceUsage::Type::AccellerationStructureRead },
+    			{ data.indexBuffer, ResourceUsage::Type::StorageBufferRead },
+    			{ data.primitiveData, ResourceUsage::Type::StorageBufferRead },
+    			{ data.vertexAttributes, ResourceUsage::Type::StorageBufferRead },
+    			{ data.materialData, ResourceUsage::Type::StorageBufferRead },
 	        },
 		.outputs = { { context.getReference(data.outputTask, 0), ResourceUsage::Type::ColorAttachmentWrite } },
 	};
@@ -35,6 +44,10 @@ static void build(Task::BuildContext& context) {
 TaskIndex rendergraph::passes::raytracing_debug(
 	PassBuildContext& context,
 	rendergraph::ResourceIndex accelerationStructure,
+	rendergraph::ResourceIndex indexBuffer,
+	rendergraph::ResourceIndex primitiveData,
+	rendergraph::ResourceIndex vertexAttributes,
+	rendergraph::ResourceIndex materialData,
 	TaskIndex sceneData,
 	TaskIndex outputTask
 ) {
@@ -51,6 +64,11 @@ TaskIndex rendergraph::passes::raytracing_debug(
 		{
 			{ vk::DescriptorType::eUniformBuffer },
 			{ vk::DescriptorType::eAccelerationStructureKHR },
+			{ vk::DescriptorType::eStorageBuffer },
+			{ vk::DescriptorType::eStorageBuffer },
+			{ vk::DescriptorType::eStorageBuffer },
+			{ vk::DescriptorType::eStorageBuffer },
+
 		}
 	);
 	return context.renderGraph.addTask(
@@ -58,6 +76,10 @@ TaskIndex rendergraph::passes::raytracing_debug(
 		{ .setup = setup, .build = build },
 		RayTracingData {
 			.accelerationStructure = accelerationStructure,
+			.indexBuffer = indexBuffer,
+			.primitiveData = primitiveData,
+			.vertexAttributes = vertexAttributes,
+			.materialData = materialData,
 			.sceneData = sceneData,
 			.outputTask = outputTask,
 			.material = material,
