@@ -19,7 +19,6 @@ struct PBRmaterial {
 [vk_binding(4)] StructuredBuffer<Vertex::Attributes> _vertexAttributes;
 [vk_binding(5)] StructuredBuffer<PBRmaterial> _materialData;
 
-
 struct VertexOutput {
 	float4 position : SV_Position;
 	float2 tex_coord : TEXCOORD0;
@@ -33,30 +32,30 @@ float4 main(VertexOutput vOutput) {
 	float3 direction = mul(_camera.invView, float4(cameraSpaceDir.xyz, 0)).xyz;
 	direction = normalize(direction);
 
-	Optional<TraceRayResults> res = TraceRay(_camera.position.xyz, direction, _camera.farPlane, _accellerationStructure);
+	Optional<TraceRayResults> res =
+		TraceRay(_camera.position.xyz, direction, _camera.farPlane, _accellerationStructure);
 
-    if(!res.hasValue) return float4(0);
+	if (!res.hasValue) return float4(0);
 
-    PrimitiveData primitiveData = _primitiveData[res.value.primitiveID];
+	PrimitiveData primitiveData = _primitiveData[res.value.primitiveID];
 
-    uint3 index = uint3(
-        _indices[primitiveData.indexOffset + res.value.baseIndex + 0],
-        _indices[primitiveData.indexOffset + res.value.baseIndex + 1],
-        _indices[primitiveData.indexOffset + res.value.baseIndex + 2]
-    );
+	uint3 index = uint3(
+		_indices[primitiveData.indexOffset + res.value.baseIndex + 0],
+		_indices[primitiveData.indexOffset + res.value.baseIndex + 1],
+		_indices[primitiveData.indexOffset + res.value.baseIndex + 2]
+	);
 
-    Vertex::Attributes attributes[3] = {
-        _vertexAttributes[primitiveData.vertexOffset + index[0]],
-        _vertexAttributes[primitiveData.vertexOffset + index[1]],
-        _vertexAttributes[primitiveData.vertexOffset + index[2]],
-    };
+	Vertex::Attributes attributes[3] = {
+		_vertexAttributes[primitiveData.vertexOffset + index[0]],
+		_vertexAttributes[primitiveData.vertexOffset + index[1]],
+		_vertexAttributes[primitiveData.vertexOffset + index[2]],
+	};
 
-    float2 uv = attributes[0].texCoord * res.value.barycentrics.x + attributes[1].texCoord * res.value.barycentrics.y + attributes[2].texCoord * res.value.barycentrics.z;
-    PBRmaterial material = _materialData[primitiveData.materialIndex];
+	float2 uv = attributes[0].texCoord * res.value.barycentrics.x + attributes[1].texCoord * res.value.barycentrics.y +
+				attributes[2].texCoord * res.value.barycentrics.z;
+	PBRmaterial material = _materialData[primitiveData.materialIndex];
 
+	float4 albedo = _staticTextures[material.albedo_texture].Sample(_samplers[SamplerType::LinearRepeat], uv);
 
-    float4 albedo = _staticTextures[material.albedo_texture].Sample(_samplers[SamplerType::LinearRepeat], uv);
-    return float4(albedo.xyz, 1);
-
-
+	return float4(albedo.xyz, 1);
 }
