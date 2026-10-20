@@ -60,7 +60,7 @@ struct PipelineStateCreateInfo {
 											   },
 			vk::VertexInputBindingDescription {
 											   .binding = 1,
-											   .stride = 44,
+											   .stride = 64,
 											   .inputRate = vk::VertexInputRate::eVertex,
 											   },
 			vk::VertexInputBindingDescription {
@@ -87,19 +87,19 @@ struct PipelineStateCreateInfo {
 												 .location = 2,
 												 .binding = 1,
 												 .format = vk::Format::eR32G32B32Sfloat,
-												 .offset = 12,
+												 .offset = 16,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 3,
 												 .binding = 1,
 												 .format = vk::Format::eR32G32B32Sfloat,
-												 .offset = 24,
+												 .offset = 32,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 4,
 												 .binding = 1,
 												 .format = vk::Format::eR32G32Sfloat,
-												 .offset = 36,
+												 .offset = 48,
 												 },
 			vk::VertexInputAttributeDescription {
 												 .location = 5,
