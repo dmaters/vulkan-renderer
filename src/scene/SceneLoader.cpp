@@ -98,7 +98,6 @@ struct PrimitiveData {
 	std::vector<Primitive> primitives;
 	std::vector<glm::mat4> transforms;
 	std::vector<Scene::MaterialHint> materialHints;
-
 	std::array<std::size_t, SceneLoader::SceneBuffersCount> bufferSizes;
 };
 
@@ -160,9 +159,7 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 		.primitives = primitives,
 		.transforms = transforms,
 		.materialHints = materialHints,
-		.transforms = transforms,
 		.bufferSizes = bufferSizes,
-
 	};
 }
 
@@ -233,7 +230,6 @@ ImageData loadImageData(
 
 		formats.push_back(getFormat(compressedFormat));
 		resolutions.push_back({ width, height });
-
 	}
 	return {
 		.sizes = imageDataSizes,
@@ -252,8 +248,8 @@ SceneLoader::SceneLoader(std::filesystem::path path) : m_path(path) {
 
 	m_scene = {
 		.primitives = std::move(primitiveData.primitives),
-		.materialHints = std::move(primitiveData.materialHints),
 		.transforms = std::move(primitiveData.transforms),
+		.materialHints = std::move(primitiveData.materialHints),
 		.vertexCount = primitiveData.bufferSizes[(int)SceneBuffers::Vertex] / sizeof(Vertex),
 		.indexCount = primitiveData.bufferSizes[(int)SceneBuffers::Indices] / sizeof(uint32_t),
 		.materialCount =
@@ -425,7 +421,11 @@ struct SceneGeometry {
 };
 
 SceneGeometry loadGeometryBuffers(
-	const fastgltf::Asset& asset, glm::vec3* vertices, Vertex::Attributes* vertexAttributes, uint32_t* indices
+	const fastgltf::Asset& asset,
+	glm::vec3* vertices,
+	Vertex::Attributes* vertexAttributes,
+	uint32_t* indices,
+	glm::mat4* transforms
 ) {
 	std::vector<Scene::PrimitiveBound> primitiveBounds;
 	primitiveBounds.reserve(asset.meshes.size());
@@ -444,6 +444,9 @@ SceneGeometry loadGeometryBuffers(
 
 				primitiveBounds.push_back(primitiveData.primitiveBounds);
 				sceneSize = std::max(primitiveData.primitiveBounds.size, sceneSize);
+
+				*transforms = (glm::mat4&)matrix;
+				transforms++;
 			}
 		}
 	);
@@ -496,7 +499,7 @@ void SceneLoader::beginBufferLoad(std::span<void*> addresses, std::vector<std::s
 		auto* indices = (uint32_t*)addresses[(int)SceneBuffers::Indices];
 		auto* transforms = (glm::mat4*)addresses[(int)SceneBuffers::Transforms];
 
-		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices);
+		auto sceneData = loadGeometryBuffers(asset, vertexAddress, vertexAttributes, indices, transforms);
 
 		sceneGeometry.primitiveBounds = std::move(sceneData.primitivesBounds);
 		sceneGeometry.size = sceneData.sceneSize;
