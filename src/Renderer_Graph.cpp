@@ -32,25 +32,6 @@ Renderer::Passes Renderer::createRenderGraph() {
 	};
 	auto sceneData = core::sceneData(context);
 
-	auto sdrOutput = core::sdrOutput(context);
-	auto raytracingDebug = raytracing_debug(
-		context,
-		m_sharedSceneBuffers.tlas,
-		m_sharedSceneBuffers.indices,
-		m_sharedSceneBuffers.primitiveData,
-		m_sharedSceneBuffers.vertexAttributes,
-		m_sharedSceneBuffers.materialData,
-		sceneData,
-		sdrOutput
-	);
-	optionalPasses.push_back(raytracingDebug);
-
-	auto ui = core::ui(context, sdrOutput);
-	optionalPasses.push_back(ui);
-
-	return { .ui = ui, .optionalPasses = optionalPasses };
-
-	/*
 	auto transmittanceLUT = procedural_sky::transmittanceLUT(context);
 	auto multiscatteringLUT = procedural_sky::multiscatteringLUT(context, transmittanceLUT);
 	auto skyviewLUT = procedural_sky::skyviewLUT(context, sceneData, transmittanceLUT, multiscatteringLUT);
@@ -87,5 +68,4 @@ Renderer::Passes Renderer::createRenderGraph() {
 	optionalPasses.push_back(ui);
 
 	return { .ui = ui, .optionalPasses = optionalPasses };
- */
 }
