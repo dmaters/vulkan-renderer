@@ -275,16 +275,22 @@ std::optional<Pipeline> PipelineBuilder::BuildRaytracingPipeline(const Raytracin
 		.pStages = info.shaderStages.data(),
 		.groupCount = (uint32_t)info.groups.size(),
 		.pGroups = info.groups.data(),
+		.maxPipelineRayRecursionDepth = 1,
 		.layout = getLayout(info.setLayouts),
 	};
 
 	auto res = device.createRayTracingPipelineKHR(deferredOperation, vk::PipelineCache(), pipelineInfo);
 	if (res.result != vk::Result::eOperationDeferredKHR && res.result != vk::Result::eOperationNotDeferredKHR &&
-		res.result != vk::Result::eSuccess)
+		res.result != vk::Result::eSuccess) {
+		device.destroyDeferredOperationKHR(deferredOperation);
 		return std::nullopt;
+	}
 
 	auto joinRes = device.deferredOperationJoinKHR(deferredOperation);
-	if (joinRes != vk::Result::eSuccess) return std::nullopt;
+	if (joinRes != vk::Result::eSuccess) {
+		device.destroyDeferredOperationKHR(deferredOperation);
+		return std::nullopt;
+	}
 
 	device.destroyDeferredOperationKHR(deferredOperation);
 

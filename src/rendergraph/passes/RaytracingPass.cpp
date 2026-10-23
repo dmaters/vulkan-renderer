@@ -8,7 +8,7 @@ static const uint32_t Alignment = 64;
 
 ResourceManager::BufferDescription RaytracingPass::GetSBTDescription() {
 	return {
-		.size = GroupSize * 4,
+		.size = std::max(GroupSize, Alignment) * 4,
 		.usage = vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 }
@@ -47,8 +47,8 @@ void RaytracingPass::TraceRays(
 			{}
 		);
 
-	using GroupHandles = std::array<std::byte, GroupSize * 4>;
-	auto handlesData = device.getRayTracingShaderGroupHandleKHR<GroupHandles>(pipeline.pipeline, 0, 4);
+	std::array<std::byte, GroupSize * 4> handlesData;
+	auto _ = device.getRayTracingShaderGroupHandlesKHR(pipeline.pipeline, 0, 4, handlesData.size(), handlesData.data());
 
 	auto groupMappedAddress = (std::byte*)buffer.data;
 	for (int i = 0; i < 4; i++) {

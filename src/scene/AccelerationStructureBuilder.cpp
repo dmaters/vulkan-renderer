@@ -60,8 +60,10 @@ AccelerationStructureBuilder::TLASAllocationInfo AccelerationStructureBuilder::q
 	std::size_t primitiveInstancesCount
 ) {
 	auto& device = Instance::Get().device;
+
 	vk::AccelerationStructureGeometryKHR geometry {
 		.geometryType = vk::GeometryTypeKHR::eInstances,
+		.geometry = { .instances = vk::AccelerationStructureGeometryInstancesDataKHR {} },
 	};
 	vk::AccelerationStructureBuildGeometryInfoKHR tlasGeometryInfo {
 		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
@@ -88,7 +90,7 @@ AccelerationStructureBuilder::TLASAllocationInfo AccelerationStructureBuilder::q
 
 	ResourceManager::BufferDescription scratchDescription {
 		.size = (uint32_t)tlasSizes.buildScratchSize,
-		.usage = vk::BufferUsageFlagBits::eStorageBuffer,
+		.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 
 	return {
@@ -104,7 +106,7 @@ void preLoadBarrier(vk::CommandBuffer& commandBuffer, Buffer& vertexBuffer, Buff
 		.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
 		.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
 		.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
-		.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR,
+		.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead,
 
 		.buffer = vertexBuffer.buffer,
 		.size = vertexBuffer.size,
@@ -113,7 +115,7 @@ void preLoadBarrier(vk::CommandBuffer& commandBuffer, Buffer& vertexBuffer, Buff
 		.srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
 		.srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
 		.dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
-		.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR,
+		.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead,
 
 		.buffer = indexBuffer.buffer,
 		.size = indexBuffer.size,
@@ -138,7 +140,7 @@ void preLoadBarrier(
 				.srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
 				.srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR,
 				.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
-				.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR,
+				.dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead,
 
 				.buffer = buffer.buffer,
 				.size = buffer.size,

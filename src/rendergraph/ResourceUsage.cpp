@@ -71,19 +71,20 @@ Access ResourceUsage::GetAccess(Type type) {
 			};
 		case Type::UniformBuffer:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
+				.stage = vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader |
+						 vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
 				.access = vk::AccessFlagBits2::eUniformRead,
 				.layout = vk::ImageLayout::eUndefined,
 			};
 		case Type::StorageBufferWrite:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eComputeShader,
+				.stage = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
 				.access = vk::AccessFlagBits2::eShaderStorageWrite,
 				.layout = vk::ImageLayout::eUndefined,
 			};
 		case Type::StorageBufferRead:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eComputeShader,
+				.stage = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
 				.access = vk::AccessFlagBits2::eShaderStorageRead,
 				.layout = vk::ImageLayout::eUndefined,
 			};

@@ -509,7 +509,7 @@ void loadData(
 }
 
 struct ASData {
-	std::vector<vk::AccelerationStructureKHR> blas;
+	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
 	vk::AccelerationStructureKHR tlas;
 };
 ASData buildAS(
@@ -538,9 +538,11 @@ ASData buildAS(
 
 	AccelerationStructureBuilder builder;
 
-	std::vector<vk::AccelerationStructureKHR> blas(mergedBLAS);
+	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
+	std::vector<vk::AccelerationStructureKHR> combinedBLAS(mergedBLAS);
+
 	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
-		auto sceneBLAS = builder.buildBLAS(
+		sceneBLAS = builder.buildBLAS(
 			commandBuffer,
 			{
 				.primitives = scene.primitives,
@@ -552,7 +554,7 @@ ASData buildAS(
 			}
 		);
 
-		blas.insert(blas.end(), sceneBLAS.begin(), sceneBLAS.end());
+		combinedBLAS.insert(combinedBLAS.end(), sceneBLAS.begin(), sceneBLAS.end());
 	});
 
 	vk::AccelerationStructureKHR tlas;
@@ -565,7 +567,7 @@ ASData buildAS(
 			commandBuffer,
 			{
 				.primitives = mergedScene.primitives,
-				.blas = blas,
+				.blas = combinedBLAS,
 				.transforms = mergedScene.transforms,
 				.instancesBuffer = *tlasInstanceHandle,
 				.asBuffer = sharedBuffers.tlas,
@@ -575,7 +577,7 @@ ASData buildAS(
 		);
 	});
 	return {
-		.blas = std::move(blas),
+		.sceneBLAS = std::move(sceneBLAS),
 		.tlas = tlas,
 	};
 }
@@ -704,13 +706,13 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 			m_loadingData->sharedAllocation,
 			m_resourceManager
 		);
-		m_scenesBLAS.push_back(std::move(asData.blas));
+		m_scenesBLAS.push_back(std::move(asData.sceneBLAS));
 
 		m_loadingData->mergedScene.tlasBuffer =
 			SharedBufferContainer<BufferHandle>(m_resourceManager.getBuffers(m_loadingData->sharedAllocation)).tlas;
 		m_loadingData->mergedScene.tlas = asData.tlas;
 	}
-
+	waitSemaphore(m_semaphore, m_transferCount);
 	transaction.submit(Instance::Get().graphicQueue, m_semaphore, ++m_transferCount);
 
 	return count;

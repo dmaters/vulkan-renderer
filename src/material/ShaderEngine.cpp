@@ -451,6 +451,10 @@ void ShaderEngine::_monitor() {
 					auto& module = m_computeModules[index];
 					auto& layouts = m_layouts[index];
 					pipeline = buildComputePipeline(module, layouts);
+				} else if (type == PipelineIndexFields::Type::Raytracing) {
+					auto& module = m_raytracingModules[index];
+					auto& layouts = m_layouts[index];
+					pipeline = buildRaytracingPipeline(module, layouts);
 				}
 
 				if (pipeline.has_value()) {
