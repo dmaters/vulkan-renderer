@@ -1,12 +1,13 @@
 module raytracing;
+namespace raytracing{
 
-public struct TraceRayResults {
+public struct RayQueryResult {
     public uint primitiveID;
     public uint baseIndex;
     public float3 barycentrics;
 };
 public
-Optional<TraceRayResults> TraceRay(float3 origin, float3 direction, float rayLength, RaytracingAccelerationStructure as){
+Optional<RayQueryResult> RayQuery(float3 origin, float3 direction, float rayLength, RaytracingAccelerationStructure as){
    	RayQuery<RAY_FLAG_NONE> query;
 	RayDesc desc;
 	desc.Direction = direction;
@@ -16,7 +17,7 @@ Optional<TraceRayResults> TraceRay(float3 origin, float3 direction, float rayLen
 	query.TraceRayInline(as, RAY_FLAG_NONE, 0xFF, desc);
 	while (query.Proceed());
 	if (query.CommittedStatus() != COMMITTED_TRIANGLE_HIT) return none;
-	TraceRayResults res;
+	RayQueryResult res;
 
 
 	res.primitiveID = query.CommittedInstanceID();
@@ -27,3 +28,32 @@ Optional<TraceRayResults> TraceRay(float3 origin, float3 direction, float rayLen
 	return res;
 
 }
+
+
+public
+void TraceRay<T>(float3 origin, float3 direction, float rayLength, RaytracingAccelerationStructure accellerationStructure, T data){
+    RayDesc ray;
+	ray.Origin = origin.xyz;
+	ray.Direction = direction;
+	ray.TMin = 0.01;
+	ray.TMax = rayLength;
+
+
+	TraceRay<T>(
+	    accellerationStructure,
+		RAY_FLAG_NONE,
+		0xFF,
+		0,
+		0,
+		0,
+		ray,
+		data
+	);
+}
+
+public
+float3 UnpackBarycentrics(float2 bary) {
+    return float3(1 - bary.x - bary.y, bary.x, bary.y);
+}
+
+};

@@ -60,6 +60,12 @@ public:
 		std::vector<Descriptor> descriptors
 	);
 
+	MaterialIndex registerRaytracingMaterial(
+		std::string_view name,
+		RaytracingPipelineModules modules,
+	    std::vector<Descriptor> descriptors
+	);
+
 	Pipeline getPipeline(MaterialIndex index) { return m_shaderEngine->getPipeline(m_pipelines[index]); }
 
 	MaterialIndex getMaterialIndex(std::string_view name) const { return m_names.at(name); }

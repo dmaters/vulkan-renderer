@@ -16,6 +16,12 @@ struct GraphicPipelineModules {
 	ShaderModule fragment;
 };
 
+struct RaytracingPipelineModules {
+	ShaderModule raygen;
+	ShaderModule miss;
+	ShaderModule closestHit;
+};
+
 struct GraphicPipelineConfiguration {
 	std::vector<vk::Format> colorAttachmentFormats = {};
 	vk::Format depthFormat = vk::Format::eUndefined;
@@ -48,4 +54,11 @@ public:
 		GraphicPipelineConfiguration& configuration;
 	};
 	static std::optional<Pipeline> BuildGraphicPipeline(const GraphicPipelineBuildInfo& info);
+
+	struct RaytracingPipelineBuildInfo {
+		std::span<const vk::PipelineShaderStageCreateInfo> shaderStages;
+		std::span<const vk::RayTracingShaderGroupCreateInfoKHR> groups;
+		std::span<const vk::DescriptorSetLayout> setLayouts;
+	};
+	static std::optional<Pipeline> BuildRaytracingPipeline(const RaytracingPipelineBuildInfo& info);
 };

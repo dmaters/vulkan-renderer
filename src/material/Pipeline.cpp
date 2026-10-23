@@ -13,7 +13,24 @@
 
 #include "Instance.hpp"
 
-vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts);
+vk::PipelineLayout getLayout(const std::span<const vk::DescriptorSetLayout> layouts) {
+	std::array<vk::PushConstantRange, 1> ranges {
+		vk::PushConstantRange {
+							   .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment |
+						  vk::ShaderStageFlagBits::eCompute,
+							   .offset = 0,
+							   .size = 4,
+							   },
+	};
+	vk::PipelineLayoutCreateInfo info {
+		.setLayoutCount = (uint32_t)layouts.size(),
+		.pSetLayouts = layouts.data(),
+		.pushConstantRangeCount = ranges.size(),
+		.pPushConstantRanges = ranges.data(),
+
+	};
+	return Instance::Get().device.createPipelineLayout(info);
+}
 
 std::optional<Pipeline> PipelineBuilder::BuildComputePipeline(const ComputePipelineBuildInfo& info) {
 	vk::ComputePipelineCreateInfo pipelineInfo {
@@ -249,21 +266,30 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(const GraphicPipel
 	};
 }
 
-vk::PipelineLayout getLayout(std::vector<vk::DescriptorSetLayout> layouts) {
-	std::array<vk::PushConstantRange, 1> ranges {
-		vk::PushConstantRange {
-							   .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment |
-						  vk::ShaderStageFlagBits::eCompute,
-							   .offset = 0,
-							   .size = 4,
-							   },
-	};
-	vk::PipelineLayoutCreateInfo info {
-		.setLayoutCount = (uint32_t)layouts.size(),
-		.pSetLayouts = layouts.data(),
-		.pushConstantRangeCount = ranges.size(),
-		.pPushConstantRanges = ranges.data(),
+std::optional<Pipeline> PipelineBuilder::BuildRaytracingPipeline(const RaytracingPipelineBuildInfo& info) {
+	auto device = Instance::Get().device;
+	auto deferredOperation = device.createDeferredOperationKHR();
 
+	vk::RayTracingPipelineCreateInfoKHR pipelineInfo {
+		.stageCount = (uint32_t)info.shaderStages.size(),
+		.pStages = info.shaderStages.data(),
+		.groupCount = (uint32_t)info.groups.size(),
+		.pGroups = info.groups.data(),
+		.layout = getLayout(info.setLayouts),
 	};
-	return Instance::Get().device.createPipelineLayout(info);
+
+	auto res = device.createRayTracingPipelineKHR(deferredOperation, vk::PipelineCache(), pipelineInfo);
+	if (res.result != vk::Result::eOperationDeferredKHR && res.result != vk::Result::eOperationNotDeferredKHR &&
+		res.result != vk::Result::eSuccess)
+		return std::nullopt;
+
+	auto joinRes = device.deferredOperationJoinKHR(deferredOperation);
+	if (joinRes != vk::Result::eSuccess) return std::nullopt;
+
+	device.destroyDeferredOperationKHR(deferredOperation);
+
+	return Pipeline {
+		.pipeline = res.value,
+		.pipelineLayout = pipelineInfo.layout,
+	};
 }

@@ -38,7 +38,7 @@ Access ResourceUsage::GetAccess(Type type) {
 			};
 		case Type::ShaderWrite:
 			return {
-				.stage = vk::PipelineStageFlagBits2::eComputeShader,
+				.stage = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR,
 				.access = vk::AccessFlagBits2::eShaderWrite,
 				.layout = vk::ImageLayout::eGeneral,
 			};

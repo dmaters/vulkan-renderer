@@ -138,11 +138,12 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	};
 	dummyBuffers.indices = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer |
+				 vk::BufferUsageFlagBits::eStorageBuffer,
 	};
 	dummyBuffers.transforms = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer |
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
 				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.materialData = {

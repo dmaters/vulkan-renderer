@@ -22,6 +22,7 @@ enum class Type {
 	TransferSrc,
 	TransferDst,
 	AccellerationStructureRead,
+	ShaderBindingTable,
 };
 
 std::optional<vk::DescriptorType> GetDescriptorType(ResourceUsage::Type usage, bool isBuffer);

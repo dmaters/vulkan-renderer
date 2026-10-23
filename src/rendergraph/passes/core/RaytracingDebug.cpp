@@ -1,9 +1,11 @@
+#include "Instance.hpp"
 #include "material/MaterialManager.hpp"
+#include "rendergraph/BuildContext.hpp"
 #include "rendergraph/RenderGraphPasses.hpp"
 #include "rendergraph/ResourceIndex.hpp"
 #include "rendergraph/ResourceUsage.hpp"
 #include "rendergraph/SetupContext.hpp"
-#include "rendergraph/passes/RenderPass.hpp"
+#include "rendergraph/passes/RaytracingPass.hpp"
 
 struct RayTracingData {
 	rendergraph::ResourceIndex accelerationStructure;
@@ -12,6 +14,7 @@ struct RayTracingData {
 	rendergraph::ResourceIndex vertexAttributes;
 	rendergraph::ResourceIndex materialData;
 
+	rendergraph::ResourceIndex SBT;
 	TaskIndex sceneData;
 	TaskIndex outputTask;
 
@@ -19,9 +22,14 @@ struct RayTracingData {
 };
 
 static Task::Dependencies setup(Task::SetupContext& context) {
-	auto data = context.getData<RayTracingData>();
+	auto& data = context.getData<RayTracingData>();
 	auto cameraBuffer = context.getReference(data.sceneData, rendergraph::passes::core::SceneDataSlots::Camera);
 
+	auto SBT = context.createBuffer(
+		"raytracingSBT", RaytracingPass::GetSBTDescription(), ResourceManager::MemoryLocation::HostVisible
+	);
+
+	data.SBT = SBT;
 	return {
 		.inputs = {
                 { cameraBuffer, ResourceUsage::Type::UniformBuffer },
@@ -30,16 +38,15 @@ static Task::Dependencies setup(Task::SetupContext& context) {
     			{ data.primitiveData, ResourceUsage::Type::StorageBufferRead },
     			{ data.vertexAttributes, ResourceUsage::Type::StorageBufferRead },
     			{ data.materialData, ResourceUsage::Type::StorageBufferRead },
+    			{ SBT, ResourceUsage::Type::ShaderBindingTable },
 	        },
-		.outputs = { { context.getReference(data.outputTask, 0), ResourceUsage::Type::ColorAttachmentWrite } },
+		.outputs = { { context.getReference(data.outputTask, 0), ResourceUsage::Type::ShaderWrite } },
 	};
 }
 static void build(Task::BuildContext& context) {
-	if (context.scene.tlas == nullptr) return;
-
-	RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::Read);
-	RenderPass::QuadDraw(context, context.getData<RayTracingData>().material);
-	RenderPass::End(context.commandBuffer);
+	auto data = context.getData<RayTracingData>();
+	auto res = context.getOutput<Image&>(0).size;
+	RaytracingPass::TraceRays(context, data.material, data.SBT, glm::uvec3(res.width, res.height, 1));
 }
 TaskIndex rendergraph::passes::raytracing_debug(
 	PassBuildContext& context,
@@ -51,16 +58,13 @@ TaskIndex rendergraph::passes::raytracing_debug(
 	TaskIndex sceneData,
 	TaskIndex outputTask
 ) {
-	auto material = context.materialManager.registerGraphicMaterial(
+	auto material = context.materialManager.registerRaytracingMaterial(
 		"raytracing_debug",
 		{
-			.vertex = { "resources/shaders/quad_vert.slang" },
-			.fragment = { "resources/shaders/raytracing_debug.slang" },
-		},
-		{
-			.colorAttachmentFormats = { vk::Format::eR8G8B8A8Unorm },
-			.cullMode = vk::CullModeFlagBits::eNone,
-		},
+			.raygen = { "resources/shaders/raytracing_debug.slang", "main_rgen" },
+			.miss = { "resources/shaders/raytracing_debug.slang", "main_miss" },
+			.closestHit = { "resources/shaders/raytracing_debug.slang", "main_chit" },
+	},
 		{
 			{ vk::DescriptorType::eUniformBuffer },
 			{ vk::DescriptorType::eAccelerationStructureKHR },
@@ -68,6 +72,7 @@ TaskIndex rendergraph::passes::raytracing_debug(
 			{ vk::DescriptorType::eStorageBuffer },
 			{ vk::DescriptorType::eStorageBuffer },
 			{ vk::DescriptorType::eStorageBuffer },
+			{ vk::DescriptorType::eStorageImage },
 
 		}
 	);

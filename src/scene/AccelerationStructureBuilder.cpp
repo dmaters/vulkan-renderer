@@ -37,14 +37,15 @@ AccelerationStructureBuilder::BLASAllocationInfo AccelerationStructureBuilder::q
 		asBuffers.push_back(
 			{
 				.size = (uint32_t)sizes.accelerationStructureSize,
-				.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
+				.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+						 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 			}
 		);
 
 		scratchBuffers.push_back(
 			{
 				.size = (uint32_t)sizes.buildScratchSize,
-				.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddressEXT,
+				.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress,
 			}
 		);
 	}
@@ -81,7 +82,8 @@ AccelerationStructureBuilder::TLASAllocationInfo AccelerationStructureBuilder::q
 
 	ResourceManager::BufferDescription asDescripton {
 		.size = (uint32_t)tlasSizes.accelerationStructureSize,
-		.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
+		.usage =
+			vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 
 	ResourceManager::BufferDescription scratchDescription {

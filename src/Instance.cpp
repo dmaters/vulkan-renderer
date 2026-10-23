@@ -223,6 +223,7 @@ const std::vector<const char*> deviceExtensions {
 	"VK_KHR_acceleration_structure",
 	"VK_KHR_ray_query",
 	"VK_KHR_deferred_host_operations",
+	"VK_KHR_ray_tracing_pipeline",
 };
 vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
@@ -262,9 +263,12 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.bufferDeviceAddress = true,
 
 	};
-
-	vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures {
+	vk::PhysicalDeviceRayTracingPipelineFeaturesKHR raytracingPipelineFeatures {
 		.pNext = &vulkan12Features,
+		.rayTracingPipeline = true,
+	};
+	vk::PhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures {
+		.pNext = &raytracingPipelineFeatures,
 		.rayQuery = true,
 	};
 	vk::PhysicalDeviceAccelerationStructureFeaturesKHR accellerationStructureFeature {
