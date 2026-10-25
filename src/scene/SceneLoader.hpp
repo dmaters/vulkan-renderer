@@ -18,8 +18,8 @@ public:
 
 	struct SceneInstance {
 		std::vector<Primitive> primitives;
-		std::vector<Scene::MaterialHint> materialHints;
 		std::vector<glm::mat4> transforms;
+		std::vector<Scene::MaterialHint> materialHints;
 
 		std::size_t vertexCount;
 		std::size_t indexCount;

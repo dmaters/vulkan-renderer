@@ -35,6 +35,7 @@ void Renderer::reloadGraphBuffers(
 	rendergraph.setBuffer(staticResources.transforms, sceneBuffers.transforms);
 	rendergraph.setBuffer(staticResources.materialData, sceneBuffers.materialData);
 	rendergraph.setBuffer(staticResources.primitiveData, sceneBuffers.primitiveData);
+	rendergraph.setBuffer(staticResources.tlas, sceneBuffers.tlas);
 }
 
 Renderer::Renderer(SDL_Window* window) :
@@ -109,12 +110,11 @@ void Renderer::render() {
 			Instance::Get().device.waitIdle();
 			m_loadingScene = false;
 			auto scene = m_sceneManager.getScene();
-
-			m_scene.primitives = scene.primitives;
-			m_scene.materialHints = scene.materialHints;
-			m_scene.primitiveBounds = scene.primitiveBounds;
-			m_scene.allocation = scene.allocation;
-			m_scene.size = scene.size;
+			auto camera = m_scene.camera;
+			auto light = m_scene.light;
+			m_scene = scene;
+			m_scene.camera = camera;
+			m_scene.light = light;
 
 			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, m_graph);
 

@@ -96,9 +96,8 @@ std::vector<TextureUsageType> getTextureUsages(const fastgltf::Asset& asset) {
 
 struct PrimitiveData {
 	std::vector<Primitive> primitives;
-	std::vector<Scene::MaterialHint> materialHints;
 	std::vector<glm::mat4> transforms;
-
+	std::vector<Scene::MaterialHint> materialHints;
 	std::array<std::size_t, SceneLoader::SceneBuffersCount> bufferSizes;
 };
 
@@ -133,11 +132,13 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 					{
 						.baseVertex = (uint32_t)vertexOffset,
 						.baseIndex = (uint32_t)indexOffset,
+						.vertexCount = (uint32_t)vertexCount,
 						.indexCount = (uint32_t)indexCount,
 						.materialIndex = (uint32_t)primitive.materialIndex.value_or(0),
 					}
 				);
 
+				transforms.push_back((glm::mat4&)matrix);
 				if (asset.materials[primitive.materialIndex.value()].alphaMode == fastgltf::AlphaMode::Mask)
 					materialHints.push_back(
 						Scene::MaterialHintBits::Opaque | Scene::MaterialHintBits::ShadowCasting |
@@ -148,8 +149,6 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 
 				vertexOffset += vertexCount;
 				indexOffset += indexCount;
-
-				transforms.push_back((glm::mat4&)matrix);
 			}
 		}
 	);
@@ -158,10 +157,9 @@ PrimitiveData loadPrimitiveData(const fastgltf::Asset& asset) {
 
 	return {
 		.primitives = primitives,
-		.materialHints = materialHints,
 		.transforms = transforms,
+		.materialHints = materialHints,
 		.bufferSizes = bufferSizes,
-
 	};
 }
 
@@ -232,7 +230,6 @@ ImageData loadImageData(
 
 		formats.push_back(getFormat(compressedFormat));
 		resolutions.push_back({ width, height });
-
 	}
 	return {
 		.sizes = imageDataSizes,
@@ -251,8 +248,8 @@ SceneLoader::SceneLoader(std::filesystem::path path) : m_path(path) {
 
 	m_scene = {
 		.primitives = std::move(primitiveData.primitives),
-		.materialHints = std::move(primitiveData.materialHints),
 		.transforms = std::move(primitiveData.transforms),
+		.materialHints = std::move(primitiveData.materialHints),
 		.vertexCount = primitiveData.bufferSizes[(int)SceneBuffers::Vertex] / sizeof(Vertex),
 		.indexCount = primitiveData.bufferSizes[(int)SceneBuffers::Indices] / sizeof(uint32_t),
 		.materialCount =
@@ -268,17 +265,18 @@ SceneLoader::SceneAllocationInfo SceneLoader::getAllocationInfo() {
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Vertex],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer,
+					 vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::VertexAttribute],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer,
+					 vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eStorageBuffer,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Indices],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eIndexBuffer,
+					 vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
+					 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Transforms],
@@ -445,14 +443,15 @@ SceneGeometry loadGeometryBuffers(
 				vertexAttributes += primitiveData.vertexCount;
 				indices += primitiveData.indexCount;
 
-				*transforms = (glm::mat4&)matrix;
-				transforms += 1;
-
 				primitiveBounds.push_back(primitiveData.primitiveBounds);
 				sceneSize = std::max(primitiveData.primitiveBounds.size, sceneSize);
+
+				*transforms = (glm::mat4&)matrix;
+				transforms++;
 			}
 		}
 	);
+
 	return {
 		.primitivesBounds = primitiveBounds,
 		.sceneSize = sceneSize,

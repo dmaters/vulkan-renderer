@@ -79,4 +79,15 @@ namespace post_processing {
 
 }  // namespace post_processing
 
+TaskIndex raytracing_debug(
+	PassBuildContext& context,
+	rendergraph::ResourceIndex accelerationStructure,
+	rendergraph::ResourceIndex indexBuffer,
+	rendergraph::ResourceIndex primitiveData,
+	rendergraph::ResourceIndex vertexAttributes,
+	rendergraph::ResourceIndex materialData,
+	TaskIndex sceneData,
+	TaskIndex outputTask
+);
+
 };	// namespace rendergraph::passes

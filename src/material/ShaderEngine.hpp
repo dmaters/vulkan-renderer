@@ -26,10 +26,11 @@ private:
 		enum class Type : uint8_t {
 			Graphic,
 			Compute,
+			Raytracing,
 		};
 
-		unsigned int type : 1;
-		unsigned int index : 31;
+		unsigned int type : 2;
+		unsigned int index : 30;
 	};
 
 	slang::IGlobalSession* m_session;
@@ -42,6 +43,8 @@ private:
 	std::unordered_map<PipelineIndex, GraphicPipelineModules> m_graphicModules;
 
 	std::unordered_map<PipelineIndex, ShaderModule> m_computeModules;
+
+	std::unordered_map<PipelineIndex, RaytracingPipelineModules> m_raytracingModules;
 
 	std::vector<std::pair<Pipeline, uint8_t>> m_retiredPipelines;
 	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>> m_modules;
@@ -67,6 +70,11 @@ private:
 	std::optional<Pipeline> buildComputePipeline(
 		ShaderModule computeModule, std::vector<vk::DescriptorSetLayout>& layouts
 	);
+
+	std::optional<Pipeline> buildRaytracingPipeline(
+		RaytracingPipelineModules& raytracingModules, std::span<const vk::DescriptorSetLayout> layouts
+	);
+
 	void reloadPipeline(PipelineIndex index);
 
 public:
@@ -79,6 +87,10 @@ public:
 		GraphicPipelineConfiguration configuration
 	);
 	PipelineIndex registerComputePipeline(ShaderModule computeModule, std::vector<vk::DescriptorSetLayout> layouts);
+
+	PipelineIndex registerRaytracingPipeline(
+		RaytracingPipelineModules raytracingModules, std::vector<vk::DescriptorSetLayout> layouts
+	);
 
 	Pipeline getPipeline(PipelineIndex index) {
 		assert(m_pipelines.contains(index));

@@ -23,6 +23,7 @@ Renderer::Passes Renderer::createRenderGraph() {
 	m_sharedSceneBuffers.transforms = m_graph.registerBuffer("transforms_buffer");
 	m_sharedSceneBuffers.materialData = m_graph.registerBuffer("pbr_data_buffer");
 	m_sharedSceneBuffers.primitiveData = m_graph.registerBuffer("primitive_data");
+	m_sharedSceneBuffers.tlas = m_graph.registerBuffer("tlas");
 
 	PassBuildContext context {
 		.renderGraph = m_graph,

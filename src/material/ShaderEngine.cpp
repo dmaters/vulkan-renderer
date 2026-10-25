@@ -191,6 +191,63 @@ std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
 		}
 	);
 }
+std::optional<Pipeline> ShaderEngine::buildRaytracingPipeline(
+	RaytracingPipelineModules& shaderModules, std::span<const vk::DescriptorSetLayout> layouts
+) {
+	auto raygenModule =
+		loadModule(shaderModules.raygen.path, shaderModules.raygen.entryPoint, SlangStage::SLANG_STAGE_RAY_GENERATION);
+	if (!raygenModule.has_value()) return std::nullopt;
+
+	auto missModule = loadModule(shaderModules.miss.path, shaderModules.miss.entryPoint, SlangStage::SLANG_STAGE_MISS);
+	if (!missModule.has_value()) return std::nullopt;
+
+	auto closestHitModule = loadModule(
+		shaderModules.closestHit.path, shaderModules.closestHit.entryPoint, SlangStage::SLANG_STAGE_CLOSEST_HIT
+	);
+	if (!closestHitModule.has_value()) return std::nullopt;
+
+	std::array<vk::PipelineShaderStageCreateInfo, 3> modulesInfo {
+		{
+			{
+				.stage = vk::ShaderStageFlagBits::eRaygenKHR,
+				.module = raygenModule.value(),
+				.pName = shaderModules.raygen.entryPoint.data(),
+			}, {
+				.stage = vk::ShaderStageFlagBits::eMissKHR,
+				.module = missModule.value(),
+				.pName = shaderModules.miss.entryPoint.data(),
+			}, {
+				.stage = vk::ShaderStageFlagBits::eClosestHitKHR,
+				.module = closestHitModule.value(),
+				.pName = shaderModules.closestHit.entryPoint.data(),
+			}, },
+	};
+
+	std::array<vk::RayTracingShaderGroupCreateInfoKHR, 4> groups {
+		{
+			{
+				.type = vk::RayTracingShaderGroupTypeKHR::eGeneral,	 // Raygen
+				.generalShader = 0,
+			}, {
+				.type = vk::RayTracingShaderGroupTypeKHR::eGeneral,	 // Miss
+				.generalShader = 1,
+			}, {
+				.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup,  // Hit
+				.generalShader = 2,
+			}, {
+				.type = vk::RayTracingShaderGroupTypeKHR::eGeneral,	 // Dummy
+			}, },
+	};
+
+	return PipelineBuilder::BuildRaytracingPipeline(
+		{
+			.shaderStages = modulesInfo,
+			.groups = groups,
+			.setLayouts = layouts,
+		}
+	);
+}
+
 void getDependencies(std::filesystem::path base, std::unordered_set<std::filesystem::path>& paths) {
 	if (paths.contains(base)) return;
 	assert(std::filesystem::exists(base));
@@ -310,6 +367,40 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 	return index;
 }
 
+PipelineIndex ShaderEngine::registerRaytracingPipeline(
+	RaytracingPipelineModules modules, std::vector<vk::DescriptorSetLayout> layouts
+) {
+	PipelineIndexFields fields {
+		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Raytracing),
+		.index = static_cast<uint32_t>(m_pipelines.size()),
+	};
+	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
+
+	auto pipeline = buildRaytracingPipeline(modules, layouts);
+
+	assert(pipeline.has_value());
+
+	m_pipelines[index] = pipeline.value();
+	m_layouts[index] = layouts;
+	m_raytracingModules[index] = modules;
+
+	std::unordered_set<std::filesystem::path> dependencies;
+
+	for (auto& module : { modules.raygen, modules.closestHit, modules.miss }) {
+		m_modules[module.path].insert(index);
+		m_lastEdited[module.path] = std::filesystem::last_write_time(module.path);
+
+		getDependencies(module.path, dependencies);
+
+		for (auto dependecy : dependencies) {
+			m_modules[dependecy].insert(index);
+			m_lastEdited[dependecy] = std::filesystem::last_write_time(dependecy);
+		}
+	}
+
+	return index;
+}
+
 void ShaderEngine::flushRetiredPipelines() {
 	vk::Device& device = Instance::Get().device;
 
@@ -360,6 +451,10 @@ void ShaderEngine::_monitor() {
 					auto& module = m_computeModules[index];
 					auto& layouts = m_layouts[index];
 					pipeline = buildComputePipeline(module, layouts);
+				} else if (type == PipelineIndexFields::Type::Raytracing) {
+					auto& module = m_raytracingModules[index];
+					auto& layouts = m_layouts[index];
+					pipeline = buildRaytracingPipeline(module, layouts);
 				}
 
 				if (pipeline.has_value()) {

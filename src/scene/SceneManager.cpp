@@ -10,6 +10,7 @@
 #include <span>
 #include <vector>
 
+#include "AccelerationStructureBuilder.hpp"
 #include "Common.hpp"
 #include "Instance.hpp"
 #include "material/MaterialDefinitions.hpp"
@@ -20,31 +21,8 @@
 #include "scene/SceneLoader.hpp"
 #include "scene/SceneManager.hpp"
 
-template <typename T>
-union SharedBufferContainer {
-	static const std::size_t Count = SceneLoader::SceneBuffersCount + 1;
-	std::array<T, SceneLoader::SceneBuffersCount + 1> values;
-
-	struct {
-		T vertices;
-		T vertexAttributes;
-		T indices;
-		T transforms;
-		T materialData;
-		T primitiveData;
-	};
-
-	constexpr std::span<const T, SceneLoader::SceneBuffersCount> sceneLoaderBuffers() const {
-		return std::span<const T, SceneLoader::SceneBuffersCount>(values.data(), SceneLoader::SceneBuffersCount);
-	}
-	SharedBufferContainer(const std::span<const T> pValues) {
-		std::copy(pValues.begin(), pValues.begin() + Count, values.begin());
-	}
-	SharedBufferContainer() : values {} {}
-};
-
 struct StagingBufferHandles {
-	const SharedBufferContainer<BufferHandle> sharedBuffers;
+	const SceneManager::SharedBufferContainer<BufferHandle> sharedBuffers;
 	std::span<const BufferHandle> images;
 
 	StagingBufferHandles(const std::span<const BufferHandle> handles) :
@@ -56,8 +34,7 @@ vk::CommandPool createCommandPool(bool graphicQueue = false) {
 	return instance.device.createCommandPool(
 		vk::CommandPoolCreateInfo {
 			.flags = vk::CommandPoolCreateFlagBits::eTransient,
-			.queueFamilyIndex = graphicQueue ? instance.queueFamiliesIndices.graphicsIndex
-											 : instance.queueFamiliesIndices.transferIndex,
+			.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
 		}
 	);
 }
@@ -110,7 +87,7 @@ void createPlaceholderTextures(
 	auto images = resourceManager.getImages(allocationIndex);
 	materialManager.registerTextureGroup(std::vector<ImageHandle>(images.begin(), images.end()));
 
-	auto tempPool = createCommandPool(true);
+	auto tempPool = createCommandPool();
 	ResourceWriteTransaction transaction(tempPool, resourceManager);
 	transaction.imageClear(
 		{
@@ -149,10 +126,11 @@ void createPlaceholderTextures(
 }
 
 ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resourceManager) {
-	SharedBufferContainer<ResourceManager::BufferDescription> dummyBuffers;
+	SceneManager::SharedBufferContainer<ResourceManager::BufferDescription> dummyBuffers;
 	dummyBuffers.vertices = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.vertexAttributes = {
 		.size = 1,
@@ -160,11 +138,13 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	};
 	dummyBuffers.indices = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eIndexBuffer |
+				 vk::BufferUsageFlagBits::eStorageBuffer,
 	};
 	dummyBuffers.transforms = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
+		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
+				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.materialData = {
 		.size = 1,
@@ -173,6 +153,11 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	dummyBuffers.primitiveData = {
 		.size = 1,
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
+	};
+
+	dummyBuffers.tlas = {
+		.size = 1,
+		.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
 	};
 
 	return resourceManager.createResources(
@@ -213,14 +198,13 @@ void mergeBuffers(
 	const std::vector<SceneLoader::SceneInstance>& sceneData,
 	std::size_t skipIndex
 ) {
-	SharedBufferContainer<std::size_t> bufferSizes;
+	SceneManager::SharedBufferContainer<std::size_t> bufferSizes;
 	for (int i = 0; i < skipIndex; i++) {
 		bufferSizes.vertices += sceneData[i].vertexCount * sizeof(Vertex);
 		bufferSizes.vertexAttributes += sceneData[i].vertexCount * sizeof(Vertex::Attributes);
 		bufferSizes.indices += sceneData[i].indexCount * sizeof(uint32_t);
 		bufferSizes.transforms += sceneData[i].transforms.size() * sizeof(glm::mat4);
 		bufferSizes.materialData += sceneData[i].materialCount * sizeof(MaterialDefinitions::PBRInstance);
-		bufferSizes.primitiveData += sceneData[i].primitives.size() * sizeof(Primitive::ShaderObject);
 	}
 
 	for (int b = 0; b < SceneLoader::SceneBuffersCount; b++) {
@@ -246,7 +230,6 @@ void mergeBuffers(
 		offsets.indices += sceneData[skipIndex].indexCount * sizeof(uint32_t);
 		offsets.transforms += sceneData[skipIndex].transforms.size() * sizeof(glm::mat4);
 		offsets.materialData += sceneData[skipIndex].materialCount * sizeof(MaterialDefinitions::PBRInstance);
-		offsets.primitiveData += sceneData[skipIndex].primitives.size() * sizeof(Primitive::ShaderObject);
 
 		bufferSizes = {};
 
@@ -256,7 +239,6 @@ void mergeBuffers(
 			bufferSizes.indices += sceneData[i].indexCount * sizeof(uint32_t);
 			bufferSizes.transforms += sceneData[i].transforms.size() * sizeof(glm::mat4);
 			bufferSizes.materialData += sceneData[i].materialCount * sizeof(MaterialDefinitions::PBRInstance);
-			bufferSizes.primitiveData += sceneData[i].primitives.size() * sizeof(Primitive::ShaderObject);
 		}
 
 		for (int b = 0; b < SceneLoader::SceneBuffersCount; b++) {
@@ -354,6 +336,7 @@ struct Offsets {
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 	uint32_t materialOffset = 0;
+	uint32_t tranformOffset = 0;
 };
 void composePrimitives(
 	const std::vector<Primitive>& scenePrimitives, std::vector<Primitive>& outputPrimitives, Offsets baseOffsets
@@ -364,8 +347,10 @@ void composePrimitives(
 			{
 				.baseVertex = primitive.baseVertex + baseOffsets.vertexOffset,
 				.baseIndex = primitive.baseIndex + baseOffsets.indexOffset,
+				.vertexCount = primitive.vertexCount,
 				.indexCount = primitive.indexCount,
 				.materialIndex = primitive.materialIndex + baseOffsets.materialOffset,
+				.baseTransform = baseOffsets.tranformOffset,
 			}
 		);
 	}
@@ -377,6 +362,10 @@ Scene mergeSceneInstances(const std::vector<SceneLoader::SceneInstance>& scenes)
 	Offsets offsets;
 	for (int i = 0; i < scenes.size(); i++) {
 		auto& sceneInstance = scenes[i];
+
+		scene.transforms.insert(
+			scene.transforms.end(), sceneInstance.transforms.begin(), sceneInstance.transforms.end()
+		);
 
 		scene.materialHints.insert(
 			scene.materialHints.end(), sceneInstance.materialHints.begin(), sceneInstance.materialHints.end()
@@ -399,15 +388,26 @@ struct Descriptions {
 	std::vector<ResourceManager::BufferDescription> sceneBuffers;
 
 	std::vector<ResourceManager::BufferDescription> stagingBuffers;
+	std::vector<ResourceManager::BufferDescription> scratchBuffers;
+
 	SharedBuffersDescriptions sharedBufferDescriptions;
 };
 
 Descriptions queryDescriptions(
-	SceneLoader& loader, Scene& mergedScene, std::span<const SharedBuffersDescriptions> sceneSharedBuffers
+	SceneLoader& loader,
+	SceneLoader::SceneInstance& sceneInstance,
+	Scene& mergedScene,
+	std::span<const SharedBuffersDescriptions> sceneSharedBuffers
 ) {
 	auto sceneAllocationInfo = loader.getAllocationInfo();
 
 	std::vector<ResourceManager::BufferDescription> sharedBuffers;
+
+	std::vector<ResourceManager::BufferDescription> sceneBuffers;
+	std::vector<ResourceManager::ImageDescription> sceneImages;
+
+	std::vector<ResourceManager::BufferDescription> stagingBuffers;
+	std::vector<ResourceManager::BufferDescription> scratchBuffers;
 
 	for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) sharedBuffers.push_back({});
 
@@ -429,10 +429,8 @@ Descriptions queryDescriptions(
 		}
 	);
 
-	std::vector<ResourceManager::ImageDescription> sceneImages;
 	sceneImages.insert(sceneImages.end(), sceneAllocationInfo.images.begin(), sceneAllocationInfo.images.end());
 
-	std::vector<ResourceManager::BufferDescription> stagingBuffers;
 	stagingBuffers.insert(
 		stagingBuffers.end(),
 		sceneAllocationInfo.stagingSharedBuffers.begin(),
@@ -451,11 +449,25 @@ Descriptions queryDescriptions(
 		sceneAllocationInfo.stagingImageBuffers.end()
 	);
 
+	AccelerationStructureBuilder asBuilder;
+	auto blasAllocationInfo = asBuilder.queryBLASAllocationInfo(sceneInstance.primitives);
+	sceneBuffers.insert(sceneBuffers.end(), blasAllocationInfo.asBuffers.begin(), blasAllocationInfo.asBuffers.end());
+
+	scratchBuffers.insert(
+		scratchBuffers.end(), blasAllocationInfo.scratchBuffers.begin(), blasAllocationInfo.scratchBuffers.end()
+	);
+
+	auto tlasAllocationInfo = asBuilder.queryTLASAllocationInfo(mergedScene.primitives.size());
+	sharedBuffers.push_back(tlasAllocationInfo.asBuffer);
+	scratchBuffers.push_back(tlasAllocationInfo.instanceData);
+	scratchBuffers.push_back(tlasAllocationInfo.scratchBuffer);
+
 	return {
 		.sharedBuffers = std::move(sharedBuffers),
 		.sceneImages = std::move(sceneImages),
-		.sceneBuffers = {},
+		.sceneBuffers = std::move(sceneBuffers),
 		.stagingBuffers = std::move(stagingBuffers),
+		.scratchBuffers = std::move(scratchBuffers),
 		.sharedBufferDescriptions = sceneAllocationInfo.geometryBuffers,
 	};
 }
@@ -496,6 +508,80 @@ void loadData(
 	}
 }
 
+struct ASData {
+	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
+	vk::AccelerationStructureKHR tlas;
+};
+ASData buildAS(
+	ResourceWriteTransaction& transaction,
+	SceneLoader::SceneInstance& scene,
+	Scene& mergedScene,
+	std::vector<vk::AccelerationStructureKHR>& mergedBLAS,
+	ResourceManager::AllocationIndex sceneAllocation,
+	ResourceManager::AllocationIndex scratchAllocation,
+	ResourceManager::AllocationIndex sharedAllocation,
+	ResourceManager& resourceManager
+) {
+	auto sharedBuffers =
+		SceneManager::SharedBufferContainer<BufferHandle>(resourceManager.getBuffers(sharedAllocation));
+
+	auto sceneAllocationHandles = resourceManager.getBuffers(sceneAllocation);
+	auto scratchAllocationHandles = resourceManager.getBuffers(scratchAllocation);
+
+	auto blasHandles = std::span<const BufferHandle>(
+		sceneAllocationHandles.end() - scene.primitives.size(), sceneAllocationHandles.end()
+	);
+
+	auto blasScratchHandles = std::span<const BufferHandle>(
+		scratchAllocationHandles.begin(), scratchAllocationHandles.begin() + scene.primitives.size()
+	);
+
+	AccelerationStructureBuilder builder;
+
+	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
+	std::vector<vk::AccelerationStructureKHR> combinedBLAS(mergedBLAS);
+
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		sceneBLAS = builder.buildBLAS(
+			commandBuffer,
+			{
+				.primitives = scene.primitives,
+				.blasBuffers = blasHandles,
+				.scratchBuffers = blasScratchHandles,
+				.vertexBuffer = sharedBuffers.vertices,
+				.indexBuffer = sharedBuffers.indices,
+				.resourceManager = resourceManager,
+			}
+		);
+
+		combinedBLAS.insert(combinedBLAS.end(), sceneBLAS.begin(), sceneBLAS.end());
+	});
+
+	vk::AccelerationStructureKHR tlas;
+
+	auto tlasInstanceHandle = scratchAllocationHandles.rbegin() + 1;
+	auto tlasScratchHandle = scratchAllocationHandles.rbegin();
+
+	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
+		tlas = builder.buildTLAS(
+			commandBuffer,
+			{
+				.primitives = mergedScene.primitives,
+				.blas = combinedBLAS,
+				.transforms = mergedScene.transforms,
+				.instancesBuffer = *tlasInstanceHandle,
+				.asBuffer = sharedBuffers.tlas,
+				.scratchBuffer = *tlasScratchHandle,
+				.resourceManager = resourceManager,
+			}
+		);
+	});
+	return {
+		.sceneBLAS = std::move(sceneBLAS),
+		.tlas = tlas,
+	};
+}
+
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
 	if (!std::filesystem::exists(path)) {
 		std::cout << "Scene not found : " + path.relative_path().string() << std::endl;
@@ -509,7 +595,7 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	auto commandPool = createCommandPool();
 
-	auto descriptions = queryDescriptions(*sceneLoader, mergedScene, m_sharedBuffersDescriptions);
+	auto descriptions = queryDescriptions(*sceneLoader, m_scenes.back(), mergedScene, m_sharedBuffersDescriptions);
 
 	auto stagingAllocation =
 		m_resourceManager.createResources({}, descriptions.stagingBuffers, ResourceManager::MemoryLocation::Host);
@@ -520,6 +606,10 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	auto sharedAllocation =
 		m_resourceManager.createResources({}, descriptions.sharedBuffers, ResourceManager::MemoryLocation::Device);
+
+	auto scratchAllocation = m_resourceManager.createResources(
+		{}, descriptions.scratchBuffers, ResourceManager::MemoryLocation::HostVisible
+	);
 
 	loadData(*sceneLoader, stagingAllocation, sceneAllocation, mergedScene, m_resourceManager, m_materialManager);
 
@@ -547,7 +637,7 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	transaction.submit(Instance::Get().transferQueue, m_semaphore, ++m_transferCount);
 
-	m_sceneTextureAllocations.push_back(sceneAllocation);
+	m_scenesAllocations.push_back(sceneAllocation);
 	m_sharedBuffersDescriptions.push_back(descriptions.sharedBufferDescriptions);
 	m_loadingData.emplace(
 		LoadingData {
@@ -555,6 +645,7 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 			.mergedScene = mergedScene,
 			.stagingAllocation = stagingAllocation,
 			.sharedAllocation = sharedAllocation,
+			.scratchAllocation = scratchAllocation,
 			.commandPool = commandPool,
 		}
 	);
@@ -577,7 +668,7 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 		uploadImages(
 			transaction,
 			delta.loadedImages,
-			m_resourceManager.getImages(m_sceneTextureAllocations[sceneIndex]),
+			m_resourceManager.getImages(m_scenesAllocations[sceneIndex]),
 			stagingBufferHandles.images,
 			m_resourceManager
 		);
@@ -600,9 +691,29 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 			offsets.values,
 			m_resourceManager
 		);
-	}
 
-	transaction.submit(Instance::Get().transferQueue, m_semaphore, ++m_transferCount);
+		std::vector<vk::AccelerationStructureKHR> blas;
+
+		for (auto& sceneBLAS : m_scenesBLAS) blas.insert(blas.end(), sceneBLAS.begin(), sceneBLAS.end());
+
+		auto asData = buildAS(
+			transaction,
+			m_scenes.back(),
+			m_loadingData->mergedScene,
+			blas,
+			m_scenesAllocations.back(),
+			m_loadingData->scratchAllocation,
+			m_loadingData->sharedAllocation,
+			m_resourceManager
+		);
+		m_scenesBLAS.push_back(std::move(asData.sceneBLAS));
+
+		m_loadingData->mergedScene.tlasBuffer =
+			SharedBufferContainer<BufferHandle>(m_resourceManager.getBuffers(m_loadingData->sharedAllocation)).tlas;
+		m_loadingData->mergedScene.tlas = asData.tlas;
+	}
+	waitSemaphore(m_semaphore, m_transferCount);
+	transaction.submit(Instance::Get().graphicQueue, m_semaphore, ++m_transferCount);
 
 	return count;
 }
@@ -625,8 +736,10 @@ Scene SceneManager::getScene() {
 
 	if (m_sharedAllocation) m_resourceManager.freeAllocation(*m_sharedAllocation);
 	m_resourceManager.freeAllocation(m_loadingData->stagingAllocation);
+	m_resourceManager.freeAllocation(m_loadingData->scratchAllocation);
+
 	m_sharedAllocation = m_loadingData->sharedAllocation;
-	m_scene.allocation = *m_sharedAllocation;
+	m_scene.allocation = m_loadingData->sharedAllocation;
 	Instance::Get().device.destroyCommandPool(m_loadingData->commandPool);
 	m_loadingData = std::nullopt;
 

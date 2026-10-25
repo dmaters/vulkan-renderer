@@ -231,6 +231,40 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 	return index;
 }
 
+MaterialIndex MaterialManager::registerRaytracingMaterial(
+	std::string_view name, RaytracingPipelineModules modules, std::vector<Descriptor> descriptors
+) {
+	vk::DescriptorSetLayout layout = m_emptySetLayout;
+	if (descriptors.size() > 0) {
+		std::vector<vk::DescriptorSetLayoutBinding> bindings;
+
+		for (int i = 0; i < descriptors.size(); i++)
+			bindings.push_back(
+				{
+					.binding = static_cast<uint32_t>(i),
+					.descriptorType = descriptors[i].type,
+					.descriptorCount = descriptors[i].count,
+					.stageFlags = vk::ShaderStageFlagBits::eAll,
+				}
+			);
+
+		layout = Instance::Get().device.createDescriptorSetLayout(
+			{
+				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+				.bindingCount = (uint32_t)bindings.size(),
+				.pBindings = bindings.data(),
+			}
+		);
+	}
+
+	PipelineIndex pipeline = m_shaderEngine->registerRaytracingPipeline(modules, { layout, m_textureSetLayout });
+
+	MaterialIndex index = m_pipelines.size();
+	m_pipelines.push_back(pipeline);
+	m_names[name] = index;
+	return index;
+}
+
 void MaterialManager::update() { m_shaderEngine->flushRetiredPipelines(); }
 
 std::vector<std::size_t> MaterialManager::registerTextureGroup(const std::vector<ImageHandle>& images) {
