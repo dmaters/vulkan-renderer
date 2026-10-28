@@ -76,7 +76,7 @@ TaskIndex rendergraph::passes::raytracing_debug(
 
 		}
 	);
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"raytracing_debug",
 		{ .setup = setup, .build = build },
 		RayTracingData {

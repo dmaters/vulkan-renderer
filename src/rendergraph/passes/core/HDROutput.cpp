@@ -22,7 +22,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 }
 
 TaskIndex rendergraph::passes::core::hdrOutput(PassBuildContext& context) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"hdr_output",
 		{
 			.setup = setup,

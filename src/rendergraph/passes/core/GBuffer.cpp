@@ -200,7 +200,7 @@ static void build(Task::BuildContext& context) {
 TaskIndex rendergraph::passes::core::gbuffer(
 	PassBuildContext& context, const ExternalResources& resources, TaskIndex sceneData
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"gbuffer",
 		{
 			.setup = setup,

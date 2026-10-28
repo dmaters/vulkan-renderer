@@ -58,7 +58,7 @@ static void build(Task::BuildContext& context) {
 }
 
 TaskIndex rendergraph::passes::core::sceneData(PassBuildContext& context) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"scene_data",
 		{
 			.setup = setup,

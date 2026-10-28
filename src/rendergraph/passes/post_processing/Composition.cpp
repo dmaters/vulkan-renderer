@@ -12,7 +12,7 @@ struct CompositionData {
 TaskIndex rendergraph::passes::post_processing::composition(
 	PassBuildContext& context, TaskIndex hdrOutput, TaskIndex sdrOutput
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"composition",
 		{ .setup = [](Task::SetupContext& context) -> Task::Dependencies {
 			 return {

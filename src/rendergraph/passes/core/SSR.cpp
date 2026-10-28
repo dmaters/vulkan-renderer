@@ -74,7 +74,7 @@ TaskIndex rendergraph::passes::core::ssr(
 		}
 	);
 
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"ssr",
 		{
 			.setup = setup,

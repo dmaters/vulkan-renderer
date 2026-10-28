@@ -44,7 +44,7 @@ void RenderPass::Begin(Task::BuildContext& context, AttachmentOp color, Attachme
 			usage != ResourceUsage::Type::DepthStencilRead)
 			continue;
 
-		Image& attachment = context.resourceManager.getImage(context.images.at(index));
+		Image& attachment = context.resourceManager.getImage(*context.images[index]);
 
 		bool isStencil = attachment.format == vk::Format::eD24UnormS8Uint;
 		if (isStencil) hasStencil = true;
@@ -130,7 +130,7 @@ void RenderPass::Begin(Task::BuildContext& context, AttachmentOp color, Attachme
 			usage != ResourceUsage::Type::DepthStencilRead)
 			continue;
 
-		Image& attachment = context.resourceManager.getImage(context.images.at(index));
+		Image& attachment = context.resourceManager.getImage(*context.images[index]);
 
 		width = attachment.size.width;
 		height = attachment.size.height;

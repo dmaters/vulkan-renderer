@@ -8,7 +8,7 @@ struct ExternalResources {
 	ResourceIndex primitiveData;
 };
 struct PassBuildContext {
-	RenderGraph& renderGraph;
+	TaskRegister& taskRegister;
 	MaterialManager& materialManager;
 
 	const RenderingConfiguration& renderingConfiguration;

@@ -43,7 +43,7 @@ TaskIndex rendergraph::passes::core::deferredLighting(
 	TaskIndex sceneData,
 	TaskIndex skyLighting
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"lighting_deferred",
 		{ .setup = setup,
 		  .build =

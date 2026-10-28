@@ -15,18 +15,17 @@ struct ProceduralSkyRequiredPasses {
 };
 
 using namespace rendergraph::passes;
-Renderer::Passes Renderer::createRenderGraph() {
-	std::vector<TaskIndex> optionalPasses;
-	m_sharedSceneBuffers.vertices = m_graph.registerBuffer("vertex_positions_buffer");
-	m_sharedSceneBuffers.vertexAttributes = m_graph.registerBuffer("vertex_attributes_buffer");
-	m_sharedSceneBuffers.indices = m_graph.registerBuffer("index_buffer");
-	m_sharedSceneBuffers.transforms = m_graph.registerBuffer("transforms_buffer");
-	m_sharedSceneBuffers.materialData = m_graph.registerBuffer("pbr_data_buffer");
-	m_sharedSceneBuffers.primitiveData = m_graph.registerBuffer("primitive_data");
-	m_sharedSceneBuffers.tlas = m_graph.registerBuffer("tlas");
+void Renderer::registerPasses() {
+	m_sharedSceneBuffers.vertices = m_taskRegister.registerStaticBuffer("vertex_positions_buffer");
+	m_sharedSceneBuffers.vertexAttributes = m_taskRegister.registerStaticBuffer("vertex_attributes_buffer");
+	m_sharedSceneBuffers.indices = m_taskRegister.registerStaticBuffer("index_buffer");
+	m_sharedSceneBuffers.transforms = m_taskRegister.registerStaticBuffer("transforms_buffer");
+	m_sharedSceneBuffers.materialData = m_taskRegister.registerStaticBuffer("pbr_data_buffer");
+	m_sharedSceneBuffers.primitiveData = m_taskRegister.registerStaticBuffer("primitive_data");
+	m_sharedSceneBuffers.tlas = m_taskRegister.registerStaticBuffer("tlas");
 
 	PassBuildContext context {
-		.renderGraph = m_graph,
+		.taskRegister = m_taskRegister,
 		.materialManager = m_materialManager,
 		.renderingConfiguration = m_configuration,
 	};
@@ -44,28 +43,26 @@ Renderer::Passes Renderer::createRenderGraph() {
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
-	optionalPasses.push_back(lighting);
+	m_taskRegister.flagFeatureTask("Deferred Lighting", lighting);
 
 	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
-	optionalPasses.push_back(skybox);
+	m_taskRegister.flagFeatureTask("Procedural Skybox", skybox);
 
 	auto hdrCopyTask = core::hdrOutput(context);
 	auto hdrCopy = util::imageCopy(context, hdrOutput, 0, hdrCopyTask, 0);
 	auto ssr = core::ssr(context, sceneData, gbuffer, hdrCopy, hiz, hdrOutput);
-	optionalPasses.push_back(ssr);
+	m_taskRegister.flagFeatureTask("SSR", ssr);
 
 	auto sdrOutput = core::sdrOutput(context);
 	auto composition = post_processing::composition(context, hdrOutput, sdrOutput);
-	optionalPasses.push_back(composition);
+	m_taskRegister.flagFeatureTask("GT7 Tonemapping", composition);
 
 	auto sdrCopyTask = core::sdrOutput(context);
 	auto sdrCopy = util::imageCopy(context, sdrOutput, 0, sdrCopyTask, 0);
 
 	auto fxaa = post_processing::fxaa(context, sdrCopy, sdrOutput);
-	optionalPasses.push_back(fxaa);
+	m_taskRegister.flagFeatureTask("FXAA", fxaa);
 
 	auto ui = core::ui(context, sdrOutput);
-	optionalPasses.push_back(ui);
-
-	return { .ui = ui, .optionalPasses = optionalPasses };
+	m_taskRegister.flagFeatureTask("UI", ui);
 }

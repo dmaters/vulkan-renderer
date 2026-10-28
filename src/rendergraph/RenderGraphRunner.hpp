@@ -8,6 +8,7 @@
 
 #include "RenderingConfiguration.hpp"
 #include "Swapchain.hpp"
+#include "TaskRegister.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/GraphData.hpp"
 #include "resources/ResourceManager.hpp"
@@ -17,7 +18,6 @@ namespace rendergraph::internal {
 
 class RenderGraphRunner {
 private:
-	GraphData& m_data;
 	ExecutionInfo m_execInfo;
 
 	bool m_initialized = false;
@@ -26,13 +26,14 @@ private:
 	ResourceManager& m_resourceManager;
 	MaterialManager& m_materialManager;
 	const RenderingConfiguration& m_renderingConfiguration;
+	TaskRegister& m_taskRegister;
 
 	std::optional<ResourceManager::AllocationIndex> m_deviceAllocation;
 	std::optional<ResourceManager::AllocationIndex> m_sharedAllocation;
 	std::optional<ResourceManager::AllocationIndex> m_hostAllocation;
 
-	std::unordered_map<ResourceIndex, ImageHandle> m_images;
-	std::unordered_map<ResourceIndex, BufferHandle> m_buffers;
+	IndexMap<ResourceIndex, ImageHandle> m_images;
+	IndexMap<ResourceIndex, BufferHandle> m_buffers;
 
 	std::array<vk::Semaphore, 3> m_renderSemaphores = {};
 
@@ -47,12 +48,12 @@ private:
 
 public:
 	RenderGraphRunner(
-		GraphData& data,
 		Swapchain& swapchain,
 		ResourceManager& resourceManager,
 		MaterialManager& materialManager,
 		const RenderingConfiguration& renderingConfiguration,
-		ExecutionInfo execInfo
+		ExecutionInfo execInfo,
+		TaskRegister& taskRegister
 	);
 	~RenderGraphRunner();
 

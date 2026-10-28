@@ -5,6 +5,7 @@
 #include "RenderingConfiguration.hpp"
 #include "Task.hpp"
 #include "scene/Scene.hpp"
+#include "utils/IndexMap.hpp"
 
 struct Task::SetupContext {
 	TaskIndex task;
@@ -23,6 +24,7 @@ struct Task::SetupContext {
 		ResourceManager::ImageDescription description,
 		ResourceManager::MemoryLocation location = ResourceManager::MemoryLocation::Device
 	);
+
 	rendergraph::ResourceIndex createBuffer(
 		std::string name,
 		ResourceManager::BufferDescription description,
@@ -36,6 +38,7 @@ struct Task::SetupContext {
 
 	rendergraph::ResourceIndex getReference(TaskIndex task, std::size_t slot);
 };
+
 class Task::SetupContext::ResourceProvider {
 public:
 	class TaskManager {
@@ -44,20 +47,17 @@ public:
 	};
 
 private:
-	rendergraph::internal::ResourceIndexer m_indexer;
-	std::unordered_map<rendergraph::ResourceIndex, std::string> m_names;
+	IndexMap<rendergraph::ResourceIndex, std::string> m_names;
+	IndexMap<rendergraph::ResourceIndex, rendergraph::ResourceType> m_types;
 
-	std::unordered_map<rendergraph::ResourceIndex, rendergraph::internal::ExecutionInfo::Resources::ImageBuildData>
-		m_images;
+	IndexMap<rendergraph::ResourceIndex, rendergraph::internal::ExecutionInfo::Resources::ImageBuildData> m_images;
+	IndexMap<rendergraph::ResourceIndex, rendergraph::internal::ExecutionInfo::Resources::BufferBuildData> m_buffers;
 
-	std::unordered_map<rendergraph::ResourceIndex, rendergraph::internal::ExecutionInfo::Resources::BufferBuildData>
-		m_buffers;
-
+	std::size_t m_resourceCount = 0;
 	TaskManager& m_taskManager;
 
 public:
-	ResourceProvider(rendergraph::internal::ResourceIndexer indexer, TaskManager& taskManager) :
-		m_indexer(indexer), m_taskManager(taskManager) {}
+	ResourceProvider(TaskManager& taskManager, const TaskRegister& taskRegister);
 
 	rendergraph::ResourceIndex createImage(
 		std::string name,

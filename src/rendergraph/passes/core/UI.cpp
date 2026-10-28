@@ -6,7 +6,7 @@
 #include "rendergraph/SetupContext.hpp"
 
 TaskIndex rendergraph::passes::core::ui(PassBuildContext& context, TaskIndex sdrOutput) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"UI",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

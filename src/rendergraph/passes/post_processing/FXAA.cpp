@@ -11,7 +11,7 @@ struct FXAAData {
 TaskIndex rendergraph::passes::post_processing::fxaa(
 	PassBuildContext& context, TaskIndex sdrCopy, TaskIndex sdrOutput
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"fxaa",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

@@ -9,6 +9,7 @@
 #include "RenderingConfiguration.hpp"
 #include "material/MaterialManager.hpp"
 #include "rendergraph/RenderGraph.hpp"
+#include "rendergraph/TaskRegister.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
 #include "scene/SceneManager.hpp"
@@ -26,19 +27,14 @@ private:
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
 
-	RenderGraph m_graph;
+	TaskRegister m_taskRegister;
+	std::optional<RenderGraph> m_graph;
 	SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> m_sharedSceneBuffers;
-	struct Passes {
-		TaskIndex ui;
-		std::vector<TaskIndex> optionalPasses;
-	};
-	Passes m_passes;
 	SceneManager m_sceneManager;
 	bool m_loadingScene = false;
 	std::size_t m_resourceCount;
 	Scene m_scene;
 
-	Renderer::Passes createRenderGraph();
 
 	static void reloadGraphBuffers(
 		ResourceManager::AllocationIndex allocation,
@@ -46,6 +42,8 @@ private:
 		ResourceManager& resourceManager,
 		RenderGraph& rendergraph
 	);
+
+	void registerPasses();
 
 public:
 	Renderer(SDL_Window* window);

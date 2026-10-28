@@ -5,48 +5,35 @@
 #include "ResourceUsage.hpp"
 #include "Task.hpp"
 #include "resources/ResourceManager.hpp"
+#include "utils/IndexMap.hpp"
 
 namespace rendergraph::internal {
 
-struct GraphData {
-	std::unordered_map<ResourceIndex, ImageHandle> externalImages;
-	std::unordered_map<ResourceIndex, BufferHandle> externalBuffers;
-
-	std::unordered_map<ResourceIndex, std::string> resourceNames;
-
-	std::unordered_map<TaskIndex, Task> tasks;
-	std::unordered_map<TaskIndex, std::vector<std::byte>> taskData;
-
-	struct TaskMetaData {
-		std::string name;
-	};
-
-	std::unordered_map<TaskIndex, TaskMetaData> taskMetadata;
-
-	ResourceIndexer indexer;
-};
-
 struct ExecutionInfo {
 	struct Resources {
-		std::unordered_map<rendergraph::ResourceIndex, std::string> names;
+		IndexMap<rendergraph::ResourceIndex, std::string> names;
+		IndexMap<rendergraph::ResourceIndex, rendergraph::ResourceType> types;
 
 		struct ImageBuildData {
 			ResourceManager::ImageDescription description;
 			ResourceManager::MemoryLocation location;
 		};
-		std::unordered_map<rendergraph::ResourceIndex, ImageBuildData> images;
+		IndexMap<rendergraph::ResourceIndex, ImageBuildData> images;
 
 		struct BufferBuildData {
 			ResourceManager::BufferDescription description;
 			ResourceManager::MemoryLocation location;
 		};
-		std::unordered_map<rendergraph::ResourceIndex, BufferBuildData> buffers;
+		IndexMap<rendergraph::ResourceIndex, BufferBuildData> buffers;
+
+		IndexMap<rendergraph::ResourceIndex, ImageHandle> externalImages;
+		IndexMap<rendergraph::ResourceIndex, BufferHandle> externalBuffers;
 	};
 	Resources resources;
 
 	struct References {
-		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>> inputs;
-		std::unordered_map<TaskIndex, std::vector<Task::ResourceDependency>> outputs;
+		IndexMap<TaskIndex, std::vector<Task::ResourceDependency>> inputs;
+		IndexMap<TaskIndex, std::vector<Task::ResourceDependency>> outputs;
 	};
 	References references;
 	ResourceIndex outputImage;
@@ -58,7 +45,7 @@ struct ExecutionInfo {
 		ResourceUsage::Type currentUsage;
 		ResourceIndex index;
 	};
-	std::unordered_map<TaskIndex, std::vector<Barrier>> barriers;
+	IndexMap<TaskIndex, std::vector<Barrier>> barriers;
 
 	std::vector<Barrier> initializationBarriers;
 

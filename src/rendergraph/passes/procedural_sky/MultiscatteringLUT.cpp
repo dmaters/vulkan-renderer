@@ -11,7 +11,7 @@ struct MultiScatteringLUTData {
 TaskIndex rendergraph::passes::procedural_sky::multiscatteringLUT(
 	PassBuildContext& context, TaskIndex transmittanceLUT
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"multiscatteringLUT",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

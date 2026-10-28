@@ -1,17 +1,18 @@
 #pragma once
-#include <unordered_map>
 
 #include "Task.hpp"
+#include "TaskRegister.hpp"
+
 class Task::DataProvider {
 private:
-	std::unordered_map<TaskIndex, std::vector<std::byte>>& m_taskData;
+	TaskRegister& m_taskRegister;
 
 public:
-	DataProvider(std::unordered_map<TaskIndex, std::vector<std::byte>>& taskData) : m_taskData(taskData) {}
+	DataProvider(TaskRegister& taskRegister) : m_taskRegister(taskRegister) {}
 
 	template <typename T>
 	T& getData(TaskIndex task) {
-		auto& rawData = m_taskData[task];
+		auto& rawData = m_taskRegister.getTasks().taskData[task];
 		assert(rawData.size() == sizeof(T));
 		return *reinterpret_cast<T*>(rawData.data());
 	}

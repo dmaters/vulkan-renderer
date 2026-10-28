@@ -13,8 +13,9 @@ struct Task::BuildContext {
 	DataProvider& dataProvider;
 
 	uint64_t currentFrame;
-	std::unordered_map<rendergraph::ResourceIndex, ImageHandle>& images;
-	std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& buffers;
+	const IndexMap<rendergraph::ResourceIndex, ImageHandle>& images;
+	const IndexMap<rendergraph::ResourceIndex, BufferHandle>& buffers;
+	const IndexMap<rendergraph::ResourceIndex, rendergraph::ResourceType>& resourceTypes;
 
 	std::span<ResourceDependency> inputs;
 	std::span<ResourceDependency> outputs;
@@ -31,8 +32,8 @@ struct Task::BuildContext {
 	template <typename T>
 	T getOutput(std::size_t slot);
 
-	Image& getImage(rendergraph::ResourceIndex index) { return resourceManager.getImage(images[index]); }
-	Buffer& getBuffer(rendergraph::ResourceIndex index) { return resourceManager.getBuffer(buffers[index]); }
+	Image& getImage(rendergraph::ResourceIndex index) { return resourceManager.getImage(*images[index]); }
+	Buffer& getBuffer(rendergraph::ResourceIndex index) { return resourceManager.getBuffer(*buffers[index]); }
 
 	struct Descriptors {
 		struct AccelerationStructureData {
@@ -61,11 +62,11 @@ struct Task::BuildContext {
 template <typename T>
 T Task::BuildContext::getInput(std::size_t slot) {
 	if constexpr (std::same_as<T, Buffer&>) {
-		return resourceManager.getBuffer(buffers[inputs[slot].resource]);
+		return resourceManager.getBuffer(*buffers[inputs[slot].resource]);
 	} else if constexpr (std::same_as<T, Image&>) {
-		return resourceManager.getImage(images[inputs[slot].resource]);
+		return resourceManager.getImage(*images[inputs[slot].resource]);
 	} else {
-		Buffer& buffer = resourceManager.getBuffer(buffers[inputs[slot].resource]);
+		Buffer& buffer = resourceManager.getBuffer(*buffers[inputs[slot].resource]);
 
 		return static_cast<T>(buffer.data);
 	}
@@ -74,11 +75,11 @@ T Task::BuildContext::getInput(std::size_t slot) {
 template <typename T>
 T Task::BuildContext::getOutput(std::size_t slot) {
 	if constexpr (std::same_as<T, Buffer&>) {
-		return resourceManager.getBuffer(buffers[outputs[slot].resource]);
+		return resourceManager.getBuffer(*buffers[outputs[slot].resource]);
 	} else if constexpr (std::same_as<T, Image&>) {
-		return resourceManager.getImage(images[outputs[slot].resource]);
+		return resourceManager.getImage(*images[outputs[slot].resource]);
 	} else {
-		Buffer& buffer = resourceManager.getBuffer(buffers[outputs[slot].resource]);
+		Buffer& buffer = resourceManager.getBuffer(*buffers[outputs[slot].resource]);
 
 		return static_cast<T>(buffer.data);
 	}

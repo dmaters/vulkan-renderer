@@ -4,7 +4,7 @@
 #include "rendergraph/SetupContext.hpp"
 
 TaskIndex rendergraph::passes::procedural_sky::transmittanceLUT(PassBuildContext& context) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"transmittanceLUT",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

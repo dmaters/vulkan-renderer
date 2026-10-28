@@ -41,7 +41,7 @@ TaskIndex rendergraph::passes::util::imageCopy(
 	TaskIndex destination,
 	std::size_t destinationSlot
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"image_copy",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

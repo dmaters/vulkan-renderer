@@ -18,7 +18,6 @@
 #include "rendergraph/RenderGraph.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
-#include "scene/SceneLoader.hpp"
 #include "ui/UI.hpp"
 
 void Renderer::reloadGraphBuffers(
@@ -42,7 +41,6 @@ Renderer::Renderer(SDL_Window* window) :
 	m_instance(Instance::Create(window)),
 	m_resourceManager(),
 	m_materialManager(m_resourceManager),
-	m_graph(m_configuration, Instance::Get().swapchain, m_resourceManager, m_materialManager),
 	m_sceneManager(m_resourceManager, m_materialManager) {
 	if (window == nullptr) return;
 
@@ -75,10 +73,12 @@ Renderer::Renderer(SDL_Window* window) :
 		70,
 	};
 
-	m_passes = createRenderGraph();
-	reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, m_graph);
-
-	m_graph.update(m_passes.ui, m_passes.optionalPasses, m_scene);
+	registerPasses();
+	m_graph.emplace(m_configuration, m_taskRegister, Instance::Get().swapchain, m_resourceManager, m_materialManager);
+	reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, *m_graph);
+	m_graph->update(
+		m_taskRegister.getTaskFeatures().tasks.back(), { m_taskRegister.getTaskFeatures().tasks.back() }, m_scene
+	);
 }
 
 void Renderer::render() {
@@ -100,7 +100,7 @@ void Renderer::render() {
 
 	m_scene.light.orientation = orientation;
 
-	bool res = m_graph.submit(m_scene);
+	bool res = m_graph->submit(m_scene);
 
 	if (m_loadingScene) {
 		std::size_t loadedCount = m_sceneManager.sync();
@@ -116,9 +116,11 @@ void Renderer::render() {
 			m_scene.camera = camera;
 			m_scene.light = light;
 
-			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, m_graph);
+			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, *m_graph);
+			m_graph->update(
+				m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene
+			);
 
-			m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
 			UI::Data.sceneData.primitiveCount = m_scene.primitives.size();
 		}
 	}
@@ -131,8 +133,7 @@ void Renderer::render() {
 			swapchainResolution.width,
 			swapchainResolution.height,
 		};
-
-		m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
+		m_graph->update(m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene);
 	}
 };
 
@@ -146,8 +147,7 @@ void Renderer::setResolution(int width, int height) {
 		width,
 		height,
 	};
-
-	m_graph.update(m_passes.optionalPasses.back(), m_passes.optionalPasses, m_scene);
+	m_graph->update(m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene);
 }
 
 void Renderer::load(const std::filesystem::path& path) {

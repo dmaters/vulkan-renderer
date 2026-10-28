@@ -130,7 +130,7 @@ static void build(Task::BuildContext& context) {
 	}
 }
 TaskIndex rendergraph::passes::core::shadows(PassBuildContext& context, TaskIndex sceneData) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"shadow_map",
 		{
 			.setup = setup,

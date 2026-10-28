@@ -14,7 +14,7 @@ struct SkyboxData {
 TaskIndex rendergraph::passes::procedural_sky::skybox(
 	PassBuildContext& context, TaskIndex sceneData, TaskIndex skyviewLUT, TaskIndex hdrOutput, TaskIndex gbuffer
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"skybox",
 		{
 

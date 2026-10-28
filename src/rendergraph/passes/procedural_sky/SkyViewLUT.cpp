@@ -12,7 +12,7 @@ struct SkyViewLUTData {
 TaskIndex rendergraph::passes::procedural_sky::skyviewLUT(
 	PassBuildContext& context, TaskIndex sceneData, TaskIndex transmittanceLUT, TaskIndex multiscatteringLUT
 ) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"skyviewLUT",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {

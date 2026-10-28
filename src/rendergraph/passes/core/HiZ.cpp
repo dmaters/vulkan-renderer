@@ -94,7 +94,7 @@ TaskIndex rendergraph::passes::core::hiz(PassBuildContext& context, TaskIndex gb
 			{ vk::DescriptorType::eStorageImage, 16 },
 		}
 	);
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"hiz",
 		{
 			.setup = setup,

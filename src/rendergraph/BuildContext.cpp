@@ -37,9 +37,8 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 	for (auto [index, usage] : inputs) {
 		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage)) continue;
 
-		if (rendergraph::internal::ResourceIndexer::ResourceIndex_getType(index) ==
-			rendergraph::internal::ResourceIndexer::ResourceType::Image) {
-			Image& image = resourceManager.getImage(images[index]);
+		if (*resourceTypes[index] == rendergraph::ResourceType::Image) {
+			Image& image = resourceManager.getImage(*images[index]);
 
 			uint32_t depthSamplingOffset = (image.getAspectFlags() & vk::ImageAspectFlagBits::eStencil) ? 1 : 0;
 			resources._imageInfo.push_back(
@@ -59,7 +58,7 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 				}
 			);
 		} else {
-			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
+			Buffer& buffer = resourceManager.getBuffer(*buffers[index]);
 
 			resources._bufferInfo.push_back(
 				{
@@ -96,9 +95,8 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 	for (auto [index, usage] : outputs) {
 		if (!isValidImageDescriptor(usage) && !isValidBufferDescriptor(usage)) continue;
 
-		if (rendergraph::internal::ResourceIndexer::ResourceIndex_getType(index) ==
-			rendergraph::internal::ResourceIndexer::ResourceType::Image) {
-			Image& image = resourceManager.getImage(images[index]);
+		if (*resourceTypes[index] == rendergraph::ResourceType::Image) {
+			Image& image = resourceManager.getImage(*images[index]);
 
 			auto baseIndex = resources._imageInfo.size();
 			for (int i = 0; i < image.views.size(); i++) {
@@ -122,7 +120,7 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 				}
 			);
 		} else {
-			Buffer& buffer = resourceManager.getBuffer(buffers[index]);
+			Buffer& buffer = resourceManager.getBuffer(*buffers[index]);
 
 			resources._bufferInfo.push_back(
 				{

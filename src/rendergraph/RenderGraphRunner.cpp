@@ -29,9 +29,9 @@ std::optional<ResourceManager::AllocationIndex> mapResources(
 	ResourceManager& resourceManager,
 	ResourceAllocationData& allocationData,
 	ResourceManager::MemoryLocation location,
-	std::unordered_map<rendergraph::ResourceIndex, ImageHandle>& imageMap,
-	std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& bufferMap,
-	std::unordered_map<rendergraph::ResourceIndex, std::string>& names
+	IndexMap<rendergraph::ResourceIndex, ImageHandle>& imageMap,
+	IndexMap<rendergraph::ResourceIndex, BufferHandle>& bufferMap,
+	IndexMap<rendergraph::ResourceIndex, std::string>& names
 ) {
 	if (allocationData.imageDescriptions.size() == 0 && allocationData.bufferDescriptions.size() == 0)
 		return std::nullopt;
@@ -59,8 +59,9 @@ std::optional<ResourceManager::AllocationIndex> mapResources(
 }
 
 struct BuildData {
-	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
-	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
+	IndexMap<rendergraph::ResourceIndex, ImageHandle> imageMap;
+	IndexMap<rendergraph::ResourceIndex, BufferHandle> bufferMap;
+
 	std::optional<ResourceManager::AllocationIndex> deviceAllocation;
 	std::optional<ResourceManager::AllocationIndex> sharedAllocation;
 	std::optional<ResourceManager::AllocationIndex> hostAllocation;
@@ -70,7 +71,7 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 	ResourceAllocationData sharedAllocationData;
 	ResourceAllocationData hostAllocationData;
 
-	for (auto [index, data] : execInfo.resources.images) {
+	for (auto [index, data] : execInfo.resources.images.items()) {
 		ResourceAllocationData* currentdata;
 		switch (data.location) {
 			case ResourceManager::MemoryLocation::Device:
@@ -87,7 +88,7 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 		currentdata->imageDescriptions.push_back(data.description);
 		currentdata->imagesIndices.push_back(index);
 	}
-	for (auto [index, data] : execInfo.resources.buffers) {
+	for (auto [index, data] : execInfo.resources.buffers.items()) {
 		ResourceAllocationData* currentdata;
 		switch (data.location) {
 			case ResourceManager::MemoryLocation::Device:
@@ -106,8 +107,8 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 	}
 
 	// TODO: Handle indexing better
-	std::unordered_map<rendergraph::ResourceIndex, ImageHandle> imageMap;
-	std::unordered_map<rendergraph::ResourceIndex, BufferHandle> bufferMap;
+	IndexMap<rendergraph::ResourceIndex, ImageHandle> imageMap;
+	IndexMap<rendergraph::ResourceIndex, BufferHandle> bufferMap;
 
 	auto deviceAllocation = mapResources(
 		resourceManager,
@@ -144,18 +145,18 @@ BuildData build(ExecutionInfo& execInfo, ResourceManager& resourceManager) {
 }
 
 RenderGraphRunner::RenderGraphRunner(
-	GraphData& graphData,
 	Swapchain& swapchain,
 	ResourceManager& resourceManager,
 	MaterialManager& materialManager,
 	const RenderingConfiguration& renderingConfiguration,
-	ExecutionInfo execInfo
+	ExecutionInfo execInfo,
+	TaskRegister& taskRegister
 ) :
-	m_data(graphData),
 	m_swapchain(swapchain),
 	m_resourceManager(resourceManager),
 	m_materialManager(materialManager),
-	m_renderingConfiguration(renderingConfiguration) {
+	m_renderingConfiguration(renderingConfiguration),
+	m_taskRegister(taskRegister) {
 	vk::Device& device = Instance::Get().device;
 	m_renderSemaphores = {
 		device.createSemaphore({}),
@@ -174,11 +175,11 @@ RenderGraphRunner::RenderGraphRunner(
 
 	m_images = data.imageMap;
 	m_buffers = data.bufferMap;
-	for (auto& [index, handle] : graphData.externalImages) {
+	for (auto [index, handle] : execInfo.resources.externalImages.items()) {
 		m_images[index] = handle;
 	}
 
-	for (auto& [index, handle] : graphData.externalBuffers) {
+	for (auto [index, handle] : execInfo.resources.externalBuffers.items()) {
 		m_buffers[index] = handle;
 	}
 	// Finish initialization
@@ -204,8 +205,9 @@ RenderGraphRunner::~RenderGraphRunner() {
 void writeBarrier(
 	vk::CommandBuffer commandBuffer,
 	const std::span<ExecutionInfo::Barrier>& barriers,
-	const std::unordered_map<rendergraph::ResourceIndex, ImageHandle>& images,
-	const std::unordered_map<rendergraph::ResourceIndex, BufferHandle>& buffers,
+	const IndexMap<rendergraph::ResourceIndex, rendergraph::ResourceType>& resourceType,
+	const IndexMap<rendergraph::ResourceIndex, ImageHandle>& images,
+	const IndexMap<rendergraph::ResourceIndex, BufferHandle>& buffers,
 	const ResourceManager& resourceManager
 ) {
 	if (barriers.size() == 0) return;
@@ -217,11 +219,10 @@ void writeBarrier(
 
 	for (auto& barrier : barriers) {
 		ResourceUsage::Access previousAccess = ResourceUsage::GetAccess(barrier.previousUsage);
-
 		ResourceUsage::Access currentAccess = ResourceUsage::GetAccess(barrier.currentUsage);
 
-		if (ResourceIndexer::ResourceIndex_getType(barrier.index) == ResourceIndexer::ResourceType::Image) {
-			const Image& image = resourceManager.getImage(images.at(barrier.index));
+		if (*resourceType[barrier.index] == rendergraph::ResourceType::Image) {
+			const Image& image = resourceManager.getImage(*images[barrier.index]);
 
 			imageBarriers.push_back(
 			    {
@@ -240,7 +241,7 @@ void writeBarrier(
                 }
 			);
 		} else {
-			const Buffer& buffer = resourceManager.getBuffer(buffers.at(barrier.index));
+			const Buffer& buffer = resourceManager.getBuffer(*buffers[barrier.index]);
 
 			bufferBarriers.push_back(
 				{
@@ -291,15 +292,13 @@ bool RenderGraphRunner::updateTimings() const {
 
 	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
 		uint32_t taskIndex = m_execInfo.tasks[i];
-
-		if (taskIndex >= m_data.tasks.size()) continue;	 // It's a barrier
+		auto& taskName = m_taskRegister.getTasks().names[taskIndex];
 
 		float ms = static_cast<float>(timestamps[timestampOffset + 1] - timestamps[timestampOffset]) / 10e6;
 
-		float pastFrameTime = UI::Data.performanceData.taskFrameTime[m_data.taskMetadata[taskIndex].name];
+		float pastFrameTime = UI::Data.performanceData.taskFrameTime[taskName];
 
-		UI::Data.performanceData.taskFrameTime[m_data.taskMetadata[taskIndex].name] =
-			(pastFrameTime / 64 * 63) + ms / 64;
+		UI::Data.performanceData.taskFrameTime[taskName] = (pastFrameTime / 64 * 63) + ms / 64;
 
 		timestampOffset += 2;
 	}
@@ -333,7 +332,12 @@ void RenderGraphRunner::outputToSwapchain(vk::CommandBuffer& commandBuffer, uint
 	};
 
 	writeBarrier(
-		commandBuffer, std::span<ExecutionInfo::Barrier>(firstBarrier), m_images, m_buffers, m_resourceManager
+		commandBuffer,
+		std::span<ExecutionInfo::Barrier>(firstBarrier),
+		m_execInfo.resources.types,
+		m_images,
+		m_buffers,
+		m_resourceManager
 	);
 
 	Image& swapchainImage = m_swapchain.getImage(imageIndex);
@@ -360,7 +364,7 @@ void RenderGraphRunner::outputToSwapchain(vk::CommandBuffer& commandBuffer, uint
 		}
 	);
 
-	Image& resultImage = m_resourceManager.getImage(m_images.at(finalImage));
+	Image& resultImage = m_resourceManager.getImage(*m_images[finalImage]);
 
 	commandBuffer.blitImage(
 		resultImage.image,
@@ -413,7 +417,12 @@ void RenderGraphRunner::outputToSwapchain(vk::CommandBuffer& commandBuffer, uint
 	};
 
 	writeBarrier(
-		commandBuffer, std::span<ExecutionInfo::Barrier>(secondBarrier), m_images, m_buffers, m_resourceManager
+		commandBuffer,
+		std::span<ExecutionInfo::Barrier>(secondBarrier),
+		m_execInfo.resources.types,
+		m_images,
+		m_buffers,
+		m_resourceManager
 	);
 
 	swapchainBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
@@ -484,14 +493,20 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	if (!m_initialized) {
 		m_initialized = true;
 
-		writeBarrier(commandBuffer, m_execInfo.initializationBarriers, m_images, m_buffers, m_resourceManager);
+		writeBarrier(
+			commandBuffer,
+			m_execInfo.initializationBarriers,
+			m_execInfo.resources.types,
+			m_images,
+			m_buffers,
+			m_resourceManager
+		);
 	}
 
-	Task::DataProvider provider(m_data.taskData);
+	Task::DataProvider provider(m_taskRegister);
 
 	for (int i = 0; i < m_execInfo.tasks.size(); i++) {
 		TaskIndex taskIndex = m_execInfo.tasks[i];
-		GraphData::TaskMetaData taskData = m_data.taskMetadata[taskIndex];
 
 		Task::BuildContext context {
 			.task = taskIndex,
@@ -500,6 +515,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 			.currentFrame = m_currentFrame,
 			.images = m_images,
 			.buffers = m_buffers,
+			.resourceTypes = m_execInfo.resources.types,
 			.inputs = m_execInfo.references.inputs[taskIndex],
 			.outputs = m_execInfo.references.outputs[taskIndex],
 			.renderingConfiguration = m_renderingConfiguration,
@@ -511,6 +527,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 		writeBarrier(
 			commandBuffer,
 			std::span<ExecutionInfo::Barrier>(m_execInfo.barriers[taskIndex]),
+			m_execInfo.resources.types,
 			m_images,
 			m_buffers,
 			m_resourceManager
@@ -518,7 +535,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 
 		commandBuffer.beginDebugUtilsLabelEXT(
 			{
-				.pLabelName = m_data.taskMetadata[taskIndex].name.data(),
+				.pLabelName = m_taskRegister.getTasks().names[taskIndex].data(),
 			}
 		);
 		if (timingFetched)
@@ -528,7 +545,7 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 				i * 2 + timestampsCount * currentFrameInFlight + 2
 			);
 
-		m_data.tasks[taskIndex].build(context);
+		m_taskRegister.getTasks().tasks[taskIndex].build(context);
 
 		if (timingFetched)
 			commandBuffer.writeTimestamp(

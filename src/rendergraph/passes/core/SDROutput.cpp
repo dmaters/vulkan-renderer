@@ -3,7 +3,7 @@
 #include "rendergraph/SetupContext.hpp"
 
 TaskIndex rendergraph::passes::core::sdrOutput(PassBuildContext &context) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"sdr_output",
 		{ .setup = [](Task::SetupContext &context) -> Task::Dependencies {
 			auto resolution = context.renderingConfiguration.resolution;

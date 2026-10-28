@@ -9,7 +9,7 @@ struct SkyLightingData {
 };
 
 TaskIndex rendergraph::passes::procedural_sky::skyLighting(PassBuildContext& context, TaskIndex skyviewLUT) {
-	return context.renderGraph.addTask(
+	return context.taskRegister.addTask(
 		"skyLighting",
 		{
 			.setup = [](Task::SetupContext& context) -> Task::Dependencies {
