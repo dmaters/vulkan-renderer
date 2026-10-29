@@ -46,4 +46,10 @@ public:
 	}
 
 	std::size_t size() const { return m_elementCount; }
+
+	std::pair<Idx, T&> topIndex() {
+		auto el = std::find_if(m_elements.rbegin(), m_elements.rend(), [](auto v) { return v.has_value(); });
+
+		return std::pair<Idx, T&>(std::distance(el, m_elements.rend()) - 1, (*(*el)));
+	}
 };

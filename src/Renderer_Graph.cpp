@@ -29,6 +29,7 @@ void Renderer::registerPasses() {
 		.materialManager = m_materialManager,
 		.renderingConfiguration = m_configuration,
 	};
+
 	auto sceneData = core::sceneData(context);
 
 	auto transmittanceLUT = procedural_sky::transmittanceLUT(context);
@@ -43,26 +44,29 @@ void Renderer::registerPasses() {
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);
 	auto lighting = core::deferredLighting(context, hdrOutput, gbuffer, shadowBuffer, sceneData, skylighting);
-	m_taskRegister.flagFeatureTask("Deferred Lighting", lighting);
+
+	auto hdrOutputFeature = m_featureRegister.addFeature("HDR Output");
+	m_featureRegister.addTask(hdrOutputFeature, lighting, "Deferred Lighting");
 
 	auto skybox = procedural_sky::skybox(context, sceneData, skyviewLUT, hdrOutput, gbuffer);
-	m_taskRegister.flagFeatureTask("Procedural Skybox", skybox);
+	m_featureRegister.addTask(hdrOutputFeature, skybox, "Procedural Skybox");
 
 	auto hdrCopyTask = core::hdrOutput(context);
 	auto hdrCopy = util::imageCopy(context, hdrOutput, 0, hdrCopyTask, 0);
 	auto ssr = core::ssr(context, sceneData, gbuffer, hdrCopy, hiz, hdrOutput);
-	m_taskRegister.flagFeatureTask("SSR", ssr);
+	m_featureRegister.addTask(hdrOutputFeature, ssr, "SSR");
 
 	auto sdrOutput = core::sdrOutput(context);
 	auto composition = post_processing::composition(context, hdrOutput, sdrOutput);
-	m_taskRegister.flagFeatureTask("GT7 Tonemapping", composition);
+	auto compositionFeature = m_featureRegister.addFeature("Composition");
+	m_featureRegister.addTask(compositionFeature, composition, "GT7 Tonemapping");
 
 	auto sdrCopyTask = core::sdrOutput(context);
 	auto sdrCopy = util::imageCopy(context, sdrOutput, 0, sdrCopyTask, 0);
 
 	auto fxaa = post_processing::fxaa(context, sdrCopy, sdrOutput);
-	m_taskRegister.flagFeatureTask("FXAA", fxaa);
+	auto postProcessingFeature = m_featureRegister.addFeature("Post Processing");
+	m_featureRegister.addTask(postProcessingFeature, fxaa, "FXAA");
 
 	auto ui = core::ui(context, sdrOutput);
-	m_taskRegister.flagFeatureTask("UI", ui);
 }

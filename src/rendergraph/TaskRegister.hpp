@@ -17,14 +17,8 @@ public:
 		IndexMap<rendergraph::ResourceIndex, rendergraph::ResourceType> types;
 	};
 
-	struct Features {
-		std::vector<std::string_view> names;
-		std::vector<TaskIndex> tasks;
-	};
-
 private:
 	TaskData m_tasks;
-	Features m_features;
 	ResourceDefinitions m_resources;
 
 public:
@@ -53,13 +47,8 @@ public:
 		return index;
 	}
 
-	void flagFeatureTask(std::string_view name, TaskIndex task) {
-		m_features.names.push_back(name);
-		m_features.tasks.push_back(task);
-	}
 
 	TaskData& getTasks() { return m_tasks; }
 	const TaskData& getTasks() const { return m_tasks; }
-	const Features& getTaskFeatures() const { return m_features; }
 	const ResourceDefinitions& getStaticResources() const { return m_resources; }
 };

@@ -17,10 +17,37 @@ void UI::Setup() {
 	Data.systemData.currentGpu = std::string(properties.properties.deviceName);
 }
 
+static void renderPassesWindow() {
+	auto& renderingData = UI::Data.renderingData;
+	ImGui::Begin("Passes");
+
+	bool updated = false;
+	for (auto [index, feature] : renderingData.featureRegister.features.items()) {
+		ImGui::SeparatorText(feature.name.data());
+
+		for (int i = 0; i < feature.tasks.size(); i++) {
+			auto task = feature.tasks[i];
+			bool currentValue = renderingData.enabledTasks[task];
+			bool previousValue = currentValue;
+
+			ImGui::Checkbox(renderingData.featureRegister.taskNames[task].data(), &currentValue);
+
+			if (currentValue != previousValue) updated |= true;
+
+			renderingData.enabledTasks[task] = currentValue;
+		}
+	}
+
+	renderingData.updated = updated;
+	ImGui::End();
+}
+
 void UI::Render(vk::CommandBuffer commandBuffer) {
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
+
+	renderPassesWindow();
 
 	ImGui::Begin("Controls", &Data._utils.showControlsWindow);
 	ImGui::Text("Right click for camera control");

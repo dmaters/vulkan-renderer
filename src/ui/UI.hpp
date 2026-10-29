@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include <vulkan/vulkan.hpp>
 
+#include "rendergraph/FeatureRegister.hpp"
+#include "utils/IndexMap.hpp"
+
 namespace UI {
 struct UIData {
 	struct Scene {
@@ -51,6 +54,15 @@ struct UIData {
 	};
 
 	Utils _utils;
+
+	struct RenderingData {
+		FeatureRegister featureRegister;
+
+		using TaskIndex = std::size_t;
+		IndexMap<TaskIndex, bool> enabledTasks;
+		bool updated = false;
+	};
+	RenderingData renderingData;
 };
 
 void Setup();

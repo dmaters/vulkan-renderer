@@ -37,6 +37,16 @@ void Renderer::reloadGraphBuffers(
 	rendergraph.setBuffer(staticResources.tlas, sceneBuffers.tlas);
 }
 
+void updateGraph(TaskRegister& taskRegister, RenderGraph& graph, Scene& scene) {
+	std::vector<TaskIndex> enabledFeatures;
+
+	for (auto [task, enabled] : UI::Data.renderingData.enabledTasks.items()) {
+		if (enabled) enabledFeatures.push_back(task);
+	}
+	TaskIndex ui = taskRegister.getTasks().tasks.topIndex().first;
+	graph.update(ui, enabledFeatures, scene);
+}
+
 Renderer::Renderer(SDL_Window* window) :
 	m_instance(Instance::Create(window)),
 	m_resourceManager(),
@@ -74,11 +84,11 @@ Renderer::Renderer(SDL_Window* window) :
 	};
 
 	registerPasses();
+
+	UI::Data.renderingData.featureRegister = m_featureRegister;
 	m_graph.emplace(m_configuration, m_taskRegister, Instance::Get().swapchain, m_resourceManager, m_materialManager);
 	reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, *m_graph);
-	m_graph->update(
-		m_taskRegister.getTaskFeatures().tasks.back(), { m_taskRegister.getTaskFeatures().tasks.back() }, m_scene
-	);
+	updateGraph(m_taskRegister, *m_graph, m_scene);
 }
 
 void Renderer::render() {
@@ -117,9 +127,7 @@ void Renderer::render() {
 			m_scene.light = light;
 
 			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, *m_graph);
-			m_graph->update(
-				m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene
-			);
+			updateGraph(m_taskRegister, *m_graph, m_scene);
 
 			UI::Data.sceneData.primitiveCount = m_scene.primitives.size();
 		}
@@ -133,7 +141,11 @@ void Renderer::render() {
 			swapchainResolution.width,
 			swapchainResolution.height,
 		};
-		m_graph->update(m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene);
+		updateGraph(m_taskRegister, *m_graph, m_scene);
+	}
+
+	if (UI::Data.renderingData.updated) {
+		updateGraph(m_taskRegister, *m_graph, m_scene);
 	}
 };
 
@@ -147,7 +159,7 @@ void Renderer::setResolution(int width, int height) {
 		width,
 		height,
 	};
-	m_graph->update(m_taskRegister.getTaskFeatures().tasks.back(), m_taskRegister.getTaskFeatures().tasks, m_scene);
+	updateGraph(m_taskRegister, *m_graph, m_scene);
 }
 
 void Renderer::load(const std::filesystem::path& path) {

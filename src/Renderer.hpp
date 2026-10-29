@@ -8,6 +8,7 @@
 #include "Instance.hpp"
 #include "RenderingConfiguration.hpp"
 #include "material/MaterialManager.hpp"
+#include "rendergraph/FeatureRegister.hpp"
 #include "rendergraph/RenderGraph.hpp"
 #include "rendergraph/TaskRegister.hpp"
 #include "resources/ResourceManager.hpp"
@@ -28,6 +29,8 @@ private:
 	MaterialManager m_materialManager;
 
 	TaskRegister m_taskRegister;
+	FeatureRegister m_featureRegister;
+
 	std::optional<RenderGraph> m_graph;
 	SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> m_sharedSceneBuffers;
 	SceneManager m_sceneManager;
