@@ -9,6 +9,7 @@ struct RaytracingPass {
 		Task::BuildContext& context,
 		MaterialIndex materialIndex,
 		rendergraph::ResourceIndex sbt,
-		glm::uvec3 dispatchSize
+		glm::uvec3 dispatchSize,
+		uint64_t accumulationIndex = 1
 	);
 };

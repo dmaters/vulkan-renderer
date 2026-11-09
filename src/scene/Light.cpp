@@ -138,6 +138,7 @@ Light::ShaderObject Light::getShaderObject(
 	return ShaderObject {
 		.view = view,
 		.cascadeProjections = shadowProjections,
+		.direction = orientation * glm::vec3(0, 0, -1),
 		.color = glm::vec3(color),
 		.intensity = intensity,
 		.cascadeDistances = cascadeDistances,

@@ -22,9 +22,7 @@ float geometrySmith(float NdotV, float NdotL, float a) {
 	return geometrySchlickGGX(NdotV, a) * geometrySchlickGGX(NdotL, a);
 }
 
-float3 microfacetBRDF(
-	float2 uv, float3 viewDir, float3 lightDir, float3 albedo, float3 normal, float metallic, float roughness
-) {
+float3 microfacetBRDF(float3 viewDir, float3 lightDir, float3 albedo, float3 normal, float roughness, float metallic) {
 	float3 halfview = normalize(viewDir + lightDir);
 
 	float NdotV = max(dot(normal, viewDir), 0.0);
@@ -43,8 +41,7 @@ float3 microfacetBRDF(
 	float3 specular = NDF * F * V;
 
 	float3 diffuse = (1.0 - F) * (1.0 - metallic) * albedo / PI;
-
-	return (diffuse + specular) * NdotL;
+	return (diffuse + specular);
 }
 
 }  // namespace PBR

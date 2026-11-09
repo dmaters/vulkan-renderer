@@ -68,5 +68,17 @@ void Renderer::registerPasses() {
 	auto postProcessingFeature = m_featureRegister.addFeature("Post Processing");
 	m_featureRegister.addTask(postProcessingFeature, fxaa, "FXAA");
 
-	auto ui = core::ui(context, sdrOutput);
+	auto pathTracer = rendergraph::passes::core::pathTracer(
+		context,
+		m_sharedSceneBuffers.tlas,
+		m_sharedSceneBuffers.indices,
+		m_sharedSceneBuffers.primitiveData,
+		m_sharedSceneBuffers.vertexAttributes,
+		m_sharedSceneBuffers.materialData,
+		sceneData,
+		hdrOutput
+	);
+	m_featureRegister.addTask(hdrOutputFeature, pathTracer, "Path Tracer");
+
+	core::ui(context, sdrOutput);
 }

@@ -14,7 +14,11 @@ ResourceManager::BufferDescription RaytracingPass::GetSBTDescription() {
 }
 
 void RaytracingPass::TraceRays(
-	Task::BuildContext& context, MaterialIndex materialIndex, rendergraph::ResourceIndex stb, glm::uvec3 dispatchSize
+	Task::BuildContext& context,
+	MaterialIndex materialIndex,
+	rendergraph::ResourceIndex stb,
+	glm::uvec3 dispatchSize,
+	uint64_t accumulationIndex
 ) {
 	if (context.scene.tlas == nullptr) return;
 	auto device = Instance::Get().device;
@@ -31,7 +35,9 @@ void RaytracingPass::TraceRays(
 		{ context.materialManager.getTextureSet() },
 		{}
 	);
-
+	context.commandBuffer.pushConstants(
+		pipeline.pipelineLayout, vk::ShaderStageFlagBits::eAll, 0, sizeof(uint64_t), &accumulationIndex
+	);
 	Task::BuildContext::Descriptors descriptors = context.getDescriptors();
 
 	if (descriptors.descriptors.size() > 0) {

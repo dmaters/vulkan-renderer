@@ -70,7 +70,16 @@ namespace core {
 
 	TaskIndex sdrOutput(PassBuildContext&);
 	TaskIndex hdrOutput(PassBuildContext&);
-
+	TaskIndex pathTracer(
+		PassBuildContext& context,
+		rendergraph::ResourceIndex accelerationStructure,
+		rendergraph::ResourceIndex indexBuffer,
+		rendergraph::ResourceIndex primitiveData,
+		rendergraph::ResourceIndex vertexAttributes,
+		rendergraph::ResourceIndex materialData,
+		TaskIndex sceneData,
+		TaskIndex outputTask
+	);
 }  // namespace core
 
 namespace post_processing {
@@ -78,16 +87,5 @@ namespace post_processing {
 	TaskIndex fxaa(PassBuildContext&, TaskIndex sdrCopy, TaskIndex sdrOutput);
 
 }  // namespace post_processing
-
-TaskIndex raytracing_debug(
-	PassBuildContext& context,
-	rendergraph::ResourceIndex accelerationStructure,
-	rendergraph::ResourceIndex indexBuffer,
-	rendergraph::ResourceIndex primitiveData,
-	rendergraph::ResourceIndex vertexAttributes,
-	rendergraph::ResourceIndex materialData,
-	TaskIndex sceneData,
-	TaskIndex outputTask
-);
 
 };	// namespace rendergraph::passes

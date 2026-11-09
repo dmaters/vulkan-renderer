@@ -24,7 +24,7 @@ struct VertexOutput {
 	float3 cameraPos = (_camera.view[3].xyz) * float3(1, 1, -1);
 	float4 fragPos = _world_position.Sample(_samplers[SamplerType::LinearClamp], input.frag_position);
 
-	float3 view_dir = -transpose(_camera.view)[2].xyz;
+	float3 view_dir = -_camera.direction.xyz;
 	float3 material = float3(0);
 
 	float3 albedo = _albedo.Sample(_samplers[SamplerType::LinearClamp], input.frag_position).rgb;
@@ -32,13 +32,13 @@ struct VertexOutput {
 	float2 roughnessMetallic = _roughness_metallic.Sample(_samplers[SamplerType::LinearClamp], input.frag_position).rg;
 
 	float shadowPercentage = Shadow::shadowPercentage(_shadow_map, fragPos.xyz, normal.xyz, _camera, _lightData);
-	float3 light_dir = transpose(_lightData.view)[2].xyz;
+	float3 light_dir = _lightData.direction.xyz;
 	float3 skylight = _envSH.getValue(-normal);	 // Improve coordinate handling
-	float3 brdf = PBR::microfacetBRDF(
-		input.frag_position, view_dir, light_dir, albedo, normal, roughnessMetallic.x, roughnessMetallic.y
-	);
-	material += (1 - shadowPercentage) * brdf * _lightData.intensity * _lightData.color;
-	material += brdf * skylight * 400;	// Arbitrary value for better visuals
+	float3 brdf = PBR::microfacetBRDF(view_dir, light_dir, albedo, normal, roughnessMetallic.x, roughnessMetallic.y);
 
+	material +=
+		(1 - shadowPercentage) * brdf * saturate(dot(normal, light_dir)) * _lightData.intensity * _lightData.color;
+
+	material += brdf * skylight * 7;  // Arbitrary value for better visuals
 	return float4(material, 1);
 }

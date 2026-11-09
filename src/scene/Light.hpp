@@ -15,11 +15,13 @@ struct Light {
 	struct ShaderObject {
 		glm::mat4 view;
 		std::array<glm::mat4, 3> cascadeProjections;
+		glm::vec3 direction;
+		int32_t _padding1;
 		glm::vec3 color;
 		float intensity;
 		std::array<float, 4> cascadeDistances;
 		std::array<float, 3> cascadePaddings;
-		int32_t _padding;
+		int32_t _padding2;
 	};
 
 	ShaderObject getShaderObject(const Camera& camera, const Camera::ShaderObject& cameraObject, float sceneSize) const;
