@@ -73,7 +73,7 @@ Renderer::Renderer(SDL_Window* window) :
 	m_scene.light = {
 		.position = glm::vec3(0, 0, 600),
 		.orientation = orientation,
-		.intensity = 25.0f,
+		.intensity = 2.54,	// 100.000lux * exposure(ev = 15)
 	};
 
 	m_scene.camera.position = glm::vec3(0, 0, 150);

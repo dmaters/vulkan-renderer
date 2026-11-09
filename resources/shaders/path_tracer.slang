@@ -181,7 +181,7 @@ float3 cosineSample(float u1, float u2) {
 			PBR::microfacetBRDF(
 				-rayDirection, _light.direction, albedo.xyz, normal, roughnessMetallic.x, roughnessMetallic.y
 			) *
-			saturate(dot(normal, _light.direction)) * _light.intensity * PI;
+			saturate(dot(normal, _light.direction)) * _light.intensity;
 	}
 
 	data.brdf *= PBR::microfacetBRDF(

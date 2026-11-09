@@ -63,8 +63,7 @@ float3 reconstructNormal(float2 xy) {
 	clip(_staticTextures[material.albedo_texture].Sample(_samplers[SamplerType::LinearRepeat], input.texcoord).w - 0.5);
 
 	output.color =
-		_staticTextures[material.albedo_texture].Sample(_samplers[SamplerType::LinearRepeat], input.texcoord) *
-		float4(material.albedo_value, 1);
+		_staticTextures[material.albedo_texture].Sample(_samplers[SamplerType::LinearRepeat], input.texcoord);
 	output.world_space = input.frag_position;
 
 	float2 sampledNormal =
