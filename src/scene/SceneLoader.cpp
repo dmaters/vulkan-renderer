@@ -265,7 +265,8 @@ SceneLoader::SceneAllocationInfo SceneLoader::getAllocationInfo() {
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Vertex],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+					 vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
+					 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::VertexAttribute],
@@ -276,12 +277,13 @@ SceneLoader::SceneAllocationInfo SceneLoader::getAllocationInfo() {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Indices],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
 					 vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
-					 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+					 vk::BufferUsageFlagBits::eStorageBuffer |
+					 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Transforms],
 											.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |
-					 vk::BufferUsageFlagBits::eVertexBuffer,
+					 vk::BufferUsageFlagBits::eStorageBuffer,
 											},
 		ResourceManager::BufferDescription {
 											.size = (uint32_t)m_bufferSizes[(int)SceneBuffers::Materials],

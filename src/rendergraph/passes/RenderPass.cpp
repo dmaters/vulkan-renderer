@@ -109,16 +109,14 @@ void RenderPass::Begin(Task::BuildContext& context, AttachmentOp color, Attachme
 	Buffer& positionBuffer = context.resourceManager.getBuffer(buffers[0]);
 	Buffer& attributeBuffer = context.resourceManager.getBuffer(buffers[1]);
 	Buffer& indexBuffer = context.resourceManager.getBuffer(buffers[2]);
-	Buffer& instanceBuffer = context.resourceManager.getBuffer(buffers[3]);
 
 	context.commandBuffer.bindVertexBuffers(
 		0,
 		{
 			positionBuffer.buffer,
 			attributeBuffer.buffer,
-			instanceBuffer.buffer,
 		},
-		{ 0, 0, 0 }
+		{ 0, 0 }
 	);
 	context.commandBuffer.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
 }

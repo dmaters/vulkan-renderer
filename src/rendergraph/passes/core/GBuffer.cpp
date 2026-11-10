@@ -10,6 +10,7 @@
 struct GBufferPass {
 	TaskIndex sceneData;
 	MaterialIndex material;
+	rendergraph::ResourceIndex transforms;
 	rendergraph::ResourceIndex pbrMaterialData;
 	rendergraph::ResourceIndex primitiveData;
 
@@ -149,6 +150,7 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 	return {
 		.inputs = {
 			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
+			{ data.transforms, ResourceUsage::Type::StorageBufferRead},
 			{ data.pbrMaterialData, ResourceUsage::Type::StorageBufferRead },
 			{ data.primitiveData, ResourceUsage::Type::StorageBufferRead },
 			{ indirectBuffer, ResourceUsage::Type::IndirectBufferRead },
@@ -185,14 +187,14 @@ static void build(Task::BuildContext& context) {
 		visiblePrimitives,
 		context.scene.primitives,
 		context.getBuffer(data._indirectBuffer[context.currentFrame % 3]),
-		context.getInput<Buffer&>(3),
+		context.getInput<Buffer&>(4),
 		context.getBuffer(data._primitiveMap[context.currentFrame % 3]),
-		context.getInput<Buffer&>(4)
+		context.getInput<Buffer&>(5)
 	);
 
 	RenderPass::Begin(context, AttachmentOp::ClearWrite, AttachmentOp::ClearWrite);
 
-	RenderPass::IndirectDraw(context, data.material, visiblePrimitives, 0, 3);
+	RenderPass::IndirectDraw(context, data.material, visiblePrimitives, 0, 4);
 
 	RenderPass::End(context.commandBuffer);
 }
@@ -209,6 +211,7 @@ TaskIndex rendergraph::passes::core::gbuffer(
 		GBufferPass {
 			.sceneData = sceneData,
 			.material = context.materialManager.getMaterialIndex("gbuffer"),
+			.transforms = resources.transforms,
 			.pbrMaterialData = resources.pbrMaterialData,
 			.primitiveData = resources.primitiveData,
 		}

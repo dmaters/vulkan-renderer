@@ -368,6 +368,8 @@ void MaterialManager::registerMaterials() {
 			{vk::DescriptorType::eUniformBuffer},
 			{vk::DescriptorType::eUniformBuffer},
 			{vk::DescriptorType::eStorageBuffer},
+			{vk::DescriptorType::eStorageBuffer},
+
 		}
 	);
 	registerGraphicMaterial(
@@ -399,6 +401,7 @@ void MaterialManager::registerMaterials() {
 		},
 		{
 			{vk::DescriptorType::eUniformBuffer},
+			{vk::DescriptorType::eStorageBuffer},
 			{vk::DescriptorType::eStorageBuffer},
 			{vk::DescriptorType::eStorageBuffer},
 			{vk::DescriptorType::eStorageBuffer},

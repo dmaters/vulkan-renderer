@@ -14,17 +14,20 @@ struct VertexOutput {
 };
 
 [vk_binding(0)] ConstantBuffer<Camera> _camera;
+[vk_binding(1)] StructuredBuffer<float4x4> _transformations;
 
 [shader("vertex")] VertexOutput main_vs(VertexInput input, uint32_t drawIndex : SV_DrawIndex) {
 	VertexOutput output;
-	float4x4 mvp = mul(mul(_camera.projection, _camera.view), input.transformation);
+	uint primitive = _primitiveIndices[drawIndex];
+	float4x4 transform = _transformations[primitive];
+	float4x4 mvp = mul(mul(_camera.projection, _camera.view), transform);
 	output.position = mul(mvp, float4(input.position, 1.0));
 
-	output.frag_position = mul(input.transformation, float4(input.position, 1.0));
-	output.normal = mul(input.transformation, float4(input.normal, 1)).xyz;
+	output.frag_position = mul(transform, float4(input.position, 1.0));
+	output.normal = mul(transform, float4(input.normal, 1)).xyz;
 	output.texcoord = input.texCoord;
-	output.tangent = mul(input.transformation, float4(input.tangent, 1)).xyz;
-	output.bitangent = mul(input.transformation, float4(input.bitangent, 1)).xyz;
+	output.tangent = mul(transform, float4(input.tangent, 1)).xyz;
+	output.bitangent = mul(transform, float4(input.bitangent, 1)).xyz;
 	output.drawIndex = drawIndex;
 	return output;
 }
@@ -38,9 +41,9 @@ struct PBRmaterial {
 	float roughness_value;
 };
 
-[vk_binding(1)] StructuredBuffer<PBRmaterial> _materialData;
-[vk_binding(2)] StructuredBuffer<PrimitiveData> _primitiveData;
-[vk_binding(3)] StructuredBuffer<uint32_t> _primitiveIndices;
+[vk_binding(2)] StructuredBuffer<PBRmaterial> _materialData;
+[vk_binding(3)] StructuredBuffer<PrimitiveData> _primitiveData;
+[vk_binding(4)] StructuredBuffer<uint32_t> _primitiveIndices;
 
 struct FragmentOutput {
 	float4 color;

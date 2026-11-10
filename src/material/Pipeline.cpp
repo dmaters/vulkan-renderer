@@ -66,8 +66,8 @@ struct PipelineStateCreateInfo {
 
 		return info;
 	};
-	std::array<vk::VertexInputAttributeDescription, 9> vertexAttributes;
-	std::array<vk::VertexInputBindingDescription, 3> vertexBindings;
+	std::array<vk::VertexInputBindingDescription, 2> vertexBindings;
+	std::array<vk::VertexInputAttributeDescription, 5> vertexAttributes;
 	vk::PipelineVertexInputStateCreateInfo vertex() {
 		vertexBindings = {
 			vk::VertexInputBindingDescription {
@@ -79,11 +79,6 @@ struct PipelineStateCreateInfo {
 											   .binding = 1,
 											   .stride = 64,
 											   .inputRate = vk::VertexInputRate::eVertex,
-											   },
-			vk::VertexInputBindingDescription {
-											   .binding = 2,
-											   .stride = 64,
-											   .inputRate = vk::VertexInputRate::eInstance,
 											   },
 		};
 
@@ -116,30 +111,6 @@ struct PipelineStateCreateInfo {
 												 .location = 4,
 												 .binding = 1,
 												 .format = vk::Format::eR32G32Sfloat,
-												 .offset = 48,
-												 },
-			vk::VertexInputAttributeDescription {
-												 .location = 5,
-												 .binding = 2,
-												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 0,
-												 },
-			vk::VertexInputAttributeDescription {
-												 .location = 6,
-												 .binding = 2,
-												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 16,
-												 },
-			vk::VertexInputAttributeDescription {
-												 .location = 7,
-												 .binding = 2,
-												 .format = vk::Format::eR32G32B32A32Sfloat,
-												 .offset = 32,
-												 },
-			vk::VertexInputAttributeDescription {
-												 .location = 8,
-												 .binding = 2,
-												 .format = vk::Format::eR32G32B32A32Sfloat,
 												 .offset = 48,
 												 },
 		};

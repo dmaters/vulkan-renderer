@@ -13,6 +13,4 @@ struct VertexInput {
 	float3 bitangent : TEXCOORD1;
 	[[vk::location(4)]]
 	float2 texCoord : TEXCOORD2;
-	[[vk::location(5)]]
-	float4x4 transformation;
 };

@@ -37,9 +37,12 @@ void Renderer::registerPasses() {
 	auto skyviewLUT = procedural_sky::skyviewLUT(context, sceneData, transmittanceLUT, multiscatteringLUT);
 	auto skylighting = procedural_sky::skyLighting(context, skyviewLUT);
 
-	auto shadowBuffer = core::shadows(context, sceneData);
-	auto gbuffer =
-		core::gbuffer(context, { m_sharedSceneBuffers.materialData, m_sharedSceneBuffers.primitiveData }, sceneData);
+	auto shadowBuffer = core::shadows(context, m_sharedSceneBuffers.transforms, sceneData);
+	auto gbuffer = core::gbuffer(
+		context,
+		{ m_sharedSceneBuffers.transforms, m_sharedSceneBuffers.materialData, m_sharedSceneBuffers.primitiveData },
+		sceneData
+	);
 
 	auto hiz = core::hiz(context, gbuffer);
 	auto hdrOutput = core::hdrOutput(context);

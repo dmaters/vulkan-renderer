@@ -12,6 +12,7 @@ struct ShadowPass {
 	std::array<rendergraph::ResourceIndex, 3> _primitiveMap;
 
 	TaskIndex sceneData;
+	rendergraph::ResourceIndex transforms;
 
 	MaterialIndex material;
 };
@@ -87,6 +88,8 @@ static Task::Dependencies setup(Task::SetupContext& context) {
 			{ cameraBuffer, ResourceUsage::Type::UniformBuffer },
 			{ indirectBuffer, ResourceUsage::Type::IndirectBufferRead },
 			{ primitiveMap, ResourceUsage::Type::StorageBufferRead },
+			{ data.transforms, ResourceUsage::Type::StorageBufferRead },
+
 		 },
 		.outputs = {
 			{ shadowAtlas, ResourceUsage::Type::DepthStencilWrite },
@@ -129,7 +132,9 @@ static void build(Task::BuildContext& context) {
 		RenderPass::End(context.commandBuffer);
 	}
 }
-TaskIndex rendergraph::passes::core::shadows(PassBuildContext& context, TaskIndex sceneData) {
+TaskIndex rendergraph::passes::core::shadows(
+	PassBuildContext& context, rendergraph::ResourceIndex transforms, TaskIndex sceneData
+) {
 	return context.taskRegister.addTask(
 		"shadow_map",
 		{
@@ -139,6 +144,7 @@ TaskIndex rendergraph::passes::core::shadows(PassBuildContext& context, TaskInde
 		},
 		ShadowPass {
 			.sceneData = sceneData,
+			.transforms = transforms,
 			.material = context.materialManager.getMaterialIndex("shadowmap"),
 		}
 	);

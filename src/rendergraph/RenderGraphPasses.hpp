@@ -4,6 +4,7 @@
 
 namespace rendergraph::passes {
 struct ExternalResources {
+	ResourceIndex transforms;
 	ResourceIndex pbrMaterialData;
 	ResourceIndex primitiveData;
 };
@@ -49,7 +50,7 @@ namespace core {
 
 	TaskIndex gbuffer(PassBuildContext&, const ExternalResources& resources, TaskIndex sceneData);
 	TaskIndex hiz(PassBuildContext&, TaskIndex gbuffer);
-	TaskIndex shadows(PassBuildContext&, TaskIndex sceneData);
+	TaskIndex shadows(PassBuildContext&, rendergraph::ResourceIndex transforms, TaskIndex sceneData);
 	TaskIndex deferredLighting(
 		PassBuildContext&,
 		TaskIndex hdrOutput,
