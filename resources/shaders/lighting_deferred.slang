@@ -39,6 +39,6 @@ struct VertexOutput {
 	material +=
 		(1 - shadowPercentage) * brdf * saturate(dot(normal, light_dir)) * _lightData.intensity * _lightData.color;
 
-	material += brdf * skylight * 7;  // Arbitrary value for better visuals
+	material += brdf * skylight * 3.14;  // Arbitrary value for better visuals
 	return float4(material, 1);
 }

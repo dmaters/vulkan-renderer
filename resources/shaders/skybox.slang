@@ -16,10 +16,8 @@ struct VertexOutput {
 	cameraSpaceDir /= cameraSpaceDir.w;
 	float3 direction = mul(_camera.invView, cameraSpaceDir).xyz;
 	direction = normalize(direction);
-
+	direction.z = -direction.z;
 	float3 sky = readSkyViewLUT(_skyview, direction);
-
-	sky *= 50.0;
 
 	return float4(sky, 1.0);
 }

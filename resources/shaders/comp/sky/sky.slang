@@ -27,8 +27,8 @@ float3 readSkyViewLUT(Texture2D skyviewLUT, float3 direction) {
 	float2 uv;
 
 	uv.x = lon / PI;
-	uv.y = (1.0 + sign(lat) * sqrt(2.0 * abs(lat) / PI)) / 2;
 	uv.x = abs(uv.x);
+	uv.y = (1.0 + sign(lat) * sqrt(2.0 * abs(lat) / PI)) / 2;
 	return skyviewLUT.SampleLevel(_samplers[SamplerType::LinearClamp], uv, 0).rgb;
 }
 
@@ -52,9 +52,8 @@ void writeSkyViewLUT(
 
 	float height = Atmosphere.BottomRadius + 0.1;
 	float3 luminance = getScatteredLuminance<AnisotropicPhase, LUTMultiscatteringProvider, true, false>(
-						   transmittanceLUT, height, direction, sunDirection, 1, { multitransferLUT }
-	)
-						   .luminance;
+						   transmittanceLUT, height, direction, sunDirection, sunIntensity, { multitransferLUT }
+	).luminance;
 	skyviewLUT.Store(coord, float4(luminance, 1));
 }
 
