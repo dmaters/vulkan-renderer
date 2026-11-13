@@ -70,9 +70,9 @@ TaskIndex rendergraph::passes::core::pathTracer(
 	auto material = context.materialManager.registerRaytracingMaterial(
 		"path_tracer",
 		{
-			.raygen = { "resources/shaders/path_tracer.slang", "main_rgen" },
-			.miss = { "resources/shaders/path_tracer.slang", "main_miss" },
-			.closestHit = { "resources/shaders/path_tracer.slang", "main_chit" },
+			.raygen = { "resources/shaders/pipelines/path_tracer.slang", "main_rgen" },
+			.miss = { "resources/shaders/pipelines/path_tracer.slang", "main_miss" },
+			.closestHit = { "resources/shaders/pipelines/path_tracer.slang", "main_chit" },
 	},
 		{
 			{ vk::DescriptorType::eUniformBuffer },

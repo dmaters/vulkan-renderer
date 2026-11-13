@@ -3,15 +3,12 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 
-#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <regex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -21,42 +18,27 @@
 #include "Instance.hpp"
 #include "Pipeline.hpp"
 
-ShaderEngine::ShaderEngine() : m_monitorThread(&ShaderEngine::_monitor, this) {
-	slang::createGlobalSession(&m_session);
-
-	{
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_monitorEnabled = true;
-	}
-	m_cv.notify_all();
-}
-ShaderEngine::~ShaderEngine() {
-	m_monitorEnabled = false;
-	m_monitorThread.join();
-}
-std::optional<vk::ShaderModule> ShaderEngine::loadModule(
-	const std::filesystem::path& path, std::string_view entryPoint, SlangStage stage
-) {
-	std::cout << "Compiling :" << path.string() << std::endl;
-	assert(!path.empty());
-
-	slang::TargetDesc desc {
-		.format = SLANG_SPIRV,
-		.profile = m_session->findProfile("glsl_460"),
-
-	};
-	slang::ISession* session;
-
+slang::ISession* createSession(slang::IGlobalSession& globalSession) {
 	const char* searchPaths[] = { "resources/shaders" };
 
 	std::vector<slang::CompilerOptionEntry> compilerOptions = {
 		{
-			.name = slang::CompilerOptionName::VulkanUseEntryPointName,
-			.value = slang::CompilerOptionValue { .intValue0 = true },
+		 .name = slang::CompilerOptionName::VulkanUseEntryPointName,
+		 .value = slang::CompilerOptionValue { .intValue0 = true },
+		 },
+		{
+		 .name = slang::CompilerOptionName::LanguageVersion,
+		 .value = slang::CompilerOptionValue { .intValue0 = 2026 },
 		 }
 	};
 
-	m_session->createSession(
+	slang::TargetDesc desc {
+		.format = SLANG_SPIRV,
+		.profile = globalSession.findProfile("glsl_460"),
+	};
+
+	slang::ISession* session;
+	globalSession.createSession(
 		{
 			.structureSize = sizeof(slang::SessionDesc),
 			.targets = &desc,
@@ -68,14 +50,46 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			.compilerOptionEntryCount = (uint32_t)compilerOptions.size(),
 		},
 		&session
-
 	);
+	return session;
+}
+
+ShaderEngine::ShaderEngine() : m_monitorThread(&ShaderEngine::_monitor, this) {
+	slang::createGlobalSession(&m_globalSession);
+
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_monitorEnabled = true;
+	}
+	m_cv.notify_all();
+
+	m_registerSession = createSession(*m_globalSession);
+}
+ShaderEngine::~ShaderEngine() {
+	m_registerSession->release();
+	m_globalSession->release();
+
+	m_monitorEnabled = false;
+	m_monitorThread.join();
+}
+
+struct ModuleInfo {
+	vk::ShaderModule module;
+	std::vector<std::filesystem::path> moduleReferences;
+};
+
+std::optional<ModuleInfo> loadModule(
+	slang::ISession& session, const std::filesystem::path& path, std::string_view entryPoint, SlangStage stage
+) {
+	std::cout << "Compiling :" << path.string() << std::endl;
+
+	assert(!path.empty());
 
 	slang::IBlob* diagnostics = nullptr;
 
 	slang::IModule* slangModule;
 
-	slangModule = session->loadModule(path.string().c_str(), &diagnostics);
+	slangModule = session.loadModule(path.string().c_str(), &diagnostics);
 
 	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
@@ -91,9 +105,15 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") != nullptr) return std::nullopt;
 	}
 
+	std::vector<std::filesystem::path> moduleReferences;
+	moduleReferences.reserve(slangModule->getDependencyFileCount());
+	for (int i = 0; i < slangModule->getDependencyFileCount(); i++) {
+		moduleReferences.push_back(slangModule->getDependencyFilePath(i));
+	}
+
 	slang ::IComponentType* components[] = { slangModule, entryPointRef };
 	slang::IComponentType* program;
-	session->createCompositeComponentType(components, 2, &program, &diagnostics);
+	session.createCompositeComponentType(components, 2, &program, &diagnostics);
 
 	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
@@ -102,7 +122,6 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	slang::IComponentType* linkedProgram;
 
 	program->link(&linkedProgram, &diagnostics);
-
 	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
 		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") != nullptr) return std::nullopt;
@@ -113,11 +132,14 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 	slang::IBlob* kernelBlob;
 
 	linkedProgram->getEntryPointCode(entryPointIndex, targetIndex, &kernelBlob, &diagnostics);
-
 	if (diagnostics) {
 		std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
 		if (std::strstr((char*)diagnostics->getBufferPointer(), "error") != nullptr) return std::nullopt;
 	}
+
+	slangModule->release();
+	program->release();
+	linkedProgram->release();
 
 	vk::ShaderModule module = Instance::Get().device.createShaderModule(
 		{
@@ -125,100 +147,132 @@ std::optional<vk::ShaderModule> ShaderEngine::loadModule(
 			.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
 		}
 	);
-
-	session->release();
-
-	return module;
+	kernelBlob->release();
+	return ModuleInfo {
+		.module = module,
+		.moduleReferences = moduleReferences,
+	};
 }
-std::optional<Pipeline> ShaderEngine::buildComputePipeline(
-	ShaderModule module, std::vector<vk::DescriptorSetLayout>& layouts
+
+struct BuildInfo {
+	Pipeline pipeline;
+	std::vector<std::filesystem::path> pipelineDependencies;
+};
+
+std::optional<BuildInfo> buildComputePipeline(
+	ShaderModule module, std::array<vk::DescriptorSetLayout, 2>& layouts, slang::ISession& session
 ) {
-	assert(!module.path.empty());
-	auto res = loadModule(module.path, module.entryPoint, SlangStage::SLANG_STAGE_COMPUTE);
-	if (!res.has_value()) return std::nullopt;
+	auto moduleInfo = loadModule(session, module.path, module.entryPoint, SlangStage::SLANG_STAGE_COMPUTE);
+	if (!moduleInfo.has_value()) return std::nullopt;
 
 	vk::PipelineShaderStageCreateInfo shaderModule = {
 		.stage = vk::ShaderStageFlagBits::eCompute,
-		.module = res.value(),
-		.pName = "main",
+		.module = moduleInfo->module,
+		.pName = module.entryPoint.data(),
 	};
 
-	return PipelineBuilder::BuildComputePipeline(
+	auto pipeline = PipelineBuilder::BuildComputePipeline(
 		{
 			.stage = shaderModule,
 			.setLayouts = layouts,
 		}
 	);
+
+	if (!pipeline) return std::nullopt;
+
+	return BuildInfo {
+		.pipeline = *pipeline,
+		.pipelineDependencies = moduleInfo->moduleReferences,
+	};
 }
 
-std::optional<Pipeline> ShaderEngine::buildGraphicPipeline(
+std::optional<BuildInfo> buildGraphicPipeline(
 	GraphicPipelineModules& modules,
-	std::vector<vk::DescriptorSetLayout>& layouts,
-	GraphicPipelineConfiguration& configuration
+	std::array<vk::DescriptorSetLayout, 2>& layouts,
+	GraphicPipelineConfiguration& configuration,
+	slang::ISession& session
 ) {
 	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 	assert(!modules.vertex.path.empty());
 	assert(!modules.fragment.path.empty());
 
-	auto vertexModule = loadModule(modules.vertex.path, modules.vertex.entryPoint, SlangStage::SLANG_STAGE_VERTEX);
-	if (!vertexModule.has_value()) return std::nullopt;
+	auto vertexModuleInfo =
+		loadModule(session, modules.vertex.path, modules.vertex.entryPoint, SlangStage::SLANG_STAGE_VERTEX);
+	if (!vertexModuleInfo.has_value()) return std::nullopt;
 
 	shaderStages.push_back(
 		{
 			.stage = vk::ShaderStageFlagBits::eVertex,
-			.module = vertexModule.value(),
+			.module = vertexModuleInfo->module,
 			.pName = modules.vertex.entryPoint.data(),
 		}
 	);
 
-	auto fragmentModule =
-		loadModule(modules.fragment.path, modules.fragment.entryPoint, SlangStage::SLANG_STAGE_FRAGMENT);
-	if (!fragmentModule.has_value()) return std::nullopt;
+	auto fragmentModuleInfo =
+		loadModule(session, modules.fragment.path, modules.fragment.entryPoint, SlangStage::SLANG_STAGE_FRAGMENT);
+	if (!fragmentModuleInfo.has_value()) return std::nullopt;
 
 	shaderStages.push_back(
 		{
 			.stage = vk::ShaderStageFlagBits::eFragment,
-			.module = fragmentModule.value(),
+			.module = fragmentModuleInfo->module,
 			.pName = modules.fragment.entryPoint.data(),
 		}
 	);
-
-	return PipelineBuilder::BuildGraphicPipeline(
+	auto pipeline = PipelineBuilder::BuildGraphicPipeline(
 		{
 			.shaderStages = shaderStages,
 			.setLayouts = layouts,
 			.configuration = configuration,
 		}
 	);
-}
-std::optional<Pipeline> ShaderEngine::buildRaytracingPipeline(
-	RaytracingPipelineModules& shaderModules, std::span<const vk::DescriptorSetLayout> layouts
-) {
-	auto raygenModule =
-		loadModule(shaderModules.raygen.path, shaderModules.raygen.entryPoint, SlangStage::SLANG_STAGE_RAY_GENERATION);
-	if (!raygenModule.has_value()) return std::nullopt;
+	if (!pipeline) return std::nullopt;
+	std::vector<std::filesystem::path> pipelineDependencies;
 
-	auto missModule = loadModule(shaderModules.miss.path, shaderModules.miss.entryPoint, SlangStage::SLANG_STAGE_MISS);
-	if (!missModule.has_value()) return std::nullopt;
-
-	auto closestHitModule = loadModule(
-		shaderModules.closestHit.path, shaderModules.closestHit.entryPoint, SlangStage::SLANG_STAGE_CLOSEST_HIT
+	pipelineDependencies.insert(
+		pipelineDependencies.end(), vertexModuleInfo->moduleReferences.begin(), vertexModuleInfo->moduleReferences.end()
 	);
-	if (!closestHitModule.has_value()) return std::nullopt;
+	pipelineDependencies.insert(
+		pipelineDependencies.end(),
+		fragmentModuleInfo->moduleReferences.begin(),
+		fragmentModuleInfo->moduleReferences.end()
+	);
+
+	return BuildInfo {
+		.pipeline = *pipeline,
+		.pipelineDependencies = std::move(pipelineDependencies),
+	};
+}
+std::optional<BuildInfo> buildRaytracingPipeline(
+	RaytracingPipelineModules& shaderModules, std::array<vk::DescriptorSetLayout, 2> layouts, slang::ISession& session
+) {
+	auto raygenModuleInfo = loadModule(
+		session, shaderModules.raygen.path, shaderModules.raygen.entryPoint, SlangStage::SLANG_STAGE_RAY_GENERATION
+	);
+	if (!raygenModuleInfo.has_value()) return std::nullopt;
+
+	auto missModuleInfo =
+		loadModule(session, shaderModules.miss.path, shaderModules.miss.entryPoint, SlangStage::SLANG_STAGE_MISS);
+	if (!missModuleInfo.has_value()) return std::nullopt;
+
+	auto closestHitModuleInfo = loadModule(
+		session, shaderModules.closestHit.path, shaderModules.closestHit.entryPoint, SlangStage::SLANG_STAGE_CLOSEST_HIT
+	);
+	if (!closestHitModuleInfo.has_value()) return std::nullopt;
 
 	std::array<vk::PipelineShaderStageCreateInfo, 3> modulesInfo {
 		{
-			{
+		 {
 				.stage = vk::ShaderStageFlagBits::eRaygenKHR,
-				.module = raygenModule.value(),
+				.module = raygenModuleInfo->module,
 				.pName = shaderModules.raygen.entryPoint.data(),
 			}, {
 				.stage = vk::ShaderStageFlagBits::eMissKHR,
-				.module = missModule.value(),
+				.module = missModuleInfo->module,
 				.pName = shaderModules.miss.entryPoint.data(),
 			}, {
 				.stage = vk::ShaderStageFlagBits::eClosestHitKHR,
-				.module = closestHitModule.value(),
+				.module = closestHitModuleInfo->module,
 				.pName = shaderModules.closestHit.entryPoint.data(),
 			}, },
 	};
@@ -239,89 +293,53 @@ std::optional<Pipeline> ShaderEngine::buildRaytracingPipeline(
 			}, },
 	};
 
-	return PipelineBuilder::BuildRaytracingPipeline(
+	auto pipeline = PipelineBuilder::BuildRaytracingPipeline(
 		{
 			.shaderStages = modulesInfo,
 			.groups = groups,
 			.setLayouts = layouts,
 		}
 	);
-}
 
-void getDependencies(std::filesystem::path base, std::unordered_set<std::filesystem::path>& paths) {
-	if (paths.contains(base)) return;
-	assert(std::filesystem::exists(base));
+	if (!pipeline) return std::nullopt;
 
-	std::ifstream file(base);
+	std::vector<std::filesystem::path> dependencies;
 
-	paths.insert(base);
+	dependencies.insert(
+		dependencies.end(), raygenModuleInfo->moduleReferences.begin(), raygenModuleInfo->moduleReferences.end()
+	);
+	dependencies.insert(
+		dependencies.end(), closestHitModuleInfo->moduleReferences.begin(), closestHitModuleInfo->moduleReferences.end()
+	);
+	dependencies.insert(
+		dependencies.end(), missModuleInfo->moduleReferences.begin(), missModuleInfo->moduleReferences.end()
+	);
 
-	std::string line;
-	std::regex pattern1(R"(#include\s*\"([^\"]+)\")");
-	std::regex pattern2(R"((__include|import)\s*([A-Za-z0-9._]+;))");
-
-	std::smatch match;
-
-	std::unordered_set<std::filesystem::path> result;
-
-	result.insert(base);
-
-	static const std::filesystem::path _rootPath("resources/shaders");
-
-	while (std::getline(file, line)) {
-		if (std::regex_search(line, match, pattern1)) {
-			std::filesystem::path path(match[1].str());
-			if (std::filesystem::exists(base.parent_path() / path))
-				getDependencies(base.parent_path() / path, paths);
-			else if (std::filesystem::exists(_rootPath / path))
-				getDependencies(_rootPath / path, paths);
-			else
-				throw "Module " + path.string() + " not found.";
-		}
-		if (std::regex_search(line, match, pattern2)) {
-			std::string import = match[2].str();
-			std::replace(import.begin(), import.end(), '.', '/');
-			import.pop_back();
-			import.append(".slang");
-
-			std::filesystem::path path = std::filesystem::path(import);
-			if (std::filesystem::exists(base.parent_path() / path))
-				getDependencies(base.parent_path() / path, paths);
-			else if (std::filesystem::exists(_rootPath / path))
-				getDependencies(_rootPath / path, paths);
-			else
-				throw "Module " + path.string() + " not found.";
-		}
-	}
-
-	file.close();
-}
-
-PipelineIndex ShaderEngine::registerComputePipeline(ShaderModule module, std::vector<vk::DescriptorSetLayout> layouts) {
-	PipelineIndexFields fields {
-		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Compute),
-		.index = static_cast<uint32_t>(m_pipelines.size()),
+	return BuildInfo {
+		.pipeline = *pipeline,
+		.pipelineDependencies = dependencies,
 	};
-	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
+}
 
-	auto pipeline = buildComputePipeline(module, layouts);
+PipelineIndex ShaderEngine::registerComputePipeline(
+	ShaderModule module, std::array<vk::DescriptorSetLayout, 2> layouts
+) {
+	assert(!module.path.empty());
+	assert(std::filesystem::exists(module.path));
 
-	assert(pipeline.has_value());
+	PipelineIndex index = m_pipelines.size();
+	m_pipelineTypes[index] = PipelineType::Compute;
 
-	m_pipelines[index] = pipeline.value();
+	auto buildInfo = buildComputePipeline(module, layouts, *m_registerSession);
+	assert(buildInfo.has_value());
+
+	m_pipelines[index] = buildInfo->pipeline;
 	m_layouts[index] = layouts;
-	m_computeModules[index] = module;
+	m_modules[index].computeModule = module;
 
-	std::unordered_set<std::filesystem::path> dependencies;
-
-	m_modules[module.path].insert(index);
-	m_lastEdited[module.path] = std::filesystem::last_write_time(module.path);
-
-	getDependencies(module.path, dependencies);
-
-	for (auto dependecy : dependencies) {
-		m_modules[dependecy].insert(index);
-		m_lastEdited[dependecy] = std::filesystem::last_write_time(dependecy);
+	for (auto dependency : buildInfo->pipelineDependencies) {
+		m_dependencies[dependency].insert(index);
+		m_lastEdited[dependency] = std::filesystem::last_write_time(dependency);
 	}
 
 	return index;
@@ -329,38 +347,26 @@ PipelineIndex ShaderEngine::registerComputePipeline(ShaderModule module, std::ve
 
 PipelineIndex ShaderEngine::registerGraphicPipeline(
 	GraphicPipelineModules modules,
-	std::vector<vk::DescriptorSetLayout> layouts,
+	std::array<vk::DescriptorSetLayout, 2> layouts,
 	GraphicPipelineConfiguration renderPassConfig
 ) {
-	PipelineIndexFields fields {
-		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Graphic),
-		.index = static_cast<uint32_t>(m_pipelines.size()),
-	};
-	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
+	assert(!modules.vertex.path.empty() && !modules.vertex.path.empty());
+	assert(std::filesystem::exists(modules.vertex.path) && std::filesystem::exists(modules.vertex.path));
 
-	auto pipeline = buildGraphicPipeline(modules, layouts, renderPassConfig);
+	PipelineIndex index = m_pipelines.size();
+	m_pipelineTypes[index] = PipelineType::Graphic;
 
-	assert(pipeline.has_value());
+	auto buildInfo = buildGraphicPipeline(modules, layouts, renderPassConfig, *m_registerSession);
 
-	m_pipelines[index] = pipeline.value();
+	assert(buildInfo.has_value());
+
+	m_pipelines[index] = buildInfo->pipeline;
 	m_layouts[index] = layouts;
-	m_graphicModules[index] = modules;
+	m_modules[index].graphicsModules = modules;
 	m_renderPassConfigurations[index] = renderPassConfig;
 
-	std::unordered_set<std::filesystem::path> dependencies;
-
-	m_modules[modules.vertex.path].insert(index);
-	m_lastEdited[modules.vertex.path] = std::filesystem::last_write_time(modules.vertex.path);
-
-	getDependencies(modules.vertex.path, dependencies);
-
-	m_modules[modules.fragment.path].insert(index);
-	m_lastEdited[modules.fragment.path] = std::filesystem::last_write_time(modules.fragment.path);
-
-	getDependencies(modules.fragment.path, dependencies);
-
-	for (auto dependency : dependencies) {
-		m_modules[dependency].insert(index);
+	for (auto dependency : buildInfo->pipelineDependencies) {
+		m_dependencies[dependency].insert(index);
 		m_lastEdited[dependency] = std::filesystem::last_write_time(dependency);
 	}
 
@@ -368,34 +374,28 @@ PipelineIndex ShaderEngine::registerGraphicPipeline(
 }
 
 PipelineIndex ShaderEngine::registerRaytracingPipeline(
-	RaytracingPipelineModules modules, std::vector<vk::DescriptorSetLayout> layouts
+	RaytracingPipelineModules modules, std::array<vk::DescriptorSetLayout, 2> layouts
 ) {
-	PipelineIndexFields fields {
-		.type = static_cast<uint8_t>(PipelineIndexFields::Type::Raytracing),
-		.index = static_cast<uint32_t>(m_pipelines.size()),
-	};
-	PipelineIndex index = std::bit_cast<PipelineIndex>(fields);
+	assert(!modules.raygen.path.empty() && !modules.closestHit.path.empty() && !modules.miss.path.empty());
+	assert(
+		std::filesystem::exists(modules.raygen.path) && std::filesystem::exists(modules.closestHit.path) &&
+		std::filesystem::exists(modules.miss.path)
+	);
 
-	auto pipeline = buildRaytracingPipeline(modules, layouts);
+	PipelineIndex index = m_pipelines.size();
+	m_pipelineTypes[index] = PipelineType::Raytracing;
 
-	assert(pipeline.has_value());
+	auto buildInfo = buildRaytracingPipeline(modules, layouts, *m_registerSession);
 
-	m_pipelines[index] = pipeline.value();
+	assert(buildInfo.has_value());
+
+	m_pipelines[index] = buildInfo->pipeline;
 	m_layouts[index] = layouts;
-	m_raytracingModules[index] = modules;
+	m_modules[index].raytracingModules = modules;
 
-	std::unordered_set<std::filesystem::path> dependencies;
-
-	for (auto& module : { modules.raygen, modules.closestHit, modules.miss }) {
-		m_modules[module.path].insert(index);
-		m_lastEdited[module.path] = std::filesystem::last_write_time(module.path);
-
-		getDependencies(module.path, dependencies);
-
-		for (auto dependecy : dependencies) {
-			m_modules[dependecy].insert(index);
-			m_lastEdited[dependecy] = std::filesystem::last_write_time(dependecy);
-		}
+	for (auto dependency : buildInfo->pipelineDependencies) {
+		m_dependencies[dependency].insert(index);
+		m_lastEdited[dependency] = std::filesystem::last_write_time(dependency);
 	}
 
 	return index;
@@ -430,41 +430,54 @@ void ShaderEngine::_monitor() {
 	}
 
 	while (m_monitorEnabled) {
-		for (auto& [module, time] : m_lastEdited) {
-			auto currentTime = std::filesystem::last_write_time(module);
+		auto session = createSession(*m_globalSession);
+		for (auto& [module, registeredTime] : m_lastEdited) {
+			auto lastEditedTime = std::filesystem::last_write_time(module);
 
-			if (currentTime == time) continue;
+			if (lastEditedTime == registeredTime) continue;
+
 			std::lock_guard<std::mutex> lock(m_mutex);
 
-			for (PipelineIndex index : m_modules.at(module)) {
-				PipelineIndexFields::Type type =
-					static_cast<PipelineIndexFields::Type>(std::bit_cast<PipelineIndexFields>(index).type);
+			slang::IBlob* diagnostics = nullptr;
+			session->loadModule(module.string().c_str(), &diagnostics);
 
-				std::optional<Pipeline> pipeline;
+			if (diagnostics) {
+				std::cerr << (char*)diagnostics->getBufferPointer() << std::endl;
+				if (std::strstr((char*)diagnostics->getBufferPointer(), "error") != nullptr) continue;
+			}
 
-				if (type == PipelineIndexFields::Type::Graphic) {
-					auto& modules = m_graphicModules[index];
-					auto& layouts = m_layouts[index];
+			for (PipelineIndex index : m_dependencies.at(module)) {
+				PipelineType type = m_pipelineTypes[index];
+
+				std::optional<BuildInfo> buildInfo;
+
+				auto& layouts = m_layouts[index];
+
+				if (type == PipelineType::Graphic) {
+					auto& modules = m_modules[index].graphicsModules;
 					auto& renderPass = m_renderPassConfigurations[index];
-					pipeline = buildGraphicPipeline(modules, layouts, renderPass);
-				} else if (type == PipelineIndexFields::Type::Compute) {
-					auto& module = m_computeModules[index];
-					auto& layouts = m_layouts[index];
-					pipeline = buildComputePipeline(module, layouts);
-				} else if (type == PipelineIndexFields::Type::Raytracing) {
-					auto& module = m_raytracingModules[index];
-					auto& layouts = m_layouts[index];
-					pipeline = buildRaytracingPipeline(module, layouts);
+					buildInfo = buildGraphicPipeline(modules, layouts, renderPass, *session);
+				} else if (type == PipelineType::Compute) {
+					auto& module = m_modules[index].computeModule;
+					buildInfo = buildComputePipeline(module, layouts, *session);
+				} else if (type == PipelineType::Raytracing) {
+					auto& module = m_modules[index].raytracingModules;
+					buildInfo = buildRaytracingPipeline(module, layouts, *session);
 				}
 
-				if (pipeline.has_value()) {
-					m_retiredPipelines.push_back({ m_pipelines[index], 4 });
-					m_pipelines[index] = pipeline.value();
+				if (!buildInfo.has_value()) continue;
+
+				m_retiredPipelines.push_back({ m_pipelines[index], 4 });
+				m_pipelines[index] = buildInfo->pipeline;
+
+				for (auto dependency : buildInfo->pipelineDependencies) {
+					m_dependencies[dependency].insert(index);
+					m_lastEdited[dependency] = std::filesystem::last_write_time(dependency);
 				}
 			}
-			m_lastEdited[module] = currentTime;
+			registeredTime = lastEditedTime;
 		}
-
+		session->release();
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
 }

@@ -17,37 +17,38 @@
 
 #include "Pipeline.hpp"
 #include "material/Pipeline.hpp"
+#include "utils/IndexMap.hpp"
 
 typedef uint32_t PipelineIndex;
 
 class ShaderEngine {
 private:
-	struct PipelineIndexFields {
-		enum class Type : uint8_t {
-			Graphic,
-			Compute,
-			Raytracing,
-		};
-
-		unsigned int type : 2;
-		unsigned int index : 30;
+	enum class PipelineType : uint8_t {
+		Graphic,
+		Compute,
+		Raytracing,
 	};
 
-	slang::IGlobalSession* m_session;
+	slang::IGlobalSession* m_globalSession;
+	slang::ISession* m_registerSession;
 
-	std::unordered_map<PipelineIndex, Pipeline> m_pipelines;
+	IndexMap<PipelineIndex, Pipeline> m_pipelines;
+	IndexMap<PipelineIndex, PipelineType> m_pipelineTypes;
+	union PipelineModules {
+		std::array<ShaderModule, 3> values;
 
-	std::unordered_map<PipelineIndex, std::vector<vk::DescriptorSetLayout>> m_layouts;
+		GraphicPipelineModules graphicsModules;
+		ShaderModule computeModule;
+		RaytracingPipelineModules raytracingModules;
+	};
 
-	std::unordered_map<PipelineIndex, GraphicPipelineConfiguration> m_renderPassConfigurations;
-	std::unordered_map<PipelineIndex, GraphicPipelineModules> m_graphicModules;
+	IndexMap<PipelineIndex, PipelineModules> m_modules;
 
-	std::unordered_map<PipelineIndex, ShaderModule> m_computeModules;
-
-	std::unordered_map<PipelineIndex, RaytracingPipelineModules> m_raytracingModules;
+	IndexMap<PipelineIndex, std::array<vk::DescriptorSetLayout, 2>> m_layouts;
+	IndexMap<PipelineIndex, GraphicPipelineConfiguration> m_renderPassConfigurations;
 
 	std::vector<std::pair<Pipeline, uint8_t>> m_retiredPipelines;
-	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>> m_modules;
+	std::unordered_map<std::filesystem::path, std::unordered_set<PipelineIndex>> m_dependencies;
 
 	std::mutex m_mutex;
 	std::condition_variable m_cv;
@@ -57,24 +58,6 @@ private:
 	std::unordered_map<std::filesystem::path, std::filesystem::file_time_type> m_lastEdited;
 
 	void _monitor();
-
-	std::optional<vk::ShaderModule> loadModule(
-		const std::filesystem::path& path, std::string_view entryPoint, SlangStage stage
-	);
-
-	std::optional<Pipeline> buildGraphicPipeline(
-		GraphicPipelineModules& modules,
-		std::vector<vk::DescriptorSetLayout>& layouts,
-		GraphicPipelineConfiguration& configuration
-	);
-	std::optional<Pipeline> buildComputePipeline(
-		ShaderModule computeModule, std::vector<vk::DescriptorSetLayout>& layouts
-	);
-
-	std::optional<Pipeline> buildRaytracingPipeline(
-		RaytracingPipelineModules& raytracingModules, std::span<const vk::DescriptorSetLayout> layouts
-	);
-
 	void reloadPipeline(PipelineIndex index);
 
 public:
@@ -83,19 +66,14 @@ public:
 
 	PipelineIndex registerGraphicPipeline(
 		GraphicPipelineModules modules,
-		std::vector<vk::DescriptorSetLayout> layouts,
+		std::array<vk::DescriptorSetLayout, 2> layouts,
 		GraphicPipelineConfiguration configuration
 	);
-	PipelineIndex registerComputePipeline(ShaderModule computeModule, std::vector<vk::DescriptorSetLayout> layouts);
-
+	PipelineIndex registerComputePipeline(ShaderModule computeModule, std::array<vk::DescriptorSetLayout, 2> layouts);
 	PipelineIndex registerRaytracingPipeline(
-		RaytracingPipelineModules raytracingModules, std::vector<vk::DescriptorSetLayout> layouts
+		RaytracingPipelineModules raytracingModules, std::array<vk::DescriptorSetLayout, 2> layouts
 	);
 
-	Pipeline getPipeline(PipelineIndex index) {
-		assert(m_pipelines.contains(index));
-		return m_pipelines[index];
-	}
-
+	Pipeline getPipeline(PipelineIndex index) { return m_pipelines[index]; }
 	void flushRetiredPipelines();
 };

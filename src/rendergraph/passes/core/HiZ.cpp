@@ -87,8 +87,8 @@ TaskIndex rendergraph::passes::core::hiz(PassBuildContext& context, TaskIndex gb
 	auto material = context.materialManager.registerComputeMaterial(
 		"hiz",
 		{
-			"resources/shaders/hiz.slang"
-	  },
+			"resources/shaders/pipelines/hiz.slang"
+	   },
 		{
 			{ vk::DescriptorType::eSampledImage },
 			{ vk::DescriptorType::eStorageImage, 16 },

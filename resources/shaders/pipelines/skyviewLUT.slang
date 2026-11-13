@@ -1,0 +1,17 @@
+import definitions.light;
+import static_textures;
+
+import tech.procedural_sky;
+
+
+[vk_binding(0)] uniform ConstantBuffer<Light> _lightData;
+[vk_binding(1)] Texture2D _transmittanceLUT;
+[vk_binding(2)] Texture2D _multiscatteringLUT;
+[vk_binding(3)] WTexture2D<float4> _skyviewLUT;
+
+void main(uint3 dispatch : SV_GroupID) {
+	float3 sunDirection = _lightData.direction;
+	writeSkyViewLUT(
+		_skyviewLUT, _transmittanceLUT, _multiscatteringLUT, dispatch.xy, sunDirection, _lightData.intensity
+	);
+}

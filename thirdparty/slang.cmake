@@ -1,4 +1,4 @@
-set(SLANG_VERSION "2025.23.2")
+set(SLANG_VERSION "2026.22")
 
 if (WIN32)
   set(SLANG_OS "windows-x86_64")

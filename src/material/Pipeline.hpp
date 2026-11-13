@@ -44,13 +44,13 @@ class PipelineBuilder {
 public:
 	struct ComputePipelineBuildInfo {
 		vk::PipelineShaderStageCreateInfo stage;
-		std::vector<vk::DescriptorSetLayout>& setLayouts;
+		std::array<vk::DescriptorSetLayout, 2>& setLayouts;
 	};
 	static std::optional<Pipeline> BuildComputePipeline(const ComputePipelineBuildInfo& info);
 
 	struct GraphicPipelineBuildInfo {
 		std::vector<vk::PipelineShaderStageCreateInfo>& shaderStages;
-		std::vector<vk::DescriptorSetLayout>& setLayouts;
+		std::array<vk::DescriptorSetLayout, 2>& setLayouts;
 		GraphicPipelineConfiguration& configuration;
 	};
 	static std::optional<Pipeline> BuildGraphicPipeline(const GraphicPipelineBuildInfo& info);
@@ -58,7 +58,7 @@ public:
 	struct RaytracingPipelineBuildInfo {
 		std::span<const vk::PipelineShaderStageCreateInfo> shaderStages;
 		std::span<const vk::RayTracingShaderGroupCreateInfoKHR> groups;
-		std::span<const vk::DescriptorSetLayout> setLayouts;
+		std::array<vk::DescriptorSetLayout, 2>& setLayouts;
 	};
 	static std::optional<Pipeline> BuildRaytracingPipeline(const RaytracingPipelineBuildInfo& info);
 };

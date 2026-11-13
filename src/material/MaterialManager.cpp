@@ -314,12 +314,14 @@ std::vector<std::size_t> MaterialManager::registerTextureGroup(const std::vector
 
 void MaterialManager::registerMaterials() {
 	registerComputeMaterial(
-		"transmittanceLUT", { "resources/shaders/transmittanceLUT.slang" }, { { vk::DescriptorType::eStorageImage } }
+		"transmittanceLUT",
+		{ "resources/shaders/pipelines/transmittanceLUT.slang" },
+		{ { vk::DescriptorType::eStorageImage } }
 	);
 
 	registerComputeMaterial(
 		"multiscatteringLUT",
-		{ "resources/shaders/multiscatteringLUT.slang" },
+		{ "resources/shaders/pipelines/multiscatteringLUT.slang" },
 		{
 			{ vk::DescriptorType::eSampledImage },
 			{ vk::DescriptorType::eStorageImage },
@@ -329,7 +331,7 @@ void MaterialManager::registerMaterials() {
 
 	registerComputeMaterial(
 		"skyviewLUT",
-		{ "resources/shaders/skyviewLUT.slang" },
+		{ "resources/shaders/pipelines/skyviewLUT.slang" },
 		{
 			{ vk::DescriptorType::eUniformBuffer },
 			{ vk::DescriptorType::eSampledImage },
@@ -340,7 +342,7 @@ void MaterialManager::registerMaterials() {
 
 	registerComputeMaterial(
 		"sky_lighting",
-		{ "resources/shaders/sky_lighting.slang" },
+		{ "resources/shaders/pipelines/sky_lighting.slang" },
 		{
 			{ vk::DescriptorType::eSampledImage },
 			{ vk::DescriptorType::eStorageBuffer },
@@ -351,11 +353,11 @@ void MaterialManager::registerMaterials() {
 		"shadowmap",
 		{
 			.vertex = {
-			    .path = "resources/shaders/shadow_mapping.slang",
+			    .path = "resources/shaders/pipelines/shadow_mapping.slang",
                 .entryPoint = "main_vs",
 			},
 			.fragment = {
-			    .path = "resources/shaders/shadow_mapping.slang",
+			    .path = "resources/shaders/pipelines/shadow_mapping.slang",
 				.entryPoint = "main_fs",
 		},
     },
@@ -375,8 +377,8 @@ void MaterialManager::registerMaterials() {
 	registerGraphicMaterial(
 		"gbuffer",
 		{
-			.vertex = {"resources/shaders/gbuffer.slang", "main_vs"},
-			.fragment = {"resources/shaders/gbuffer.slang", "main_fs"},
+			.vertex = {"resources/shaders/pipelines/gbuffer.slang", "main_vs"},
+			.fragment = {"resources/shaders/pipelines/gbuffer.slang", "main_fs"},
 		},
 		{
 			.colorAttachmentFormats = {
@@ -411,8 +413,8 @@ void MaterialManager::registerMaterials() {
 	registerGraphicMaterial(
 		"lighting_deferred",
 		{
-			.vertex = { "resources/shaders/quad_vert.slang"			},
-			.fragment = { "resources/shaders/lighting_deferred.slang" },
+			.vertex = { "resources/shaders/pipelines/quad_vert.slang"		  },
+			.fragment = { "resources/shaders/pipelines/lighting_deferred.slang" },
 	},
 		{
 			.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat },
@@ -441,8 +443,8 @@ void MaterialManager::registerMaterials() {
 	registerGraphicMaterial(
 	    "skybox",
     	{
-    		.vertex = {"resources/shaders/quad_vert.slang"},
-    		.fragment = {"resources/shaders/skybox.slang"},
+    		.vertex = {"resources/shaders/pipelines/quad_vert.slang"},
+    		.fragment = {"resources/shaders/pipelines/skybox.slang"},
     	},
     	{
     		.colorAttachmentFormats = {
@@ -468,7 +470,7 @@ void MaterialManager::registerMaterials() {
 
 	registerComputeMaterial(
 		"composition",
-		{ "resources/shaders/composition.slang" },
+		{ "resources/shaders/pipelines/composition.slang" },
 		{
 			{ vk::DescriptorType::eSampledImage },
 			{ vk::DescriptorType::eStorageImage },
@@ -477,8 +479,8 @@ void MaterialManager::registerMaterials() {
 	registerGraphicMaterial(
 		"fxaa",
 		{
-			.vertex = { "resources/shaders/quad_vert.slang" },
-			.fragment = { "resources/shaders/fxaa.slang" },
+			.vertex = { "resources/shaders/pipelines/quad_vert.slang" },
+			.fragment = { "resources/shaders/pipelines/fxaa.slang" },
 		},
 		{
 			.colorAttachmentFormats = { vk::Format::eR8G8B8A8Unorm },

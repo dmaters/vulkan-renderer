@@ -1,0 +1,43 @@
+module shadowmapping;
+
+import samplers;
+import definitions.camera;
+import definitions.light;
+
+float getValue(Texture2D shadowMap, float3 worldPos, float3 normal, uint cascade, Camera camera, Light light) {
+	float4 lightSpacePos = mul(mul(light.cascadeProjections[cascade], light.view), float4(worldPos, 1));
+
+	float2 uv = lightSpacePos.xy * 0.5 + 0.5;
+
+	uv.x /= 3.0;
+	uv.x += (1.0 / 3.0) * cascade;
+
+	float bias = 1e-4;
+	float costheta = dot(normal, -transpose(light.view)[2].xyz);
+	bias *= tan(acos(costheta));
+	bias = clamp(bias, 0.001, 0.05);
+
+	return (lightSpacePos.z) < shadowMap.Sample(_samplers[SamplerType::LinearClamp], uv).r + bias ? 0 : 1;
+}
+
+public float cascadeShadowmapSample(Texture2D shadowmap, float3 worldPos, float3 normal, Camera camera, Light light) {
+	float distance = -mul(camera.view, float4(worldPos, 1)).z;
+	if (distance > light.cascadeDistances[3]) return 1;
+
+	uint cascade = 2;
+
+	if (distance < (light.cascadeDistances[2] + light.paddings[1])) cascade = 1;
+	if (distance < (light.cascadeDistances[1] + light.paddings[0])) cascade = 0;
+
+	// We use the padding of the stabilization alignment for the blending
+	// This way we access the full cascade resolution before using the next
+	float weight = saturate((distance - light.cascadeDistances[cascade + 1]) / light.paddings[cascade]);
+	float shadow = getValue(shadowmap, worldPos, normal, cascade, camera, light);
+
+	if (weight > 0 && cascade < 2) {
+		float nextCascadeShadow = getValue(shadowmap, worldPos, normal, cascade + 1, camera, light);
+		shadow = lerp(shadow, nextCascadeShadow, weight);
+	}
+
+	return shadow;
+}

@@ -62,7 +62,7 @@ TaskIndex rendergraph::passes::core::ssr(
 ) {
 	auto material = context.materialManager.registerComputeMaterial(
 		"ssr",
-		{ "resources/shaders/ssr.slang" },
+		{ "resources/shaders/pipelines/ssr.slang" },
 		{
 			{ vk::DescriptorType::eUniformBuffer },
 			{ vk::DescriptorType::eSampledImage },
