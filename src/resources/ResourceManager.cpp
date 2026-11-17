@@ -58,7 +58,7 @@ vk::Image createImage(const ResourceManager::ImageDescription &description) {
 		.initialLayout = vk::ImageLayout::eUndefined,
 	};
 
-	vk::Image image = device.createImage(imageInfo);
+	auto [status, image] = device.createImage(imageInfo);
 
 	return image;
 }
@@ -118,7 +118,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 
 		uint32_t bufferSize = description.size;
 
-		vk::Buffer buffer = device.createBuffer(
+		auto [bufferCreateStatus, buffer] = device.createBuffer(
 			vk::BufferCreateInfo {
 				.size = bufferSize,
 				.usage = description.usage,
@@ -167,7 +167,7 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
 			image.image, m_allocations.at(allocIndex).getAllocation().memory, image.allocation->offset
 		);
 
-		image.views.push_back(device.createImageView( {
+		auto [viewCreateStatus, view] = device.createImageView( {
     		.image = image.image,
     		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
     		.format = image.format,
@@ -178,10 +178,12 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
     							.baseArrayLayer = 0,
     							.layerCount = 1,
     							},
-    	}));
+    	});
+
+		image.views.push_back(view);
 
 		if (Image::GetAspectFlags(image.format) & vk::ImageAspectFlagBits::eStencil) {
-			image.views.push_back(device.createImageView( {
+			auto [stencilStatus, stencilView] = device.createImageView( {
     		.image = image.image,
     		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
     		.format = image.format,
@@ -191,12 +193,13 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
     							.baseArrayLayer = 0,
     							.layerCount = 1,
     							},
-    	    }));
+    	    });
+			image.views.push_back(stencilView);
 		}
 
 		if (image.mipLevels > 1) {
 			for (int mip = 0; mip < imagesDescriptions[i].miplevels; mip++) {
-				image.views.push_back(device.createImageView( {
+				auto [mipViewStatus, mipView] = device.createImageView( {
               		.image = image.image,
               		.viewType = image.size.depth > 1 ? vk::ImageViewType::e3D : vk::ImageViewType::e2D,
               		.format = image.format,
@@ -206,7 +209,9 @@ ResourceManager::AllocationIndex ResourceManager::createResources(
              							.baseArrayLayer = 0,
              							.layerCount = 1,
              							},
-           	    }));
+           	    });
+
+				image.views.push_back(mipView);
 			}
 		}
 	}

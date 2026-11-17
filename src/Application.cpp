@@ -58,7 +58,7 @@ Application::Application(const std::filesystem::path& path) {
 		.type = vk::DescriptorType::eCombinedImageSampler,
 		.descriptorCount = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
 	};
-	vk::DescriptorPool imguiPool = instance.device.createDescriptorPool(
+	auto [status, descriptorPool] = instance.device.createDescriptorPool(
 		vk::DescriptorPoolCreateInfo {
 			.maxSets = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
 			.poolSizeCount = 1,
@@ -76,7 +76,7 @@ Application::Application(const std::filesystem::path& path) {
 		.Device = instance.device,
 		.QueueFamily = instance.queueFamiliesIndices.graphicsIndex,
 		.Queue = instance.graphicQueue,
-		.DescriptorPool = imguiPool,
+		.DescriptorPool = descriptorPool,
 		.MinImageCount = 3,
 		.ImageCount = 3,
 		.PipelineInfoMain = {

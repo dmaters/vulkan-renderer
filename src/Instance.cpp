@@ -38,7 +38,7 @@ Instance& Instance::Create(SDL_Window* window) {
 	vk::Device device = createDevice(physicalDevice);
 
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
-	auto formats = physicalDevice.getSurfaceFormatsKHR(surface);
+	auto [status, formats] = physicalDevice.getSurfaceFormatsKHR(surface);
 
 	vk::Queue graphicQueue, transferQueue;
 
@@ -100,14 +100,13 @@ vk::Instance createInstance() {
 		extNames.push_back(extensions[i]);
 	}
 
-	vk::Instance instance = vk::createInstance(
+	auto [status, instance] = vk::createInstance(
 		vk::InstanceCreateInfo {
 			.pApplicationInfo = &appInfo,
 			.enabledExtensionCount = (uint32_t)extNames.size(),
 			.ppEnabledExtensionNames = extNames.data(),
 		}
 	);
-
 	return instance;
 }
 //// Debug
@@ -164,7 +163,7 @@ void setupDebug(vk::Instance instance) {
 //// PhysicalDevice
 
 vk::PhysicalDevice getPhysicalDevice(vk::Instance instance) {
-	std::vector<vk::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
+	auto [status, devices] = instance.enumeratePhysicalDevices();
 
 	std::optional<vk::PhysicalDevice> integrated;
 
@@ -300,5 +299,6 @@ vk::Device createDevice(vk::PhysicalDevice physicalDevice) {
 		.pEnabledFeatures = &features,
 	};
 
-	return physicalDevice.createDevice(info);
+	auto [status, device] = physicalDevice.createDevice(info);
+	return device;
 }

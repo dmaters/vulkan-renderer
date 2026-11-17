@@ -29,14 +29,15 @@ struct StagingBufferHandles {
 		sharedBuffers(handles), images(handles.begin() + SceneLoader::SceneBuffersCount + 1, handles.end()) {}
 };
 
-vk::CommandPool createCommandPool(bool graphicQueue = false) {
+vk::CommandPool createCommandPool() {
 	auto& instance = Instance::Get();
-	return instance.device.createCommandPool(
+	auto [status, commandPool] = instance.device.createCommandPool(
 		vk::CommandPoolCreateInfo {
 			.flags = vk::CommandPoolCreateFlagBits::eTransient,
 			.queueFamilyIndex = instance.queueFamiliesIndices.graphicsIndex,
 		}
 	);
+	return commandPool;
 }
 
 void waitSemaphore(vk::Semaphore semaphore, uint64_t value) {
@@ -49,7 +50,6 @@ void waitSemaphore(vk::Semaphore semaphore, uint64_t value) {
 		},
 		UINT64_MAX
 	);
-	assert(waitResult == vk::Result::eSuccess);
 }
 
 void createPlaceholderTextures(
@@ -173,7 +173,8 @@ vk::Semaphore createSemaphore() {
 		.initialValue = 0,
 	};
 
-	return Instance::Get().device.createSemaphore({ .pNext = &info });
+	auto [status, semaphore] = Instance::Get().device.createSemaphore({ .pNext = &info });
+	return semaphore;
 }
 
 SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& materialManager) :

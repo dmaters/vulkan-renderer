@@ -29,7 +29,8 @@ vk::PipelineLayout getLayout(const std::span<const vk::DescriptorSetLayout> layo
 		.pPushConstantRanges = ranges.data(),
 
 	};
-	return Instance::Get().device.createPipelineLayout(info);
+	auto [status, layout] = Instance::Get().device.createPipelineLayout(info);
+	return layout;
 }
 
 std::optional<Pipeline> PipelineBuilder::BuildComputePipeline(const ComputePipelineBuildInfo& info) {
@@ -239,7 +240,7 @@ std::optional<Pipeline> PipelineBuilder::BuildGraphicPipeline(const GraphicPipel
 
 std::optional<Pipeline> PipelineBuilder::BuildRaytracingPipeline(const RaytracingPipelineBuildInfo& info) {
 	auto device = Instance::Get().device;
-	auto deferredOperation = device.createDeferredOperationKHR();
+	auto [deferredOperationStatus, deferredOperation] = device.createDeferredOperationKHR();
 
 	vk::RayTracingPipelineCreateInfoKHR pipelineInfo {
 		.stageCount = (uint32_t)info.shaderStages.size(),
@@ -250,9 +251,9 @@ std::optional<Pipeline> PipelineBuilder::BuildRaytracingPipeline(const Raytracin
 		.layout = getLayout(info.setLayouts),
 	};
 
-	auto res = device.createRayTracingPipelineKHR(deferredOperation, vk::PipelineCache(), pipelineInfo);
-	if (res.result != vk::Result::eOperationDeferredKHR && res.result != vk::Result::eOperationNotDeferredKHR &&
-		res.result != vk::Result::eSuccess) {
+	auto [status, pipeline] = device.createRayTracingPipelineKHR(deferredOperation, vk::PipelineCache(), pipelineInfo);
+	if (status != vk::Result::eOperationDeferredKHR && status != vk::Result::eOperationNotDeferredKHR &&
+		status != vk::Result::eSuccess) {
 		device.destroyDeferredOperationKHR(deferredOperation);
 		return std::nullopt;
 	}
@@ -266,7 +267,7 @@ std::optional<Pipeline> PipelineBuilder::BuildRaytracingPipeline(const Raytracin
 	device.destroyDeferredOperationKHR(deferredOperation);
 
 	return Pipeline {
-		.pipeline = res.value,
+		.pipeline = pipeline,
 		.pipelineLayout = pipelineInfo.layout,
 	};
 }

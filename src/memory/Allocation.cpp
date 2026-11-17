@@ -1,15 +1,9 @@
 #include "Allocation.hpp"
 
-#include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <forward_list>
-#include <iostream>
-#include <list>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_structs.hpp>
+#include <vulkan/vulkan.hpp>
 
 #include "Instance.hpp"
 
@@ -26,17 +20,19 @@ Allocation::Allocation(vk::MemoryPropertyFlags requiredType, uint32_t requiredSi
 			continue;
 		vk::MemoryAllocateFlagsInfo flagsInfo { .flags = vk::MemoryAllocateFlagBits::eDeviceAddress };
 
-		memory = device.allocateMemory(
-
-			vk::MemoryAllocateInfo {
+		auto [allocateStatus, allocatedMemory] = device.allocateMemory(
+			{
 				.pNext = &flagsInfo,
 				.allocationSize = requiredSize,
 				.memoryTypeIndex = (uint32_t)i,
 			}
 		);
+		memory = allocatedMemory;
 
-		if (requiredType & vk::MemoryPropertyFlagBits::eHostVisible)
-			address = static_cast<std::byte*>(device.mapMemory(memory, 0, requiredSize));
+		if (requiredType & vk::MemoryPropertyFlagBits::eHostVisible) {
+			auto [mapStatus, createdAddress] = device.mapMemory(memory, 0, requiredSize);
+			address = static_cast<std::byte*>(createdAddress);
+		};
 
 		size = requiredSize;
 

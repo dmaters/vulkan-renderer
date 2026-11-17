@@ -36,12 +36,15 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) : m_resourceM
 										.poolSizeCount = sizes.size(),
 										.pPoolSizes = sizes.data() };
 
-	m_pool = device.createDescriptorPool(info);
+	auto [poolAllocationStatus, pool] = device.createDescriptorPool(info);
+	m_pool = pool;
+
 	m_registeredImages = std::vector<std::optional<ImageHandle>>(512, std::nullopt);
 
 	createTextureDescriptorSet();
 
-	m_emptySetLayout = Instance::Get().device.createDescriptorSetLayout({});
+	auto [descriptorSetAllocationResult, emptyDescriptorSet] = Instance::Get().device.createDescriptorSetLayout({});
+	m_emptySetLayout = emptyDescriptorSet;
 	m_shaderEngine = std::make_unique<ShaderEngine>();
 
 	registerMaterials();
@@ -50,7 +53,7 @@ MaterialManager::MaterialManager(ResourceManager& resourceManager) : m_resourceM
 void MaterialManager::createTextureDescriptorSet() {
 	vk::Device& device = Instance::Get().device;
 
-	vk::Sampler linearClamp = device.createSampler(
+	auto [linearClampStatus, linearClamp] = device.createSampler(
 		{
 			.magFilter = vk::Filter::eLinear,
 			.minFilter = vk::Filter::eLinear,
@@ -61,7 +64,8 @@ void MaterialManager::createTextureDescriptorSet() {
 			.maxLod = 100,
 		}
 	);
-	vk::Sampler linearRepeat = device.createSampler(
+
+	auto [linearRepeatStatus, linearRepeat] = device.createSampler(
 		{
 			.magFilter = vk::Filter::eLinear,
 			.minFilter = vk::Filter::eLinear,
@@ -73,7 +77,7 @@ void MaterialManager::createTextureDescriptorSet() {
 		}
 	);
 
-	vk::Sampler nearestClamp = device.createSampler(
+	auto [nearestClampStatus, nearestClamp] = device.createSampler(
 		{
 			.magFilter = vk::Filter::eNearest,
 			.minFilter = vk::Filter::eNearest,
@@ -85,7 +89,7 @@ void MaterialManager::createTextureDescriptorSet() {
 		}
 	);
 
-	vk::Sampler nearestRepeat = device.createSampler(
+	auto [nearestRepeatStatus, nearestRepeat] = device.createSampler(
 		{
 			.magFilter = vk::Filter::eLinear,
 			.minFilter = vk::Filter::eLinear,
@@ -118,8 +122,10 @@ void MaterialManager::createTextureDescriptorSet() {
 
 	};
 
-	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo { .bindingCount = bindingFlags.size(),
-															  .pBindingFlags = bindingFlags.data() };
+	vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo {
+		.bindingCount = bindingFlags.size(),
+		.pBindingFlags = bindingFlags.data(),
+	};
 
 	vk::DescriptorSetLayoutCreateInfo layoutInfo {
 		.pNext = &flagsInfo,
@@ -128,7 +134,7 @@ void MaterialManager::createTextureDescriptorSet() {
 		.pBindings = bindings.data(),
 	};
 
-	vk::DescriptorSetLayout layout = device.createDescriptorSetLayout(layoutInfo);
+	auto [layoutCreateStatus, layout] = device.createDescriptorSetLayout(layoutInfo);
 
 	vk::DescriptorSetAllocateInfo allocateInfo {
 		.descriptorPool = m_pool,
@@ -136,7 +142,8 @@ void MaterialManager::createTextureDescriptorSet() {
 		.pSetLayouts = &layout,
 	};
 
-	auto set = device.allocateDescriptorSets(allocateInfo)[0];
+	auto [setAllocationStatus, sets] = device.allocateDescriptorSets(allocateInfo);
+	auto& set = sets[0];
 
 	std::array<vk::DescriptorImageInfo, 4> samplerInfos {
 		vk::DescriptorImageInfo { .sampler = linearClamp },
@@ -176,13 +183,14 @@ MaterialIndex MaterialManager::registerComputeMaterial(
 				}
 			);
 
-		layout = Instance::Get().device.createDescriptorSetLayout(
+		auto [layoutCreateStatus, createLayout] = Instance::Get().device.createDescriptorSetLayout(
 			{
 				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
 				.bindingCount = (uint32_t)bindings.size(),
 				.pBindings = bindings.data(),
 			}
 		);
+		layout = createLayout;
 	}
 
 	PipelineIndex pipeline = m_shaderEngine->registerComputePipeline(module, { layout, m_textureSetLayout });
@@ -213,13 +221,14 @@ MaterialIndex MaterialManager::registerGraphicMaterial(
 				}
 			);
 
-		layout = Instance::Get().device.createDescriptorSetLayout(
+		auto [status, createdLayout] = Instance::Get().device.createDescriptorSetLayout(
 			{
 				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
 				.bindingCount = (uint32_t)bindings.size(),
 				.pBindings = bindings.data(),
 			}
 		);
+		layout = createdLayout;
 	}
 
 	PipelineIndex pipeline =
@@ -248,13 +257,14 @@ MaterialIndex MaterialManager::registerRaytracingMaterial(
 				}
 			);
 
-		layout = Instance::Get().device.createDescriptorSetLayout(
+		auto [status, createdLayout] = Instance::Get().device.createDescriptorSetLayout(
 			{
 				.flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
 				.bindingCount = (uint32_t)bindings.size(),
 				.pBindings = bindings.data(),
 			}
 		);
+		layout = createdLayout;
 	}
 
 	PipelineIndex pipeline = m_shaderEngine->registerRaytracingPipeline(modules, { layout, m_textureSetLayout });

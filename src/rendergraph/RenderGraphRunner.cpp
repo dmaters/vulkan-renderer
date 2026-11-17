@@ -158,11 +158,11 @@ RenderGraphRunner::RenderGraphRunner(
 	m_renderingConfiguration(renderingConfiguration),
 	m_taskRegister(taskRegister) {
 	vk::Device& device = Instance::Get().device;
-	m_renderSemaphores = {
-		device.createSemaphore({}),
-		device.createSemaphore({}),
-		device.createSemaphore({}),
-	};
+
+	for (auto& renderSemaphore : m_renderSemaphores) {
+		auto [status, semaphore] = device.createSemaphore({});
+		renderSemaphore = semaphore;
+	}
 
 	m_execInfo = execInfo;
 	m_initialized = false;
@@ -185,12 +185,15 @@ RenderGraphRunner::RenderGraphRunner(
 	// Finish initialization
 	uint32_t queryCount = static_cast<uint32_t>(execInfo.tasks.size() * 3 * 2 + 6);
 	// TODO: Dispose of old query pool to reduce leaks
-	m_debugQueryPool = device.createQueryPool(
+
+	auto [queryPoolAllocationStatus, queryPool] = device.createQueryPool(
 		vk::QueryPoolCreateInfo {
 			.queryType = vk::QueryType::eTimestamp,
 			.queryCount = queryCount,
 		}
 	);
+	m_debugQueryPool = queryPool;
+
 	device.resetQueryPool(m_debugQueryPool, 0, queryCount);
 }
 RenderGraphRunner::~RenderGraphRunner() {
@@ -454,14 +457,9 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	acquireInfo.deviceMask = 1;
 	uint32_t imageIndex = 0;
 
-	try {
-		auto [result, index] = device.acquireNextImage2KHR(acquireInfo);
-		imageIndex = index;
-		if (result == vk::Result::eSuboptimalKHR) return false;
-
-	} catch (vk::OutOfDateKHRError _) {
-		return false;
-	}
+	auto [acquireStatus, index] = device.acquireNextImage2KHR(acquireInfo);
+	imageIndex = index;
+	if (acquireStatus != vk::Result::eSuccess) return false;
 
 	auto _ = device.waitForFences({ frame.fence }, vk::True, UINT64_MAX);
 	device.resetFences(frame.fence);
@@ -478,7 +476,9 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	commandInfo.commandPool = frame.commandPool;
 	commandInfo.level = vk::CommandBufferLevel::ePrimary;
 
-	auto commandBuffer = device.allocateCommandBuffers(commandInfo)[0];
+	auto [allocationStatus, commandBuffers] = device.allocateCommandBuffers(commandInfo);
+	auto& commandBuffer = commandBuffers[0];
+
 	commandBuffer.begin(
 		vk::CommandBufferBeginInfo {
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
@@ -589,14 +589,8 @@ bool RenderGraphRunner::submit(const Scene& scene) {
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = { &(m_swapchain.getSwapchain()) };
 	presentInfo.pImageIndices = &imageIndex;
-
-	try {
-		auto presentResult = Instance::Get().presentQueue.presentKHR(presentInfo);
-		if (presentResult == vk::Result::eSuboptimalKHR) return false;
-
-	} catch (vk::OutOfDateKHRError _) {
-		return false;
-	}
+	auto presentStatus = Instance::Get().presentQueue.presentKHR(presentInfo);
+	if (presentStatus != vk::Result::eSuccess) return false;
 
 	m_currentFrame++;
 	return true;

@@ -4,14 +4,15 @@
 
 ResourceWriteTransaction::ResourceWriteTransaction(vk::CommandPool &commandPool, ResourceManager &resourceManager) :
 	m_resourceManager(resourceManager) {
-	m_commandBuffer = Instance::Get().device.allocateCommandBuffers(
+	auto [status, commandBuffer] = Instance::Get().device.allocateCommandBuffers(
 		vk::CommandBufferAllocateInfo {
 			.commandPool = commandPool,
 			.level = vk::CommandBufferLevel::ePrimary,
 			.commandBufferCount = 1,
 		}
-	)[0];
+	);
 
+	m_commandBuffer = commandBuffer[0];
 	m_commandBuffer.begin(vk::CommandBufferBeginInfo { .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
 }
 

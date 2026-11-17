@@ -15,6 +15,7 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
 target_include_directories(${PROJECT_NAME} PRIVATE src/)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_CONSTRUCTORS)
+target_compile_definitions(${PROJECT_NAME} PRIVATE VULKAN_HPP_NO_EXCEPTIONS)
 target_compile_definitions(${PROJECT_NAME} PRIVATE VK_NO_PROTOTYPES)
 
 add_subdirectory(thirdparty)

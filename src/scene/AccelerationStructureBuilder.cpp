@@ -209,7 +209,9 @@ std::vector<vk::AccelerationStructureKHR> AccelerationStructureBuilder::buildBLA
 			.type = vk::AccelerationStructureTypeKHR::eBottomLevel,
 		};
 
-		blas[i] = device.createAccelerationStructureKHR(createInfo);
+		auto [status, createdBlas] = device.createAccelerationStructureKHR(createInfo);
+
+		blas[i] = createdBlas;
 
 		geometryInfos[i].dstAccelerationStructure = blas[i];
 
@@ -313,7 +315,7 @@ vk::AccelerationStructureKHR AccelerationStructureBuilder::buildTLAS(
 		.type = vk::AccelerationStructureTypeKHR::eTopLevel,
 	};
 
-	auto tlas = device.createAccelerationStructureKHR(createInfo);
+	auto [status, tlas] = device.createAccelerationStructureKHR(createInfo);
 
 	geometryInfo.dstAccelerationStructure = tlas;
 

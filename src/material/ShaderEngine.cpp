@@ -23,12 +23,12 @@ slang::ISession* createSession(slang::IGlobalSession& globalSession) {
 
 	std::vector<slang::CompilerOptionEntry> compilerOptions = {
 		{
-		 .name = slang::CompilerOptionName::VulkanUseEntryPointName,
-		 .value = slang::CompilerOptionValue { .intValue0 = true },
+			.name = slang::CompilerOptionName::VulkanUseEntryPointName,
+			.value = slang::CompilerOptionValue { .intValue0 = true },
 		 },
 		{
-		 .name = slang::CompilerOptionName::LanguageVersion,
-		 .value = slang::CompilerOptionValue { .intValue0 = 2026 },
+			.name = slang::CompilerOptionName::LanguageVersion,
+			.value = slang::CompilerOptionValue { .intValue0 = 2026 },
 		 }
 	};
 
@@ -141,7 +141,7 @@ std::optional<ModuleInfo> loadModule(
 	program->release();
 	linkedProgram->release();
 
-	vk::ShaderModule module = Instance::Get().device.createShaderModule(
+	auto [status, module] = Instance::Get().device.createShaderModule(
 		{
 			.codeSize = kernelBlob->getBufferSize(),
 			.pCode = (uint32_t*)kernelBlob->getBufferPointer(),
@@ -262,7 +262,7 @@ std::optional<BuildInfo> buildRaytracingPipeline(
 
 	std::array<vk::PipelineShaderStageCreateInfo, 3> modulesInfo {
 		{
-		 {
+			{
 				.stage = vk::ShaderStageFlagBits::eRaygenKHR,
 				.module = raygenModuleInfo->module,
 				.pName = shaderModules.raygen.entryPoint.data(),
