@@ -22,7 +22,7 @@ void Renderer::registerPasses() {
 	m_sharedSceneBuffers.transforms = m_taskRegister.registerStaticBuffer("transforms_buffer");
 	m_sharedSceneBuffers.materialData = m_taskRegister.registerStaticBuffer("pbr_data_buffer");
 	m_sharedSceneBuffers.primitiveData = m_taskRegister.registerStaticBuffer("primitive_data");
-	m_sharedSceneBuffers.tlas = m_taskRegister.registerStaticBuffer("tlas");
+	if (Instance::Get().supportedExtensions.raytracing) m_tlas = m_taskRegister.registerStaticBuffer("tlas");
 
 	PassBuildContext context {
 		.taskRegister = m_taskRegister,
@@ -71,17 +71,19 @@ void Renderer::registerPasses() {
 	auto postProcessingFeature = m_featureRegister.addFeature("Post Processing");
 	m_featureRegister.addTask(postProcessingFeature, fxaa, "FXAA");
 
-	auto pathTracer = rendergraph::passes::core::pathTracer(
-		context,
-		m_sharedSceneBuffers.tlas,
-		m_sharedSceneBuffers.indices,
-		m_sharedSceneBuffers.primitiveData,
-		m_sharedSceneBuffers.vertexAttributes,
-		m_sharedSceneBuffers.materialData,
-		sceneData,
-		hdrOutput
-	);
-	m_featureRegister.addTask(hdrOutputFeature, pathTracer, "Path Tracer");
+	if (Instance::Get().supportedExtensions.raytracing) {
+		auto pathTracer = rendergraph::passes::core::pathTracer(
+			context,
+			*m_tlas,
+			m_sharedSceneBuffers.indices,
+			m_sharedSceneBuffers.primitiveData,
+			m_sharedSceneBuffers.vertexAttributes,
+			m_sharedSceneBuffers.materialData,
+			sceneData,
+			hdrOutput
+		);
+		m_featureRegister.addTask(hdrOutputFeature, pathTracer, "Path Tracer");
+	}
 
 	core::ui(context, sdrOutput);
 }

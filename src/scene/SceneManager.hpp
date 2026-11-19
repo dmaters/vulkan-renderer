@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-#include "AccelerationStructureBuilder.hpp"
+#include "AccelerationStructureManager.hpp"
 #include "material/MaterialManager.hpp"
 #include "resources/ResourceManager.hpp"
 #include "scene/Scene.hpp"
@@ -23,7 +23,6 @@ private:
 		std::vector<vk::AccelerationStructureKHR> BLAS;
 		ResourceManager::AllocationIndex stagingAllocation;
 		ResourceManager::AllocationIndex sharedAllocation;
-		ResourceManager::AllocationIndex scratchAllocation;
 
 		std::size_t resourceLoadedCount = 0;
 
@@ -49,6 +48,8 @@ private:
 	ResourceManager::AllocationIndex m_dummyAllocation;
 	std::optional<ResourceManager::AllocationIndex> m_sharedAllocation;
 
+	AccelerationStructureManager m_asManager;
+
 	Scene m_scene;
 
 public:
@@ -70,8 +71,8 @@ public:
 
 template <typename T>
 union SceneManager::SharedBufferContainer {
-	static const std::size_t Count = SceneLoader::SceneBuffersCount + 2;
-	std::array<T, Count> values;
+	static const std::size_t Count = SceneLoader::SceneBuffersCount + 1;
+	std::array<T, Count> values = {};
 
 	struct {
 		T vertices;
@@ -80,7 +81,6 @@ union SceneManager::SharedBufferContainer {
 		T transforms;
 		T materialData;
 		T primitiveData;
-		T tlas;
 	};
 
 	constexpr std::span<const T, SceneLoader::SceneBuffersCount> sceneLoaderBuffers() const {

@@ -20,7 +20,7 @@ void RaytracingPass::TraceRays(
 	glm::uvec3 dispatchSize,
 	uint64_t accumulationIndex
 ) {
-	if (context.scene.tlas == nullptr) return;
+	if (!context.scene.tlas.has_value()) return;
 	auto device = Instance::Get().device;
 	auto pipeline = context.materialManager.getPipeline(materialIndex);
 

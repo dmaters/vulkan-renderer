@@ -34,6 +34,9 @@ struct Scene {
 
 	ResourceManager::AllocationIndex allocation;
 
-	BufferHandle tlasBuffer;
-	vk::AccelerationStructureKHR tlas;
+	struct TLAS {
+		BufferHandle tlasBuffer;
+		vk::AccelerationStructureKHR as;
+	};
+	std::optional<TLAS> tlas;
 };

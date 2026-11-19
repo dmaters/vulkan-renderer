@@ -10,8 +10,6 @@
 #include <span>
 #include <vector>
 
-#include "AccelerationStructureBuilder.hpp"
-#include "Common.hpp"
 #include "Instance.hpp"
 #include "material/MaterialDefinitions.hpp"
 #include "resources/ResourceManager.hpp"
@@ -129,8 +127,6 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 	SceneManager::SharedBufferContainer<ResourceManager::BufferDescription> dummyBuffers;
 	dummyBuffers.vertices = {
 		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer |
-				 vk::BufferUsageFlagBits::eShaderDeviceAddress,
 	};
 	dummyBuffers.vertexAttributes = {
 		.size = 1,
@@ -155,10 +151,6 @@ ResourceManager::AllocationIndex createDummyAllocation(ResourceManager& resource
 		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
 	};
 
-	dummyBuffers.tlas = {
-		.size = 1,
-		.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR,
-	};
 
 	return resourceManager.createResources(
 		{},
@@ -178,7 +170,7 @@ vk::Semaphore createSemaphore() {
 }
 
 SceneManager::SceneManager(ResourceManager& resourceManager, MaterialManager& materialManager) :
-	m_resourceManager(resourceManager), m_materialManager(materialManager) {
+	m_resourceManager(resourceManager), m_materialManager(materialManager), m_asManager(resourceManager) {
 	m_semaphore = createSemaphore();
 	m_dummyAllocation = createDummyAllocation(resourceManager);
 	m_scene.allocation = m_dummyAllocation;
@@ -396,7 +388,6 @@ struct Descriptions {
 
 Descriptions queryDescriptions(
 	SceneLoader& loader,
-	SceneLoader::SceneInstance& sceneInstance,
 	Scene& mergedScene,
 	std::span<const SharedBuffersDescriptions> sceneSharedBuffers
 ) {
@@ -408,7 +399,6 @@ Descriptions queryDescriptions(
 	std::vector<ResourceManager::ImageDescription> sceneImages;
 
 	std::vector<ResourceManager::BufferDescription> stagingBuffers;
-	std::vector<ResourceManager::BufferDescription> scratchBuffers;
 
 	for (int i = 0; i < SceneLoader::SceneBuffersCount; i++) sharedBuffers.push_back({});
 
@@ -450,25 +440,11 @@ Descriptions queryDescriptions(
 		sceneAllocationInfo.stagingImageBuffers.end()
 	);
 
-	AccelerationStructureBuilder asBuilder;
-	auto blasAllocationInfo = asBuilder.queryBLASAllocationInfo(sceneInstance.primitives);
-	sceneBuffers.insert(sceneBuffers.end(), blasAllocationInfo.asBuffers.begin(), blasAllocationInfo.asBuffers.end());
-
-	scratchBuffers.insert(
-		scratchBuffers.end(), blasAllocationInfo.scratchBuffers.begin(), blasAllocationInfo.scratchBuffers.end()
-	);
-
-	auto tlasAllocationInfo = asBuilder.queryTLASAllocationInfo(mergedScene.primitives.size());
-	sharedBuffers.push_back(tlasAllocationInfo.asBuffer);
-	scratchBuffers.push_back(tlasAllocationInfo.instanceData);
-	scratchBuffers.push_back(tlasAllocationInfo.scratchBuffer);
-
 	return {
 		.sharedBuffers = std::move(sharedBuffers),
 		.sceneImages = std::move(sceneImages),
 		.sceneBuffers = std::move(sceneBuffers),
 		.stagingBuffers = std::move(stagingBuffers),
-		.scratchBuffers = std::move(scratchBuffers),
 		.sharedBufferDescriptions = sceneAllocationInfo.geometryBuffers,
 	};
 }
@@ -509,79 +485,6 @@ void loadData(
 	}
 }
 
-struct ASData {
-	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
-	vk::AccelerationStructureKHR tlas;
-};
-ASData buildAS(
-	ResourceWriteTransaction& transaction,
-	SceneLoader::SceneInstance& scene,
-	Scene& mergedScene,
-	std::vector<vk::AccelerationStructureKHR>& mergedBLAS,
-	ResourceManager::AllocationIndex sceneAllocation,
-	ResourceManager::AllocationIndex scratchAllocation,
-	ResourceManager::AllocationIndex sharedAllocation,
-	ResourceManager& resourceManager
-) {
-	auto sharedBuffers =
-		SceneManager::SharedBufferContainer<BufferHandle>(resourceManager.getBuffers(sharedAllocation));
-
-	auto sceneAllocationHandles = resourceManager.getBuffers(sceneAllocation);
-	auto scratchAllocationHandles = resourceManager.getBuffers(scratchAllocation);
-
-	auto blasHandles = std::span<const BufferHandle>(
-		sceneAllocationHandles.end() - scene.primitives.size(), sceneAllocationHandles.end()
-	);
-
-	auto blasScratchHandles = std::span<const BufferHandle>(
-		scratchAllocationHandles.begin(), scratchAllocationHandles.begin() + scene.primitives.size()
-	);
-
-	AccelerationStructureBuilder builder;
-
-	std::vector<vk::AccelerationStructureKHR> sceneBLAS;
-	std::vector<vk::AccelerationStructureKHR> combinedBLAS(mergedBLAS);
-
-	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
-		sceneBLAS = builder.buildBLAS(
-			commandBuffer,
-			{
-				.primitives = scene.primitives,
-				.blasBuffers = blasHandles,
-				.scratchBuffers = blasScratchHandles,
-				.vertexBuffer = sharedBuffers.vertices,
-				.indexBuffer = sharedBuffers.indices,
-				.resourceManager = resourceManager,
-			}
-		);
-
-		combinedBLAS.insert(combinedBLAS.end(), sceneBLAS.begin(), sceneBLAS.end());
-	});
-
-	vk::AccelerationStructureKHR tlas;
-
-	auto tlasInstanceHandle = scratchAllocationHandles.rbegin() + 1;
-	auto tlasScratchHandle = scratchAllocationHandles.rbegin();
-
-	transaction.customOperation([&](vk::CommandBuffer& commandBuffer) {
-		tlas = builder.buildTLAS(
-			commandBuffer,
-			{
-				.primitives = mergedScene.primitives,
-				.blas = combinedBLAS,
-				.transforms = mergedScene.transforms,
-				.instancesBuffer = *tlasInstanceHandle,
-				.asBuffer = sharedBuffers.tlas,
-				.scratchBuffer = *tlasScratchHandle,
-				.resourceManager = resourceManager,
-			}
-		);
-	});
-	return {
-		.sceneBLAS = std::move(sceneBLAS),
-		.tlas = tlas,
-	};
-}
 
 SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path& path) {
 	if (!std::filesystem::exists(path)) {
@@ -596,7 +499,7 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 
 	auto commandPool = createCommandPool();
 
-	auto descriptions = queryDescriptions(*sceneLoader, m_scenes.back(), mergedScene, m_sharedBuffersDescriptions);
+	auto descriptions = queryDescriptions(*sceneLoader, mergedScene, m_sharedBuffersDescriptions);
 
 	auto stagingAllocation =
 		m_resourceManager.createResources({}, descriptions.stagingBuffers, ResourceManager::MemoryLocation::Host);
@@ -608,9 +511,6 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 	auto sharedAllocation =
 		m_resourceManager.createResources({}, descriptions.sharedBuffers, ResourceManager::MemoryLocation::Device);
 
-	auto scratchAllocation = m_resourceManager.createResources(
-		{}, descriptions.scratchBuffers, ResourceManager::MemoryLocation::HostVisible
-	);
 
 	loadData(*sceneLoader, stagingAllocation, sceneAllocation, mergedScene, m_resourceManager, m_materialManager);
 
@@ -646,7 +546,6 @@ SceneManager::ResourceCount SceneManager::loadAsync(const std::filesystem::path&
 			.mergedScene = mergedScene,
 			.stagingAllocation = stagingAllocation,
 			.sharedAllocation = sharedAllocation,
-			.scratchAllocation = scratchAllocation,
 			.commandPool = commandPool,
 		}
 	);
@@ -693,25 +592,19 @@ SceneManager::LoadedResourceCount SceneManager::sync() {
 			m_resourceManager
 		);
 
-		std::vector<vk::AccelerationStructureKHR> blas;
+		if (Instance::Get().supportedExtensions.raytracing) {
+			auto sharedBuffersValues = SharedBufferContainer<BufferHandle>(sharedBuffers);
 
-		for (auto& sceneBLAS : m_scenesBLAS) blas.insert(blas.end(), sceneBLAS.begin(), sceneBLAS.end());
+			m_asManager.addScene(
+				m_scenes.back(), sharedBuffersValues.vertices, sharedBuffersValues.indices, transaction
+			);
+			auto tlasData = m_asManager.buildTLAS(m_loadingData->mergedScene, transaction);
 
-		auto asData = buildAS(
-			transaction,
-			m_scenes.back(),
-			m_loadingData->mergedScene,
-			blas,
-			m_scenesAllocations.back(),
-			m_loadingData->scratchAllocation,
-			m_loadingData->sharedAllocation,
-			m_resourceManager
-		);
-		m_scenesBLAS.push_back(std::move(asData.sceneBLAS));
-
-		m_loadingData->mergedScene.tlasBuffer =
-			SharedBufferContainer<BufferHandle>(m_resourceManager.getBuffers(m_loadingData->sharedAllocation)).tlas;
-		m_loadingData->mergedScene.tlas = asData.tlas;
+			m_loadingData->mergedScene.tlas = Scene::TLAS {
+				.tlasBuffer = m_resourceManager.getBuffers(tlasData.allocationIndex)[0],
+				.as = tlasData.accelerationStructure,
+			};
+		}
 	}
 	waitSemaphore(m_semaphore, m_transferCount);
 	transaction.submit(Instance::Get().graphicQueue, m_semaphore, ++m_transferCount);
@@ -737,12 +630,15 @@ Scene SceneManager::getScene() {
 
 	if (m_sharedAllocation) m_resourceManager.freeAllocation(*m_sharedAllocation);
 	m_resourceManager.freeAllocation(m_loadingData->stagingAllocation);
-	m_resourceManager.freeAllocation(m_loadingData->scratchAllocation);
 
 	m_sharedAllocation = m_loadingData->sharedAllocation;
 	m_scene.allocation = m_loadingData->sharedAllocation;
 	Instance::Get().device.destroyCommandPool(m_loadingData->commandPool);
 	m_loadingData = std::nullopt;
+
+	if (Instance::Get().supportedExtensions.raytracing) {
+		m_asManager.cleanup();
+	}
 
 	return m_scene;
 }

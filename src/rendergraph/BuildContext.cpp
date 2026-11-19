@@ -80,7 +80,7 @@ Task::BuildContext::Descriptors Task::BuildContext::getDescriptors() const {
 			if (usage == ResourceUsage::Type::AccellerationStructureRead) {
 				resources._accelerationStructure = std::make_unique<Descriptors::AccelerationStructureData>();
 
-				resources._accelerationStructure->tlas = scene.tlas;
+				resources._accelerationStructure->tlas = scene.tlas->as;
 				resources._accelerationStructure->accelerationStructureInfo = {
 					.accelerationStructureCount = 1,
 					.pAccelerationStructures = &resources._accelerationStructure->tlas,

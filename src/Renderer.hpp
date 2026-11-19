@@ -33,18 +33,13 @@ private:
 
 	std::optional<RenderGraph> m_graph;
 	SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> m_sharedSceneBuffers;
+	std::optional<rendergraph::ResourceIndex> m_tlas;
+
 	SceneManager m_sceneManager;
 	bool m_loadingScene = false;
 	std::size_t m_resourceCount;
 	Scene m_scene;
 
-
-	static void reloadGraphBuffers(
-		ResourceManager::AllocationIndex allocation,
-		SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> staticResources,
-		ResourceManager& resourceManager,
-		RenderGraph& rendergraph
-	);
 
 	void registerPasses();
 

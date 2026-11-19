@@ -20,13 +20,13 @@
 #include "scene/Scene.hpp"
 #include "ui/UI.hpp"
 
-void Renderer::reloadGraphBuffers(
-	ResourceManager::AllocationIndex allocation,
+void reloadGraphBuffers(
+	ResourceManager::AllocationIndex sceneAllocation,
 	SceneManager::SharedBufferContainer<rendergraph::ResourceIndex> staticResources,
 	ResourceManager& resourceManager,
 	RenderGraph& rendergraph
 ) {
-	auto sceneBuffers = SceneManager::SharedBufferContainer<BufferHandle>(resourceManager.getBuffers(allocation));
+	auto sceneBuffers = SceneManager::SharedBufferContainer<BufferHandle>(resourceManager.getBuffers(sceneAllocation));
 
 	rendergraph.setBuffer(staticResources.vertices, sceneBuffers.vertices);
 	rendergraph.setBuffer(staticResources.vertexAttributes, sceneBuffers.vertexAttributes);
@@ -34,7 +34,6 @@ void Renderer::reloadGraphBuffers(
 	rendergraph.setBuffer(staticResources.transforms, sceneBuffers.transforms);
 	rendergraph.setBuffer(staticResources.materialData, sceneBuffers.materialData);
 	rendergraph.setBuffer(staticResources.primitiveData, sceneBuffers.primitiveData);
-	rendergraph.setBuffer(staticResources.tlas, sceneBuffers.tlas);
 }
 
 void updateGraph(TaskRegister& taskRegister, RenderGraph& graph, Scene& scene) {
@@ -127,6 +126,8 @@ void Renderer::render() {
 			m_scene.light = light;
 
 			reloadGraphBuffers(m_scene.allocation, m_sharedSceneBuffers, m_resourceManager, *m_graph);
+			if (Instance::Get().supportedExtensions.raytracing) m_graph->setBuffer(*m_tlas, m_scene.tlas->tlasBuffer);
+
 			updateGraph(m_taskRegister, *m_graph, m_scene);
 
 			UI::Data.sceneData.primitiveCount = m_scene.primitives.size();

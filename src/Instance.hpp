@@ -18,6 +18,7 @@ public:
 
 		bool transferAvailable = false;
 	};
+
 	vk::Device device;
 	vk::SurfaceKHR surface;
 	vk::SurfaceFormatKHR surfaceFormat;
@@ -39,6 +40,12 @@ public:
 	QueueFamilies queueFamiliesIndices;
 	static Instance& Create(SDL_Window* window);
 	static Instance& Get() { return _instance.value(); }
+
+	struct SupportedExtensions {
+		bool raytracing;
+	};
+
+	SupportedExtensions supportedExtensions;
 
 private:
 	static std::optional<Instance> _instance;
