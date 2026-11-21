@@ -1,6 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_video.h>
 
 #include <filesystem>
 #include <vulkan/vulkan.hpp>
@@ -24,7 +23,6 @@ private:
 
 	RenderingConfiguration m_configuration;
 
-	Instance& m_instance;
 	ResourceManager m_resourceManager;
 	MaterialManager m_materialManager;
 
@@ -44,7 +42,7 @@ private:
 	void registerPasses();
 
 public:
-	Renderer(SDL_Window* window);
+	Renderer();
 	void load(const std::filesystem::path& path);
 	void render();
 	void setResolution(int width, int height);

@@ -1,12 +1,12 @@
 #pragma once
 
 #include "Renderer.hpp"
-#include "SDL3/SDL_video.h"
 
+struct GLFWwindow;
 class Application {
 private:
-	SDL_Window* m_window;
 	std::unique_ptr<Renderer> m_renderer;
+	GLFWwindow* m_window;
 
 public:
 	Application(const std::filesystem::path& path);

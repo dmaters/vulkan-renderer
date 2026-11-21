@@ -1,17 +1,11 @@
-
-
 #include "Application.hpp"
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_mouse.h>
-#include <SDL3/SDL_timer.h>
-#include <backends/imgui_impl_sdl3.h>
-#include <backends/imgui_impl_sdlgpu3.h>
+#include <GLFW/glfw3.h>
+#include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
 
-#include <cstdint>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -25,18 +19,26 @@ static void check_vk_result(VkResult err) {
 }
 
 Application::Application(const std::filesystem::path& path) {
-	if (!SDL_Init(SDL_INIT_VIDEO)) {
-		std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
-		throw;
+	if (!glfwInit()) {
+		const char* error;
+		glfwGetError(&error);
+		std::cerr << "Couldn't initialize glfw. " << error << std::endl;
+		abort();
+	}
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+	m_window = glfwCreateWindow(1280, 720, "Renderer", nullptr, nullptr);
+
+	if (!m_window) {
+		const char* error;
+		glfwGetError(&error);
+		std::cerr << "Couldn't create glfw window. " << error << std::endl;
+		abort();
 	}
 
-	m_window = SDL_CreateWindow("SDLVulk Test", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-	if (!m_window) {
-		std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;
-		SDL_Quit();
-		throw;
-	}
-	m_renderer = std::make_unique<Renderer>(m_window);
+	Instance::Create(m_window);
+
+	m_renderer = std::make_unique<Renderer>();
 	m_renderer->load(path);
 
 	IMGUI_CHECKVERSION();
@@ -44,8 +46,7 @@ Application::Application(const std::filesystem::path& path) {
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	ImGui_ImplSDL3_InitForVulkan(m_window);
-
+	ImGui_ImplGlfw_InitForVulkan(m_window, true);
 	Instance& instance = Instance::Get();
 	ImGui_ImplVulkan_LoadFunctions(
 		vk::ApiVersion13,
@@ -92,72 +93,138 @@ Application::Application(const std::filesystem::path& path) {
 	ImGui_ImplVulkan_Init(&init_info);
 }
 
+struct InputState {
+	bool cameraControl;
+	bool forward;
+	bool backward;
+	bool right;
+	bool left;
+
+	bool speedBoost;
+	bool speedSlow;
+
+	double mX;
+	double mY;
+};
+
+static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	InputState* inputState = (InputState*)glfwGetWindowUserPointer(window);
+
+	if (action == GLFW_PRESS) {
+		switch (key) {
+			case GLFW_KEY_ESCAPE:
+				glfwSetWindowShouldClose(window, GLFW_TRUE);
+				break;
+			case GLFW_KEY_W:
+				inputState->forward = true;
+				break;
+			case GLFW_KEY_S:
+				inputState->backward = true;
+				break;
+			case GLFW_KEY_A:
+				inputState->left = true;
+				break;
+			case GLFW_KEY_D:
+				inputState->right = true;
+				break;
+			case GLFW_KEY_LEFT_SHIFT:
+				inputState->speedBoost = true;
+				break;
+			case GLFW_KEY_LEFT_CONTROL:
+				inputState->speedSlow = true;
+				break;
+		}
+	}
+
+	else if (action == GLFW_RELEASE) {
+		switch (key) {
+			case GLFW_KEY_W:
+				inputState->forward = false;
+				break;
+			case GLFW_KEY_S:
+				inputState->backward = false;
+				break;
+			case GLFW_KEY_A:
+				inputState->left = false;
+				break;
+			case GLFW_KEY_D:
+				inputState->right = false;
+				break;
+			case GLFW_KEY_LEFT_SHIFT:
+				inputState->speedBoost = false;
+				break;
+			case GLFW_KEY_LEFT_CONTROL:
+				inputState->speedSlow = false;
+				break;
+		}
+	}
+}
+
+static void mouseInputCallback(GLFWwindow* window, int button, int action, int mods) {
+	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+
+	if (ImGui::GetIO().WantCaptureMouse) return;
+
+	InputState* inputState = (InputState*)glfwGetWindowUserPointer(window);
+	if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+		if (action == GLFW_PRESS) {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			inputState->cameraControl = true;
+			glfwGetCursorPos(window, &inputState->mX, &inputState->mY);
+
+		} else if (action == GLFW_RELEASE) {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			inputState->cameraControl = false;
+		}
+	}
+}
+
 int Application::run() {
-	SDL_Event event;
-	bool running = true;
-	bool cameraLocked = false;
-	glm::vec2 prelockCoordinates;
+	auto lastFrameTime = std::chrono::steady_clock::now();
 
-	SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_WARP_MOTION, "1");
+	InputState inputState {};
+	glfwSetWindowUserPointer(m_window, &inputState);
+	glfwSetKeyCallback(m_window, keyCallback);
+	glfwSetMouseButtonCallback(m_window, mouseInputCallback);
 
-	uint64_t lastFrameTime = 0;
+	while (!glfwWindowShouldClose(m_window)) {
+		glfwPollEvents();
 
-	while (running) {
-		uint64_t currentTime = SDL_GetTicks();
-		float deltaTime = static_cast<float>(currentTime - lastFrameTime) / 1e3;
+		auto currentTime = std::chrono::steady_clock::now();
+		float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+
 		lastFrameTime = currentTime;
 		Camera& camera = m_renderer->getScene().camera;
-		glm::vec2 centerCoords = glm::vec2(m_renderer->getResolution()) / glm::vec2(2.0);
 
-		while (SDL_PollEvent(&event)) {
-			ImGui_ImplSDL3_ProcessEvent(&event);
-
-			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
-				m_renderer->setResolution(event.window.data1, event.window.data2);
-			}
-
-			if (event.type == SDL_EVENT_QUIT) {
-				running = false;
-			}
-
-			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_RIGHT) {
-				SDL_GetMouseState(&prelockCoordinates.x, &prelockCoordinates.y);
-				SDL_SetWindowRelativeMouseMode(m_window, true);
-				SDL_HideCursor();
-				SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
-				cameraLocked = true;
-			}
-			if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_RIGHT) {
-				SDL_SetWindowRelativeMouseMode(m_window, false);
-				SDL_ShowCursor();
-				SDL_WarpMouseInWindow(nullptr, prelockCoordinates.x, prelockCoordinates.y);
-				cameraLocked = false;
-			}
-		}
-
-		const bool* keyStates = SDL_GetKeyboardState(NULL);
 		glm::vec3 direction = glm::vec3(0);
 		float accel = 1.0;
-		if (keyStates[SDL_SCANCODE_W]) direction += glm::vec3(0, 0, -1);
-		if (keyStates[SDL_SCANCODE_S]) direction += glm::vec3(0, 0, 1);
-		if (keyStates[SDL_SCANCODE_D]) direction += glm::vec3(1, 0, 0);
-		if (keyStates[SDL_SCANCODE_A]) direction += glm::vec3(-1, 0, 0);
-		if (keyStates[SDL_SCANCODE_LSHIFT]) accel = 10.0;
-		if (keyStates[SDL_SCANCODE_LCTRL]) accel = 0.2;
+		if (inputState.forward) direction += glm::vec3(0, 0, -1);
+		if (inputState.backward) direction += glm::vec3(0, 0, 1);
+		if (inputState.left) direction += glm::vec3(-1, 0, 0);
+		if (inputState.right) direction += glm::vec3(1, 0, 0);
+		if (inputState.speedBoost) accel = 10.0;
+		if (inputState.speedSlow) accel = 0.2;
 
 		glm::vec3 dir2 = direction * direction;
 		if ((dir2.x + dir2.y + dir2.z) > 0)
 			camera.position += camera.getOrientation() * (glm::normalize(direction) * deltaTime * accel * 150.0f);
 
-		if (cameraLocked) {
-			glm::vec2 coordinates;
-			SDL_GetMouseState(&coordinates.x, &coordinates.y);
+		glm::ivec2 res;
+		glfwGetFramebufferSize(m_window, &res.x, &res.y);
+		if (res != m_renderer->getResolution()) m_renderer->setResolution(res.x, res.y);
 
-			glm::vec2 rotation = (centerCoords - coordinates) * deltaTime;
-			camera.yaw += rotation.x * 10;
-			camera.pitch += rotation.y * 10;
+		if (inputState.cameraControl) {
+			double newX, newY;
+			glfwGetCursorPos(m_window, &newX, &newY);
+			float x = (newX - inputState.mX) * deltaTime;
+			float y = (newY - inputState.mY) * deltaTime;
+
+			inputState.mX = newX;
+			inputState.mY = newY;
+
+			camera.yaw += -x * 10;
+			camera.pitch += -y * 10;
 			camera.pitch = glm::clamp(camera.pitch, -89.0f, 89.0f);
-			SDL_WarpMouseInWindow(nullptr, centerCoords.x, centerCoords.y);
 		}
 
 		m_renderer->render();
@@ -167,6 +234,6 @@ int Application::run() {
 }
 
 Application::~Application() {
-	SDL_DestroyWindow(m_window);
-	SDL_Quit();
+	glfwDestroyWindow(m_window);
+	glfwTerminate();
 };

@@ -5,11 +5,13 @@
 #include <string_view>
 #include <unordered_set>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
 
-#include <SDL3/SDL_vulkan.h>
 std::optional<Instance> Instance::_instance;
 
 vk::Instance createInstance() {
@@ -21,7 +23,7 @@ vk::Instance createInstance() {
 	extNames.push_back(vk::EXTDebugUtilsExtensionName);
 
 	uint32_t extCount;
-	auto* extensions = SDL_Vulkan_GetInstanceExtensions(&extCount);
+	auto* extensions = glfwGetRequiredInstanceExtensions(&extCount);
 
 	for (int i = 0; i < extCount; i++) {
 		extNames.push_back(extensions[i]);
@@ -172,9 +174,9 @@ DeviceInfo createDevice(vk::PhysicalDevice physicalDevice) {
 	Instance::QueueFamilies queueFamilies = getQueueFamilies(physicalDevice);
 	std::vector<vk::DeviceQueueCreateInfo> queueInfo {
 		{
-		 .queueFamilyIndex = (uint32_t)queueFamilies.graphicsIndex,
-		 .queueCount = 1,
-		 .pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }.data(),
+			.queueFamilyIndex = (uint32_t)queueFamilies.graphicsIndex,
+			.queueCount = 1,
+			.pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }.data(),
 		 },
 	};
 
@@ -185,7 +187,7 @@ DeviceInfo createDevice(vk::PhysicalDevice physicalDevice) {
 				.queueCount = 1,
 				.pQueuePriorities = std::array<float, 3> { 1.f, 1.f, 1.f }
 					  .data()
-		 }
+		  }
 		);
 
 	vk::StructureChain<
@@ -200,20 +202,20 @@ DeviceInfo createDevice(vk::PhysicalDevice physicalDevice) {
 			{ .features = { .multiDrawIndirect = true } },
 			{ .shaderDrawParameters = true },
 			{
-			 .descriptorIndexing = true,
-			 .descriptorBindingSampledImageUpdateAfterBind = true,
-			 .descriptorBindingUpdateUnusedWhilePending = true,
-			 .descriptorBindingPartiallyBound = true,
-			 .descriptorBindingVariableDescriptorCount = true,
-			 .runtimeDescriptorArray = true,
-			 .hostQueryReset = true,
-			 .timelineSemaphore = true,
-			 .bufferDeviceAddress = true,
+				.descriptorIndexing = true,
+				.descriptorBindingSampledImageUpdateAfterBind = true,
+				.descriptorBindingUpdateUnusedWhilePending = true,
+				.descriptorBindingPartiallyBound = true,
+				.descriptorBindingVariableDescriptorCount = true,
+				.runtimeDescriptorArray = true,
+				.hostQueryReset = true,
+				.timelineSemaphore = true,
+				.bufferDeviceAddress = true,
 
 			 },
 			{
-			 .synchronization2 = true,
-			 .dynamicRendering = true,
+				.synchronization2 = true,
+				.dynamicRendering = true,
 			 },
 			{ .rayTracingPipeline = true },
 			{ .rayQuery = true },
@@ -253,17 +255,20 @@ DeviceInfo createDevice(vk::PhysicalDevice physicalDevice) {
 	};
 }
 
-Instance& Instance::Create(SDL_Window* window) {
+Instance& Instance::Create(GLFWwindow* window) {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init();
 	vk::Instance instance = createInstance();
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
 	setupDebug(instance);
 
 	VkSurfaceKHR surface;
-	bool res = SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface);
+	vk::Result res = (vk::Result)glfwCreateWindowSurface(instance, window, nullptr, &surface);
 
-	if (!res) {
-		std::cerr << SDL_GetError() << std::endl;
+	if (res != vk::Result::eSuccess) {
+		const char* error;
+		glfwGetError(&error);
+		std::cerr << "Couldn't create glfw surface. " << error << std::endl;
+		abort();
 	}
 	vk::PhysicalDevice physicalDevice = getPhysicalDevice(instance);
 	auto [device, raytracingSupport] = createDevice(physicalDevice);

@@ -1,6 +1,6 @@
 #include "UI.hpp"
 
-#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
 
@@ -44,7 +44,7 @@ static void renderPassesWindow() {
 
 void UI::Render(vk::CommandBuffer commandBuffer) {
 	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplSDL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
 	renderPassesWindow();

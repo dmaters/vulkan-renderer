@@ -8,7 +8,7 @@
 
 #include "Swapchain.hpp"
 
-struct SDL_Window;
+struct GLFWwindow;
 struct Instance {
 public:
 	struct QueueFamilies {
@@ -38,7 +38,7 @@ public:
 	Swapchain swapchain;
 
 	QueueFamilies queueFamiliesIndices;
-	static Instance& Create(SDL_Window* window);
+	static Instance& Create(GLFWwindow* window);
 	static Instance& Get() { return _instance.value(); }
 
 	struct SupportedExtensions {

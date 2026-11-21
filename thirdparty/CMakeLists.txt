@@ -11,9 +11,9 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-        sdl
-        GIT_REPOSITORY https://github.com/libsdl-org/SDL
-        GIT_TAG release-3.2.20
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG 3.5.1
 )
 
 FetchContent_Declare(
@@ -31,14 +31,14 @@ FetchContent_Declare(
     texture-compressor
     GIT_REPOSITORY https://github.com/dmaters/texture-compressor
 )
-FetchContent_MakeAvailable(glm sdl fastgltf stb texture-compressor)
+FetchContent_MakeAvailable(glm glfw fastgltf stb texture-compressor)
 
 include(slang.cmake)
 include(imgui.cmake)
 
 
 find_package(Vulkan REQUIRED)
-target_link_libraries(imgui INTERFACE SDL3::SDL3 Vulkan::Vulkan)
+target_link_libraries(imgui INTERFACE glfw Vulkan::Vulkan)
 
 target_include_directories(${PROJECT_NAME} INTERFACE ${Vulkan_INCLUDE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
@@ -46,7 +46,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${stb_SOURCE_DIR})
 target_link_libraries(
     ${PROJECT_NAME} INTERFACE
     glm::glm
-    SDL3::SDL3
+    glfw
     Vulkan::Vulkan
     fastgltf
     slang

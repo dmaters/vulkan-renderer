@@ -1,7 +1,6 @@
 
 #include "Renderer.hpp"
 
-#include <SDL3/SDL_vulkan.h>
 #include <stdlib.h>
 #include <vulkan/vulkan_core.h>
 
@@ -46,15 +45,11 @@ void updateGraph(TaskRegister& taskRegister, RenderGraph& graph, Scene& scene) {
 	graph.update(ui, enabledFeatures, scene);
 }
 
-Renderer::Renderer(SDL_Window* window) :
-	m_instance(Instance::Create(window)),
-	m_resourceManager(),
-	m_materialManager(m_resourceManager),
-	m_sceneManager(m_resourceManager, m_materialManager) {
-	if (window == nullptr) return;
-
-	m_graphicsQueue = m_instance.device.getQueue(m_instance.queueFamiliesIndices.graphicsIndex, 0);
-	m_presentQueue = m_instance.device.getQueue(m_instance.queueFamiliesIndices.presentIndex, 0);
+Renderer::Renderer() :
+	m_resourceManager(), m_materialManager(m_resourceManager), m_sceneManager(m_resourceManager, m_materialManager) {
+	auto& instance = Instance::Get();
+	m_graphicsQueue = instance.device.getQueue(instance.queueFamiliesIndices.graphicsIndex, 0);
+	m_presentQueue = instance.device.getQueue(instance.queueFamiliesIndices.presentIndex, 0);
 
 	auto swapchainResolution = Instance::Get().swapchain.getResolution();
 	m_configuration.resolution = {
