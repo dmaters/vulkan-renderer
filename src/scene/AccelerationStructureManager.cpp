@@ -68,7 +68,7 @@ AccelerationStructureManager::TLASData AccelerationStructureManager::buildTLAS(
 				.blas = m_blases,
 				.transforms = scene.transforms,
 				.instancesBuffer = m_resourceManager.getBuffers(instanceDataAllocation)[0],
-				.asBuffer = m_resourceManager.getBuffers(tlasAllocation)[9],
+				.asBuffer = m_resourceManager.getBuffers(tlasAllocation)[0],
 				.scratchBuffer = m_resourceManager.getBuffers(scratchAllocation)[0],
 				.resourceManager = m_resourceManager,
 			}
