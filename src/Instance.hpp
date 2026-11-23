@@ -38,7 +38,7 @@ public:
 	Swapchain swapchain;
 
 	QueueFamilies queueFamiliesIndices;
-	static Instance& Create(GLFWwindow* window);
+	static Instance& Create(GLFWwindow& window);
 	static Instance& Get() { return _instance.value(); }
 
 	struct SupportedExtensions {

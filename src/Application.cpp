@@ -1,6 +1,5 @@
 #include "Application.hpp"
 
-#include <GLFW/glfw3.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
@@ -19,24 +18,7 @@ static void check_vk_result(VkResult err) {
 }
 
 Application::Application(const std::filesystem::path& path) {
-	if (!glfwInit()) {
-		const char* error;
-		glfwGetError(&error);
-		std::cerr << "Couldn't initialize glfw. " << error << std::endl;
-		abort();
-	}
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-	m_window = glfwCreateWindow(1280, 720, "Renderer", nullptr, nullptr);
-
-	if (!m_window) {
-		const char* error;
-		glfwGetError(&error);
-		std::cerr << "Couldn't create glfw window. " << error << std::endl;
-		abort();
-	}
-
-	Instance::Create(m_window);
+	Instance::Create(m_window.getWindow());
 
 	m_renderer = std::make_unique<Renderer>();
 	m_renderer->load(path);
@@ -46,7 +28,7 @@ Application::Application(const std::filesystem::path& path) {
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	ImGui_ImplGlfw_InitForVulkan(m_window, true);
+	ImGui_ImplGlfw_InitForVulkan(&m_window.getWindow(), false);
 	Instance& instance = Instance::Get();
 	ImGui_ImplVulkan_LoadFunctions(
 		vk::ApiVersion13,
@@ -93,102 +75,17 @@ Application::Application(const std::filesystem::path& path) {
 	ImGui_ImplVulkan_Init(&init_info);
 }
 
-struct InputState {
-	bool cameraControl;
-	bool forward;
-	bool backward;
-	bool right;
-	bool left;
-
-	bool speedBoost;
-	bool speedSlow;
-
-	double mX;
-	double mY;
-};
-
-static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-	InputState* inputState = (InputState*)glfwGetWindowUserPointer(window);
-
-	if (action == GLFW_PRESS) {
-		switch (key) {
-			case GLFW_KEY_ESCAPE:
-				glfwSetWindowShouldClose(window, GLFW_TRUE);
-				break;
-			case GLFW_KEY_W:
-				inputState->forward = true;
-				break;
-			case GLFW_KEY_S:
-				inputState->backward = true;
-				break;
-			case GLFW_KEY_A:
-				inputState->left = true;
-				break;
-			case GLFW_KEY_D:
-				inputState->right = true;
-				break;
-			case GLFW_KEY_LEFT_SHIFT:
-				inputState->speedBoost = true;
-				break;
-			case GLFW_KEY_LEFT_CONTROL:
-				inputState->speedSlow = true;
-				break;
-		}
-	}
-
-	else if (action == GLFW_RELEASE) {
-		switch (key) {
-			case GLFW_KEY_W:
-				inputState->forward = false;
-				break;
-			case GLFW_KEY_S:
-				inputState->backward = false;
-				break;
-			case GLFW_KEY_A:
-				inputState->left = false;
-				break;
-			case GLFW_KEY_D:
-				inputState->right = false;
-				break;
-			case GLFW_KEY_LEFT_SHIFT:
-				inputState->speedBoost = false;
-				break;
-			case GLFW_KEY_LEFT_CONTROL:
-				inputState->speedSlow = false;
-				break;
-		}
-	}
-}
-
-static void mouseInputCallback(GLFWwindow* window, int button, int action, int mods) {
-	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
-
-	if (ImGui::GetIO().WantCaptureMouse) return;
-
-	InputState* inputState = (InputState*)glfwGetWindowUserPointer(window);
-	if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-		if (action == GLFW_PRESS) {
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			inputState->cameraControl = true;
-			glfwGetCursorPos(window, &inputState->mX, &inputState->mY);
-
-		} else if (action == GLFW_RELEASE) {
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			inputState->cameraControl = false;
-		}
-	}
-}
-
 int Application::run() {
 	auto lastFrameTime = std::chrono::steady_clock::now();
 
-	InputState inputState {};
-	glfwSetWindowUserPointer(m_window, &inputState);
-	glfwSetKeyCallback(m_window, keyCallback);
-	glfwSetMouseButtonCallback(m_window, mouseInputCallback);
+	bool running = true;
+	glm::vec2 mousePos;
 
-	while (!glfwWindowShouldClose(m_window)) {
-		glfwPollEvents();
+	while (running) {
+		m_window.update();
+		auto inputState = m_window.getState();
+
+		running = inputState.running;
 
 		auto currentTime = std::chrono::steady_clock::now();
 		float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
@@ -209,23 +106,17 @@ int Application::run() {
 		if ((dir2.x + dir2.y + dir2.z) > 0)
 			camera.position += camera.getOrientation() * (glm::normalize(direction) * deltaTime * accel * 150.0f);
 
-		glm::ivec2 res;
-		glfwGetFramebufferSize(m_window, &res.x, &res.y);
-		if (res != m_renderer->getResolution()) m_renderer->setResolution(res.x, res.y);
+		if (glm::ivec2(inputState.width, inputState.height) != m_renderer->getResolution())
+			m_renderer->setResolution(inputState.width, inputState.height);
 
 		if (inputState.cameraControl) {
-			double newX, newY;
-			glfwGetCursorPos(m_window, &newX, &newY);
-			float x = (newX - inputState.mX) * deltaTime;
-			float y = (newY - inputState.mY) * deltaTime;
+			auto deltaPos = (inputState.mousePos - mousePos) * deltaTime;
 
-			inputState.mX = newX;
-			inputState.mY = newY;
-
-			camera.yaw += -x * 10;
-			camera.pitch += -y * 10;
+			camera.yaw += -deltaPos.x * 10;
+			camera.pitch += -deltaPos.y * 10;
 			camera.pitch = glm::clamp(camera.pitch, -89.0f, 89.0f);
 		}
+		mousePos = inputState.mousePos;
 
 		m_renderer->render();
 	};
@@ -233,7 +124,3 @@ int Application::run() {
 	return 0;
 }
 
-Application::~Application() {
-	glfwDestroyWindow(m_window);
-	glfwTerminate();
-};

@@ -255,14 +255,14 @@ DeviceInfo createDevice(vk::PhysicalDevice physicalDevice) {
 	};
 }
 
-Instance& Instance::Create(GLFWwindow* window) {
+Instance& Instance::Create(GLFWwindow& window) {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init();
 	vk::Instance instance = createInstance();
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
 	setupDebug(instance);
 
 	VkSurfaceKHR surface;
-	vk::Result res = (vk::Result)glfwCreateWindowSurface(instance, window, nullptr, &surface);
+	vk::Result res = (vk::Result)glfwCreateWindowSurface(instance, &window, nullptr, &surface);
 
 	if (res != vk::Result::eSuccess) {
 		const char* error;
@@ -270,6 +270,7 @@ Instance& Instance::Create(GLFWwindow* window) {
 		std::cerr << "Couldn't create glfw surface. " << error << std::endl;
 		abort();
 	}
+
 	vk::PhysicalDevice physicalDevice = getPhysicalDevice(instance);
 	auto [device, raytracingSupport] = createDevice(physicalDevice);
 
